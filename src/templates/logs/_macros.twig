@@ -1,0 +1,11 @@
+{% macro confidenceBadge(score) %}
+  {% if score is null %}
+    <span style="background:#fff;color:#596673;border:1px solid #d8dde2;padding:2px 8px;border-radius:10px;font-size:12px;">—</span>
+  {% else %}
+    {% set pct = (score * 100)|round %}
+    {% if pct >= 80 %}{% set color = '#10b981' %}{% set bg = '#d1fae5' %}
+    {% elseif pct >= 60 %}{% set color = '#b45309' %}{% set bg = '#fef3c7' %}
+    {% else %}{% set color = '#b91c1c' %}{% set bg = '#fee2e2' %}{% endif %}
+    <span style="background:{{ bg }};color:{{ color }};padding:2px 8px;border-radius:10px;font-size:12px;">{{ pct }}%</span>
+  {% endif %}
+{% endmacro %}

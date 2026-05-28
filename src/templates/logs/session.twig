@@ -1,0 +1,167 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Session ' ~ session.sessionToken|slice(0, 10) %}
+{% set selectedSubnavItem = 'logs' %}
+{% import '_cs-chatbot/logs/_macros' as m %}
+
+{% block content %}
+  <style>
+    .cs-md > :first-child { margin-top:0; }
+    .cs-md > :last-child { margin-bottom:0; }
+    .cs-md p { margin:0 0 6px; }
+    .cs-md ul, .cs-md ol { margin:4px 0; padding-left:22px; }
+    .cs-md li { margin:1px 0; }
+    .cs-md h1, .cs-md h2, .cs-md h3, .cs-md h4, .cs-md h5, .cs-md h6 { margin:8px 0 4px; font-weight:600; line-height:1.25; }
+    .cs-md code { background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.92em; }
+    .cs-md pre { background:rgba(0,0,0,0.06); padding:10px; border-radius:6px; overflow-x:auto; }
+    .cs-md pre code { background:transparent; padding:0; }
+    .cs-md { overflow-wrap:anywhere; word-break:break-word; }
+    .cs-md { position:relative; }
+    .cs-md a { text-decoration:underline; overflow-wrap:anywhere; word-break:break-word; }
+    .cs-md a[data-cs-href]:hover::after {
+      content: "↗ " attr(data-cs-href);
+      position:absolute; bottom:auto; top:-26px; right:0; left:auto;
+      max-width:100%;
+      background:#111827; color:#f9fafb;
+      padding:4px 8px; border-radius:4px;
+      font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      z-index:9999; pointer-events:none;
+      box-shadow:0 2px 8px rgba(0,0,0,0.25);
+    }
+    .cs-md blockquote { margin:6px 0; padding:4px 10px; border-left:3px solid #cdd8e4; color:#596673; }
+
+    .cs-log-layout { display:flex; gap:20px; align-items:flex-start; }
+    .cs-log-chat { flex:1 1 auto; min-width:0; }
+    .cs-log-meta { flex:0 0 320px; width:320px; position:sticky; top:14px; }
+    .cs-log-meta .pane { margin-bottom:14px; }
+    .cs-log-meta .meta { margin:0; --heading-width: 80px; }
+    .cs-log-meta .meta .value { overflow-wrap:anywhere; word-break:break-word; white-space:normal; }
+    @media (max-width: 900px) {
+      .cs-log-layout { flex-direction:column; }
+      .cs-log-meta { width:100%; flex-basis:auto; position:static; }
+    }
+  </style>
+  <p><a class="btn" href="{{ url('_cs-chatbot/logs') }}">&larr; Back to logs</a></p>
+
+  <div class="cs-log-layout">
+    <div class="cs-log-chat">
+      {% for msg in messages %}
+        <div class="pane" style="margin-bottom:10px;{{ msg.role == 'bot' ? 'background:#f3f7fc;' : '' }}">
+          <div class="flex" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+            <strong>{{ msg.role == 'bot' ? 'Bot' : 'User' }}</strong>
+            <span class="light" style="font-size:12px;">{{ msg.dateCreated|datetime('short') }}</span>
+            {% if msg.responseTime %}<span class="light" style="font-size:12px;">{{ msg.responseTime }}s</span>{% endif %}
+            {% if msg.role == 'bot' %}{{ m.confidenceBadge(msg.confidence) }}{% endif %}
+            {% if msg.rating == 1 %}<span style="color:#27ab46;">&uarr;</span>{% endif %}
+            {% if msg.rating == -1 %}<span style="color:#cf1124;">&darr;</span>{% endif %}
+            {% if msg.usedAsQa %}
+              <span style="background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:8px;font-size:11px;">&check; Q&amp;A Training</span>
+            {% endif %}
+          </div>
+          <div class="cs-md" style="word-break:break-word;">{{ msg.content|md('gfm-comment') }}</div>
+          {% if msg.role == 'bot' and not msg.usedAsQa %}
+            <div style="margin-top:8px;">
+              <button class="btn small js-use-qa" data-id="{{ msg.id }}">Use as Q&amp;A</button>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <aside class="cs-log-meta">
+      <div class="pane">
+        <div class="meta read-only">
+          <div class="data">
+            <div class="heading">Session</div>
+            <div class="value code">{{ session.sessionToken }}</div>
+          </div>
+          <div class="data">
+            <div class="heading">Page</div>
+            <div class="value">{{ session.pageUrl ?: '—' }}</div>
+          </div>
+          <div class="data">
+            <div class="heading">IP</div>
+            <div class="value">{{ session.ip ?: '—' }}</div>
+          </div>
+          <div class="data">
+            <div class="heading">Started</div>
+            <div class="value">{{ session.dateCreated|datetime('short') }}</div>
+          </div>
+          <div class="data">
+            <div class="heading">Ratings</div>
+            <div class="value">
+              <span style="color:#27ab46;">{{ session.ratingPositive }} &uarr;</span>
+              &nbsp;
+              <span style="color:#cf1124;">{{ session.ratingNegative }} &darr;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" style="background:#fffdf4;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <strong style="font-size:13px;">📝 Admin notes <span class="light" style="font-weight:normal;font-size:11px;">(searchable from logs page)</span></strong>
+          <span id="lc-note-status" class="light" style="font-size:11px;"></span>
+        </div>
+        <textarea id="lc-note" class="text fullwidth" rows="5" placeholder="Notes for this conversation — e.g. context, follow-up, internal tags...">{{ session.adminNotes }}</textarea>
+        <div style="margin-top:8px;">
+          <button type="button" class="btn submit" id="lc-note-save">Save note</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    (function(){
+      var $note = document.getElementById('lc-note');
+      var $save = document.getElementById('lc-note-save');
+      var $status = document.getElementById('lc-note-status');
+      var saveTimer = null;
+      function saveNote() {
+        var fd = new FormData();
+        fd.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        fd.append('id', '{{ session.id }}');
+        fd.append('note', $note.value);
+        $status.textContent = 'Saving…';
+        fetch(Craft.getActionUrl('_cs-chatbot/logs/save-note'), {method:'POST', body:fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}})
+          .then(function(r){return r.json();})
+          .then(function(r){ $status.textContent = r.success ? 'Saved ✓' : 'Save failed'; setTimeout(function(){$status.textContent='';}, 2000); });
+      }
+      $save.addEventListener('click', saveNote);
+      $note.addEventListener('input', function () {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveNote, 1200);
+      });
+      $note.addEventListener('keydown', function (e) {
+        if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          if (saveTimer) clearTimeout(saveTimer);
+          saveNote();
+        }
+      });
+
+      document.querySelectorAll('.cs-md a[href]').forEach(function (a) {
+        var href = a.getAttribute('href') || '';
+        if (!/^(https?:|mailto:)/i.test(href)) {
+          a.removeAttribute('href');
+          return;
+        }
+        if (!a.getAttribute('title')) a.setAttribute('title', href);
+        if (!a.getAttribute('data-cs-href')) a.setAttribute('data-cs-href', href);
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener nofollow');
+      });
+
+      document.querySelectorAll('.js-use-qa').forEach(function(b){
+        b.addEventListener('click', function(){
+          var data = new FormData();
+          data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+          data.append('messageId', b.dataset.id);
+          fetch(Craft.getActionUrl('_cs-chatbot/logs/use-as-qa'), {method:'POST', body:data, credentials:'same-origin'})
+            .then(function(r){return r.json();})
+            .then(function(j){ if (j.success){ location.reload(); } else { alert(j.error || 'Failed'); } });
+        });
+      });
+    })();
+  </script>
+{% endblock %}

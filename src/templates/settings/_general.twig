@@ -1,0 +1,93 @@
+{% import '_includes/forms' as forms %}
+
+{{ forms.lightswitchField({
+  label: 'Enable Chatbot',
+  name: 'settings[enabled]',
+  on: settings.enabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Company Name',
+  name: 'settings[companyName]',
+  value: settings.companyName,
+  required: true,
+}) }}
+
+{{ forms.textField({
+  label: 'Logo Text',
+  instructions: 'Up to 3 characters, shown as a badge when no logo image is set.',
+  name: 'settings[logoText]',
+  value: settings.logoText,
+  size: 6,
+}) }}
+
+{{ forms.elementSelectField({
+  label: 'Logo Image',
+  name: 'settings[logoAssetId]',
+  elementType: 'craft\\elements\\Asset',
+  selectionLabel: 'Choose image',
+  limit: 1,
+  elements: settings.logoAssetId ? [craft.assets.id(settings.logoAssetId).one()]|filter : [],
+}) }}
+
+{{ forms.colorField({
+  label: 'Primary Color',
+  name: 'settings[primaryColor]',
+  value: settings.primaryColor,
+}) }}
+
+{{ forms.colorField({
+  label: 'Logo Background Color',
+  name: 'settings[logoBgColor]',
+  value: settings.logoBgColor,
+}) }}
+
+{{ forms.selectField({
+  label: 'Default Theme',
+  name: 'settings[defaultTheme]',
+  value: settings.defaultTheme,
+  options: { light: 'Light', dark: 'Dark' },
+}) }}
+
+{{ forms.selectField({
+  label: 'Operation Mode',
+  instructions: 'Chat = floating bubble in the corner. Agent = docked full-height panel on the right that shrinks the page content beside it.',
+  name: 'settings[operationMode]',
+  value: settings.operationMode ?? 'chat',
+  options: { chat: 'Chat (floating bubble)', agent: 'Agent (docked side panel)' },
+}) }}
+
+{{ forms.textField({
+  label: 'Agent Panel Width',
+  instructions: 'Width in pixels of the docked panel (Agent mode only). 280–900.',
+  name: 'settings[agentPanelWidth]',
+  value: settings.agentPanelWidth ?? 420,
+  size: 6,
+  type: 'number',
+  unit: 'px',
+}) }}
+
+<hr>
+<h3>Bubble Colors (frontend)</h3>
+<p class="instructions">Leave empty to use the default. Text color is auto-picked from luminance.</p>
+
+{{ forms.colorField({
+  label: 'User Bubble',
+  instructions: 'Defaults to Primary Color.',
+  name: 'settings[bubbleUserColor]',
+  value: settings.bubbleUserColor,
+}) }}
+
+{{ forms.colorField({
+  label: 'Bot Bubble',
+  instructions: 'Defaults to light grey (light theme) / dark grey (dark theme).',
+  name: 'settings[bubbleBotColor]',
+  value: settings.bubbleBotColor,
+}) }}
+
+{{ forms.colorField({
+  label: 'Admin Bubble',
+  instructions: 'Defaults to green (#10b981).',
+  name: 'settings[bubbleAdminColor]',
+  value: settings.bubbleAdminColor,
+}) }}

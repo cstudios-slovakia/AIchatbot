@@ -1,0 +1,86 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Training · Globals' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+} %}
+{% set selectedTab = 'globals' %}
+
+{% block content %}
+  <form method="post" accept-charset="UTF-8">
+    {{ csrfInput() }}
+    {{ actionInput('_cs-chatbot/training/train-global-sets') }}
+    <div class="field">
+      <div class="heading"><label>Global sets to train</label></div>
+      <div class="input">
+        {% if allSets|length %}
+          {% for s in allSets %}
+            <label style="display:block;margin-bottom:6px;">
+              <input type="checkbox" name="sets[]" value="{{ s.uid }}"
+                {% if s.uid in selectedSets %}checked{% endif %}>
+              {{ s.name }}
+            </label>
+          {% endfor %}
+        {% else %}
+          <p class="light">No global sets exist yet.</p>
+        {% endif %}
+      </div>
+    </div>
+    <button type="submit" class="btn submit"{% if not allSets|length %} disabled{% endif %}>Train now</button>
+  </form>
+
+  <hr>
+  <h2>Indexed globals</h2>
+  {% if rows|length %}
+    <table class="data fullwidth">
+      <thead>
+        <tr><th>Global Set</th><th>Status</th><th>Chunks</th><th>Last trained</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>
+              <a href="{{ url('_cs-chatbot/training/global-chunks/' ~ r.id) }}">
+                {{ names[r.globalSetId] ?? 'Global #' ~ r.globalSetId }}
+              </a>
+            </td>
+            <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
+            <td>{{ r.chunkCount }}</td>
+            <td>{{ r.lastTrainedAt ?: '—' }}</td>
+            <td>
+              <button class="btn small js-train" data-id="{{ r.id }}">Re-train</button>
+              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="light">No global sets trained yet.</p>
+  {% endif %}
+
+  <script>
+    (function(){
+      function post(action, id) {
+        var data = new FormData();
+        data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        data.append('id', id);
+        return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
+      }
+      document.querySelectorAll('.js-train').forEach(function(b){
+        b.addEventListener('click', function(){ post('_cs-chatbot/training/train-global-set', b.dataset.id).then(function(){ location.reload(); }); });
+      });
+      document.querySelectorAll('.js-delete').forEach(function(b){
+        b.addEventListener('click', function(){
+          if (!confirm('Remove this global set from index?')) return;
+          post('_cs-chatbot/training/delete-global-set', b.dataset.id).then(function(){ location.reload(); });
+        });
+      });
+    })();
+  </script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% import '_includes/forms' as forms %}
+
+{{ forms.lightswitchField({
+  label: 'Allow human assistance',
+  instructions: 'Master switch. When off, users can never request a human — no "Talk to a human" button or inline offer appears anywhere, and the bot stops offering it.',
+  name: 'settings[humanHandoffEnabled]',
+  on: settings.humanHandoffEnabled,
+}) }}
+
+{{ forms.lightswitchField({
+  label: "Show admin's name to user",
+  instructions: 'When on, the widget says "Chatting with [Name]". When off, it just says "Chatting with a human agent".',
+  name: 'settings[showAdminName]',
+  on: settings.showAdminName,
+}) }}
+
+{{ forms.textField({
+  label: 'Auto-close inactive conversations after (minutes)',
+  instructions: 'Closes any requested/active handoff session with no activity for this many minutes. 0 = disabled. Runs at most once per minute, triggered by admin and widget polls.',
+  name: 'settings[autoCloseInactiveMinutes]',
+  value: settings.autoCloseInactiveMinutes,
+  type: 'number',
+  size: 6,
+}) }}
+
+{{ forms.selectField({
+  label: 'When can users request a human?',
+  instructions: '"Always available" shows a persistent "Talk to a human" button. "Only when the AI suggests it" hides the button — the offer appears inline below the bot reply when confidence is low or the bot defers to support.',
+  name: 'settings[humanHandoffMode]',
+  value: settings.humanHandoffMode ?? 'always',
+  options: {
+    always: 'Always available (persistent button)',
+    ai: 'Only when the AI suggests it',
+  },
+}) }}
+
+{{ forms.textareaField({
+  label: 'Canned Response Templates',
+  instructions: 'Separate templates with a line of three dashes (`---`). Each template may span multiple lines. Shown as quick-insert buttons above the reply input in Live Chat.',
+  name: 'settings[chatTemplates]',
+  value: settings.chatTemplates|join("\n---\n"),
+  rows: 14,
+  placeholder: "Hi! How can I help you today?\n---\nThanks for reaching out — looking into this now.\nCould you share a screenshot or the exact URL?\n---\nI'll get back to you within the next business day.\n\nIn the meantime, our docs may help:\nhttps://example.com/docs",
+}) }}

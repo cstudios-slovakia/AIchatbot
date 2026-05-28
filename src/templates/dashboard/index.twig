@@ -1,0 +1,106 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Dashboard' %}
+{% set selectedSubnavItem = 'dashboard' %}
+
+{% block content %}
+  <div id="chatbot-dashboard">
+    <form method="get" class="flex flex-nowrap" style="gap:8px;margin-bottom:16px;">
+      <input type="date" name="from" value="{{ from }}" class="text">
+      <input type="date" name="to" value="{{ to }}" class="text">
+      <button type="submit" class="btn">Apply</button>
+      <a class="btn" href="?from={{ now|date_modify('-7 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 7 days</a>
+      <a class="btn" href="?from={{ now|date_modify('-30 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 30 days</a>
+      <a class="btn" href="?from={{ now|date_modify('-90 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 90 days</a>
+    </form>
+
+    <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:24px;">
+      {% set kpis = [
+        { label: 'Active now', value: stats.activeNow ?? 0, href: url('_cs-chatbot/logs', { active: 1 }), color: '#2563eb' },
+        { label: 'Conversations', value: stats.totalConversations, href: null },
+        { label: 'Messages', value: stats.totalMessages, href: null },
+        { label: 'Avg response (s)', value: stats.avgResponseTime, href: null },
+        { label: 'Avg / day', value: stats.avgPerDay, href: null },
+        { label: 'Positive', value: stats.positive, href: url('_cs-chatbot/logs', { rating: 'pos' }), color: '#27ab46' },
+        { label: 'Negative', value: stats.negative, href: url('_cs-chatbot/logs', { rating: 'neg' }), color: '#cf1124' },
+      ] %}
+      {% for k in kpis %}
+        {% if k.href %}
+          <a href="{{ k.href }}" class="readable" style="display:block;text-decoration:none;color:inherit;padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;transition:border-color .15s, transform .15s;" onmouseover="this.style.borderColor='{{ k.color ?? '#2563eb' }}';" onmouseout="this.style.borderColor='#d8dde2';">
+            <div style="font-size:12px;color:#596673;">{{ k.label }} <span style="font-size:10px;opacity:.6;">↗ view</span></div>
+            <div style="font-size:24px;font-weight:600;color:{{ k.color ?? 'inherit' }};">{{ k.value }}</div>
+          </a>
+        {% else %}
+          <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+            <div style="font-size:12px;color:#596673;">{{ k.label }}</div>
+            <div style="font-size:24px;font-weight:600;">{{ k.value }}</div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;margin-bottom:24px;">
+      <h2>Activity</h2>
+      <canvas id="chatbot-activity" height="120"></canvas>
+    </div>
+
+    <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+        <h2>Suggestion clicks</h2>
+        {% if suggestions|length %}
+          <table class="data fullwidth">
+            <thead><tr><th>Suggestion</th><th>Clicks</th><th>Last</th></tr></thead>
+            <tbody>
+              {% for s in suggestions %}
+                <tr><td>{{ s.suggestion }}</td><td>{{ s.clicks }}</td><td>{{ s.lastClickedAt }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="light">No suggestion clicks yet.</p>
+        {% endif %}
+      </div>
+
+      <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+        <h2>Training data</h2>
+        <table class="data fullwidth">
+          <thead><tr><th>Type</th><th>Sources</th><th>Chunks</th></tr></thead>
+          <tbody>
+            <tr><td>Entries</td><td>{{ training.entries.count }}</td><td>{{ training.entries.chunks }}</td></tr>
+            <tr><td>Files</td><td>{{ training.files.count }}</td><td>{{ training.files.chunks }}</td></tr>
+            <tr><td>URLs</td><td>{{ training.urls.count }}</td><td>{{ training.urls.chunks }}</td></tr>
+            <tr><td>Q&amp;A</td><td>{{ training.qa.count }}</td><td>{{ training.qa.chunks }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var data = {{ stats.activity|json_encode|raw }};
+      var canvas = document.getElementById('chatbot-activity');
+      if (!canvas || !data.length) return;
+      var ctx = canvas.getContext('2d');
+      var w = canvas.width = canvas.offsetWidth;
+      var h = canvas.height;
+      var max = Math.max(1, Math.max.apply(null, data.map(function(d){return Math.max(d.conversations, d.messages);})));
+      function path(key, color){
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        data.forEach(function(d, i){
+          var x = (i/(data.length-1||1))*(w-20)+10;
+          var y = h - 10 - (d[key]/max)*(h-20);
+          if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+      path('conversations', '#2563eb');
+      path('messages', '#10b981');
+      // legend
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#2563eb'; ctx.fillText('Conversations', 10, 14);
+      ctx.fillStyle = '#10b981'; ctx.fillText('Messages', 120, 14);
+    })();
+  </script>
+{% endblock %}

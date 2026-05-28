@@ -1,0 +1,90 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Training · Files' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+} %}
+{% set selectedTab = 'files' %}
+
+{% block content %}
+  <div id="chatbot-drop" style="border:2px dashed #c9d3dc;border-radius:8px;padding:24px;text-align:center;margin-bottom:16px;background:#fafbfc;">
+    <p><strong>Drop .txt or .md files here</strong> or
+      <button class="btn submit" id="chatbot-file-pick">Browse</button></p>
+    <p class="light" style="font-size:12px;">Max 5 MB each</p>
+    <input type="file" id="chatbot-file-input" accept=".txt,.md" multiple style="display:none;">
+    <div id="chatbot-upload-status" style="margin-top:8px;color:#596673;"></div>
+  </div>
+
+  <h2>Files</h2>
+  {% if rows|length %}
+    <table class="data fullwidth">
+      <thead><tr><th>Name</th><th>Status</th><th>Chunks</th><th>Size</th><th>Last indexed</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.originalName }}</td>
+            <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
+            <td>{{ r.chunkCount }}</td>
+            <td>{{ (r.size / 1024)|number_format(1) }} KB</td>
+            <td>{{ r.lastTrainedAt ?: '—' }}</td>
+            <td>
+              <button class="btn small js-reindex" data-id="{{ r.id }}">Re-index</button>
+              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="light">No files uploaded yet.</p>
+  {% endif %}
+
+  <script>
+    (function(){
+      var drop = document.getElementById('chatbot-drop');
+      var input = document.getElementById('chatbot-file-input');
+      var pick = document.getElementById('chatbot-file-pick');
+      var status = document.getElementById('chatbot-upload-status');
+
+      pick.addEventListener('click', function(e){ e.preventDefault(); input.click(); });
+      input.addEventListener('change', function(){ upload(input.files); });
+      ['dragover','dragenter'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.style.background = '#eef2ff'; }); });
+      ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.style.background = '#fafbfc'; }); });
+      drop.addEventListener('drop', function(e){ upload(e.dataTransfer.files); });
+
+      function upload(files){
+        if (!files || !files.length) return;
+        var queue = Array.from(files);
+        status.textContent = 'Uploading…';
+        function next(){
+          if (!queue.length) { location.reload(); return; }
+          var f = queue.shift();
+          var data = new FormData();
+          data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+          data.append('file', f);
+          fetch(Craft.getActionUrl('_cs-chatbot/training/upload-file'), {method:'POST', body:data, credentials:'same-origin'})
+            .then(function(r){return r.json();})
+            .then(function(j){
+              status.textContent = j.success ? ('Uploaded: ' + f.name) : ('Error: ' + (j.error||'unknown'));
+              next();
+            });
+        }
+        next();
+      }
+
+      function post(action, id){
+        var data = new FormData();
+        data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        data.append('id', id);
+        return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
+      }
+      document.querySelectorAll('.js-reindex').forEach(function(b){ b.addEventListener('click', function(){ post('_cs-chatbot/training/reindex-file', b.dataset.id).then(function(){ location.reload(); }); }); });
+      document.querySelectorAll('.js-delete').forEach(function(b){ b.addEventListener('click', function(){ if(!confirm('Delete?'))return; post('_cs-chatbot/training/delete-file', b.dataset.id).then(function(){ location.reload(); }); }); });
+    })();
+  </script>
+{% endblock %}

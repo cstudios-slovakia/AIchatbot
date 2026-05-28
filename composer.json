@@ -1,0 +1,63 @@
+{
+  "name": "cstudios-s-r-o/craft-cs-chatbot",
+  "description": "Interactive AI Assistant — an AI-powered chat widget and live-chat console for Craft CMS, trained on your own content.",
+  "type": "craft-plugin",
+  "license": "proprietary",
+  "keywords": [
+    "craft",
+    "cms",
+    "craftcms",
+    "craft-plugin",
+    "chatbot",
+    "ai",
+    "assistant",
+    "openai",
+    "live chat",
+    "support"
+  ],
+  "support": {
+    "source": "https://github.com/cstudios-slovakia/AIchatbot",
+    "issues": "https://github.com/cstudios-slovakia/AIchatbot/issues"
+  },
+  "authors": [
+    {
+      "name": "Cstudios s. r. o.",
+      "homepage": "https://cstudios.sk"
+    }
+  ],
+  "require": {
+    "php": ">=8.2",
+    "craftcms/cms": "^5"
+  },
+  "require-dev": {
+    "craftcms/ecs": "dev-main",
+    "craftcms/phpstan": "dev-main"
+  },
+  "autoload": {
+    "psr-4": {
+      "cstudiossro\\craftcschatbot\\": "src/"
+    }
+  },
+  "extra": {
+    "handle": "_cs-chatbot",
+    "name": "Interactive AI Assistant",
+    "developer": "Cstudios s. r. o.",
+    "developerUrl": "https://cstudios.sk",
+    "documentationUrl": "https://github.com/cstudios-slovakia/AIchatbot/blob/main/README.md"
+  },
+  "scripts": {
+    "check-cs": "ecs check --ansi",
+    "fix-cs": "ecs check --ansi --fix",
+    "phpstan": "phpstan --memory-limit=1G"
+  },
+  "config": {
+    "sort-packages": true,
+    "platform": {
+      "php": "8.2"
+    },
+    "allow-plugins": {
+      "yiisoft/yii2-composer": true,
+      "craftcms/plugin-installer": true
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{% import '_includes/forms' as forms %}
+
+{{ forms.lightswitchField({
+  label: 'Enable Suggestions',
+  name: 'settings[suggestionsEnabled]',
+  on: settings.suggestionsEnabled,
+}) }}
+
+{{ forms.textareaField({
+  label: 'Suggested Questions (default)',
+  instructions: 'One per line. Shown as clickable buttons below the initial greeting. Used when no site override is set below.',
+  name: 'settings[suggestions]',
+  value: settings.suggestions|join("\n"),
+  rows: 5,
+}) }}
+
+{% set allSites = craft.app.sites.getAllSites() %}
+{% if allSites|length > 1 %}
+  <hr>
+  <h2>Per-site overrides</h2>
+  <p class="light">Leave blank to fall back to the default list above. Each Craft site can have its own suggestion buttons (e.g. translated for the site's language).</p>
+
+  {% for site in allSites %}
+    <div style="border:1px solid #d8dde2;border-radius:6px;padding:14px;margin-bottom:14px;background:#fbfcfd;">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px;">
+        {{ site.name }}
+        <span class="light" style="font-weight:normal;font-size:11px;">· {{ site.handle }} · {{ site.language }} · {{ site.baseUrl ?: '—' }}</span>
+      </div>
+
+      {% set siteSuggestions = settings.suggestionsBySite[site.uid] ?? [] %}
+      {{ forms.textareaField({
+        label: 'Suggested Questions',
+        instructions: 'One per line. Overrides the default list when at least one line is set.',
+        name: 'settings[suggestionsBySite][' ~ site.uid ~ ']',
+        value: siteSuggestions|join("\n"),
+        rows: 4,
+      }) }}
+    </div>
+  {% endfor %}
+{% endif %}

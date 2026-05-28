@@ -1,0 +1,57 @@
+{% import '_includes/forms' as forms %}
+
+{{ forms.lightswitchField({
+  label: 'Enable filter',
+  instructions: 'Blocks empty, too-long, gibberish, and rate-limited messages before they reach the AI. Runs on both frontend and backend.',
+  name: 'settings[filterEnabled]',
+  on: settings.filterEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Minimum message length',
+  instructions: 'Messages shorter than this (after trimming) are rejected.',
+  name: 'settings[filterMinLength]',
+  value: settings.filterMinLength,
+  type: 'number',
+  size: 6,
+}) }}
+
+{{ forms.textField({
+  label: 'Maximum message length',
+  instructions: 'Hard cap on message length in characters.',
+  name: 'settings[filterMaxLength]',
+  value: settings.filterMaxLength,
+  type: 'number',
+  size: 6,
+}) }}
+
+<hr>
+<h3>Rate limit</h3>
+
+{{ forms.textField({
+  label: 'Window (seconds)',
+  instructions: 'Time window for counting messages. Set 0 to disable rate limiting.',
+  name: 'settings[filterRateWindowSeconds]',
+  value: settings.filterRateWindowSeconds,
+  type: 'number',
+  size: 6,
+}) }}
+
+{{ forms.textField({
+  label: 'Max messages per session in window',
+  instructions: 'Per-session cap. IP cap is 3× this value across all sessions.',
+  name: 'settings[filterRateMaxMessages]',
+  value: settings.filterRateMaxMessages,
+  type: 'number',
+  size: 6,
+}) }}
+
+<hr>
+
+{{ forms.textareaField({
+  label: 'Blocked words / phrases',
+  instructions: 'One per line. Case-insensitive substring match. Empty to disable.',
+  name: 'settings[filterBlockedWords]',
+  value: settings.filterBlockedWords|join("\n"),
+  rows: 8,
+}) }}

@@ -1,0 +1,44 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Settings' %}
+{% set selectedSubnavItem = 'settings' %}
+
+{% set tabs = {
+  general:     { label: 'General',          url: cpUrl('_cs-chatbot/settings', { tab: 'general' }) },
+  ai:          { label: 'AI Configuration', url: cpUrl('_cs-chatbot/settings', { tab: 'ai' }) },
+  training:    { label: 'Training',         url: cpUrl('_cs-chatbot/settings', { tab: 'training' }) },
+  suggestions: { label: 'Suggestions',      url: cpUrl('_cs-chatbot/settings', { tab: 'suggestions' }) },
+  livechat:    { label: 'Live Chat',        url: cpUrl('_cs-chatbot/settings', { tab: 'livechat' }) },
+  filter:      { label: 'Filter',           url: cpUrl('_cs-chatbot/settings', { tab: 'filter' }) },
+  logging:     { label: 'Logging',          url: cpUrl('_cs-chatbot/settings', { tab: 'logging' }) },
+} %}
+{% set selectedTab = tab %}
+
+{% block content %}
+
+  <form method="post" accept-charset="UTF-8" enctype="multipart/form-data" id="cs-chatbot-settings-form">
+    {{ csrfInput() }}
+    {{ actionInput('_cs-chatbot/settings/save') }}
+    {{ redirectInput('_cs-chatbot/settings?tab=' ~ tab) }}
+    <input type="hidden" name="tab" value="{{ tab }}">
+
+    {% include '_cs-chatbot/settings/_' ~ tab with { settings: settings, sections: sections } %}
+
+    <hr>
+    <button type="submit" class="btn submit">Save</button>
+  </form>
+
+  {% js %}
+    (function () {
+      var form = document.getElementById('cs-chatbot-settings-form');
+      if (!form) return;
+      document.addEventListener('keydown', function (e) {
+        var mod = e.metaKey || e.ctrlKey;
+        if (mod && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          if (typeof form.requestSubmit === 'function') form.requestSubmit();
+          else form.submit();
+        }
+      });
+    })();
+  {% endjs %}
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Training · URLs' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+} %}
+{% set selectedTab = 'urls' %}
+
+{% block content %}
+  <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+      {{ csrfInput() }}
+      {{ actionInput('_cs-chatbot/training/import-sitemap') }}
+      <h2>Sitemap import</h2>
+      <input type="url" name="sitemap" class="text fullwidth" placeholder="https://example.com/sitemap.xml" required>
+      <button type="submit" class="btn submit" style="margin-top:8px;">Import sitemap</button>
+    </form>
+
+    <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+      {{ csrfInput() }}
+      {{ actionInput('_cs-chatbot/training/add-urls') }}
+      <h2>Manual URLs</h2>
+      <textarea name="urls" class="text fullwidth" rows="5" placeholder="One URL per line"></textarea>
+      <button type="submit" class="btn submit" style="margin-top:8px;">Add URLs</button>
+    </form>
+  </div>
+
+  <form method="post" accept-charset="UTF-8" style="margin-bottom:8px;">
+    {{ csrfInput() }}
+    {{ actionInput('_cs-chatbot/training/crawl-all') }}
+    <button type="submit" class="btn">Crawl all &amp; index</button>
+  </form>
+
+  <h2>URLs</h2>
+  {% if rows|length %}
+    <table class="data fullwidth">
+      <thead><tr><th>URL</th><th>Source</th><th>Status</th><th>Chunks</th><th>Last</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td><a href="{{ url('_cs-chatbot/training/url-chunks/' ~ r.id) }}">{{ r.url }}</a></td>
+            <td>{{ r.source }}</td>
+            <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
+            <td>{{ r.chunkCount }}</td>
+            <td>{{ r.lastTrainedAt ?: '—' }}</td>
+            <td>
+              <button class="btn small js-recrawl" data-id="{{ r.id }}">Re-crawl</button>
+              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="light">No URLs added yet.</p>
+  {% endif %}
+
+  <script>
+    (function(){
+      function post(action, id){
+        var data = new FormData();
+        data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        data.append('id', id);
+        return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
+      }
+      document.querySelectorAll('.js-recrawl').forEach(function(b){ b.addEventListener('click', function(){ post('_cs-chatbot/training/recrawl-url', b.dataset.id).then(function(){ location.reload(); }); }); });
+      document.querySelectorAll('.js-delete').forEach(function(b){ b.addEventListener('click', function(){ if(!confirm('Delete?'))return; post('_cs-chatbot/training/delete-url', b.dataset.id).then(function(){ location.reload(); }); }); });
+    })();
+  </script>
+{% endblock %}

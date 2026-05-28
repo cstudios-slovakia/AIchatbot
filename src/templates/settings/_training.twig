@@ -1,0 +1,32 @@
+{% import '_includes/forms' as forms %}
+
+{{ forms.checkboxSelectField({
+  label: 'Sections to train',
+  name: 'settings[trainingSections]',
+  values: settings.trainingSections,
+  options: sections|map(s => { label: s.name, value: s.uid }),
+  showAllOption: false,
+}) }}
+
+{{ forms.checkboxSelectField({
+  label: 'Category groups to train',
+  name: 'settings[trainingCategoryGroups]',
+  values: settings.trainingCategoryGroups,
+  options: categoryGroups|map(g => { label: g.name, value: g.uid }),
+  showAllOption: false,
+}) }}
+
+{{ forms.checkboxSelectField({
+  label: 'Global sets to train',
+  name: 'settings[trainingGlobalSets]',
+  values: settings.trainingGlobalSets,
+  options: globalSets|map(g => { label: g.name, value: g.uid }),
+  showAllOption: false,
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Auto-Train on Save',
+  instructions: 'Automatically index entries, categories and globals whenever they are saved (background job). Only items in selected sections / groups / sets are auto-trained.',
+  name: 'settings[autoTrainOnSave]',
+  on: settings.autoTrainOnSave,
+}) }}

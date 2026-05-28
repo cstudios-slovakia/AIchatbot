@@ -1,0 +1,16 @@
+{% extends '_layouts/cp' %}
+{% set docTitle = (title ?? 'AI Assistant') ~ ' · ' ~ craft.app.systemName %}
+{% set title = title ?? 'AI Assistant' %}
+{% set selectedSubnavItem = selectedSubnavItem ?? 'dashboard' %}
+
+{% set crumbs = [
+  { label: 'AI Assistant', url: url('_cs-chatbot') },
+] %}
+
+{% set subnav = {
+  dashboard:   { label: 'Dashboard', url: '_cs-chatbot' },
+  'live-chat': { label: 'Live Chat', url: '_cs-chatbot/live-chat' },
+  training:    { label: 'Training',  url: '_cs-chatbot/training/entries' },
+  logs:        { label: 'Chat Logs', url: '_cs-chatbot/logs' },
+  settings:    { label: 'Settings',  url: '_cs-chatbot/settings' },
+} %}

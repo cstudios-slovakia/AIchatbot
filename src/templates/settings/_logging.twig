@@ -1,0 +1,23 @@
+{% import '_includes/forms' as forms %}
+
+{{ forms.lightswitchField({
+  label: 'Message Ratings',
+  instructions: 'Show thumbs up / down under each bot response.',
+  name: 'settings[ratingsEnabled]',
+  on: settings.ratingsEnabled,
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Conversation Logging',
+  name: 'settings[loggingEnabled]',
+  on: settings.loggingEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Log Retention (days)',
+  instructions: '0 = keep forever.',
+  name: 'settings[logRetentionDays]',
+  value: settings.logRetentionDays,
+  type: 'number',
+  size: 6,
+}) }}

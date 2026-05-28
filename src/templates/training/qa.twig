@@ -1,0 +1,66 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Training · Q&A' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+} %}
+{% set selectedTab = 'qa' %}
+
+{% block content %}
+  <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;margin-bottom:16px;">
+    {{ csrfInput() }}
+    {{ actionInput('_cs-chatbot/training/save-qa') }}
+    <h2>Add Q&amp;A pair</h2>
+    <div class="field">
+      <div class="heading"><label>Question</label></div>
+      <div class="input"><input type="text" class="text fullwidth" name="question" required></div>
+    </div>
+    <div class="field">
+      <div class="heading"><label>Answer</label></div>
+      <div class="input"><textarea class="text fullwidth" name="answer" rows="4" required></textarea></div>
+    </div>
+    <button type="submit" class="btn submit">Save Q&amp;A</button>
+  </form>
+
+  <h2>Pairs</h2>
+  {% if rows|length %}
+    <table class="data fullwidth">
+      <thead><tr><th>Question</th><th>Answer</th><th>Source</th><th>Active</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.question|slice(0, 120) }}</td>
+            <td>{{ r.answer|slice(0, 200) }}</td>
+            <td><span class="status-pill status-{{ r.source }}">{{ r.source }}</span></td>
+            <td>
+              <button class="btn small js-toggle" data-id="{{ r.id }}">{{ r.active ? 'On' : 'Off' }}</button>
+            </td>
+            <td>
+              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="light">No Q&amp;A pairs yet.</p>
+  {% endif %}
+
+  <script>
+    (function(){
+      function post(action, id){
+        var data = new FormData();
+        data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        data.append('id', id);
+        return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
+      }
+      document.querySelectorAll('.js-toggle').forEach(function(b){ b.addEventListener('click', function(){ post('_cs-chatbot/training/toggle-qa', b.dataset.id).then(function(){ location.reload(); }); }); });
+      document.querySelectorAll('.js-delete').forEach(function(b){ b.addEventListener('click', function(){ if(!confirm('Delete?'))return; post('_cs-chatbot/training/delete-qa', b.dataset.id).then(function(){ location.reload(); }); }); });
+    })();
+  </script>
+{% endblock %}

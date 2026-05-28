@@ -1,0 +1,137 @@
+{% extends '_cs-chatbot/_layout' %}
+{% set title = 'Chat Logs' %}
+{% set selectedSubnavItem = 'logs' %}
+{% import '_cs-chatbot/logs/_macros' as m %}
+
+{% block content %}
+  <form method="get" class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:36px;align-items:center;">
+    <div class="texticon search icon clearable">
+      <span class="texticon-icon search icon" aria-hidden="true"></span>
+      <input type="search" name="q" value="{{ q }}" placeholder="Short ID / token / text" class="text" autocomplete="off" style="min-width:220px;">
+    </div>
+    <div class="select">
+      <select name="rating">
+        <option value="">All ratings</option>
+        <option value="pos" {{ rating == 'pos' ? 'selected' }}>Positive</option>
+        <option value="neg" {{ rating == 'neg' ? 'selected' }}>Negative</option>
+      </select>
+    </div>
+    <div class="select">
+      <select name="confidence">
+        <option value="">All confidence</option>
+        <option value="high" {{ confidence == 'high' ? 'selected' }}>High (&ge; 80%)</option>
+        <option value="mid"  {{ confidence == 'mid'  ? 'selected' }}>Medium (60-79%)</option>
+        <option value="low"  {{ confidence == 'low'  ? 'selected' }}>Low (&lt; 60%)</option>
+        <option value="none" {{ confidence == 'none' ? 'selected' }}>No context</option>
+      </select>
+    </div>
+    <label style="display:inline-flex;gap:6px;align-items:center;font-size:12px;color:#3f4d5a;">
+      <input type="checkbox" name="starred" value="1" {{ starredOnly ? 'checked' }}> ★ Favourites only
+    </label>
+    <label style="display:inline-flex;gap:6px;align-items:center;font-size:12px;color:#3f4d5a;">
+      <input type="checkbox" name="active" value="1" {{ activeOnly ? 'checked' }}> 🟢 Active now
+    </label>
+    <button class="btn submit" type="submit">Filter</button>
+    {% if q or rating or confidence or starredOnly or activeOnly %}
+      <a class="btn" href="{{ url('_cs-chatbot/logs') }}">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if rows|length %}
+    <div class="tableview">
+      <div class="tablepane">
+        <table class="data fullwidth" style="table-layout:fixed;">
+          <colgroup>
+            <col style="width:4%">
+            <col style="width:13%">
+            <col style="width:26%">
+            <col style="width:7%">
+            <col style="width:13%">
+            <col style="width:10%">
+            <col style="width:12%">
+            <col style="width:15%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">★</th>
+              <th scope="col">Session</th>
+              <th scope="col">Page</th>
+              <th scope="col">Msgs</th>
+              <th scope="col">Rating</th>
+              <th scope="col">Confidence</th>
+              <th scope="col">IP</th>
+              <th scope="col">Started</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr data-session-id="{{ r.id }}">
+                <td>
+                  <button type="button" class="logs-star-btn" data-id="{{ r.id }}" title="{{ r.starred ? 'Unfavourite' : 'Favourite' }}" style="background:transparent;border:0;cursor:pointer;color:{{ r.starred ? '#c08a1e' : '#8895a4' }};font-size:16px;line-height:1;padding:0;">
+                    {{ r.starred ? '★' : '☆' }}
+                  </button>
+                </td>
+                <td style="overflow:hidden;text-overflow:ellipsis;">
+                  <a href="{{ url('_cs-chatbot/logs/session/' ~ r.id) }}" class="code">
+                    {{ '%05d-%s'|format(r.id, r.sessionToken|slice(0, 4)|upper) }}
+                  </a>
+                  {% if r.adminNotes %}
+                    <span title="{{ r.adminNotes|slice(0, 200) }}" style="margin-left:4px;color:#c08a1e;cursor:help;">📝</span>
+                  {% endif %}
+                </td>
+                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.pageUrl }}">
+                  {{ r.pageUrl ?: '—' }}
+                </td>
+                <td>{{ r.messageCount }}</td>
+                <td style="white-space:nowrap;">
+                  <span style="color:#27ab46;">{{ r.ratingPositive }} &uarr;</span>
+                  &nbsp;
+                  <span style="color:#cf1124;">{{ r.ratingNegative }} &darr;</span>
+                  {% if r.chatRating == 1 %} <span title="End-of-chat rating">👍</span>
+                  {% elseif r.chatRating == -1 %} <span title="End-of-chat rating">👎</span>
+                  {% endif %}
+                </td>
+                <td>{{ m.confidenceBadge(r.maxConf) }}</td>
+                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.ip ?: '—' }}</td>
+                <td style="white-space:nowrap;">
+                  {{ r.dateCreated|datetime('short') }}
+                  {% if not r.chatEndedAt %}<span title="Not yet ended" style="margin-left:4px;color:#16a34a;font-size:11px;">● live</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="flex" style="margin-top:14px;gap:8px;align-items:center;">
+      {% if page > 1 %}
+        <a class="btn" href="?{{ {q:q, rating:rating, confidence:confidence, starred:starredOnly?1:'', active:activeOnly?1:'', page:page-1}|url_encode }}">&larr; Prev</a>
+      {% endif %}
+      <span class="light">Page {{ page }} &middot; {{ total }} sessions total</span>
+      {% if rows|length == perPage %}
+        <a class="btn" href="?{{ {q:q, rating:rating, confidence:confidence, starred:starredOnly?1:'', active:activeOnly?1:'', page:page+1}|url_encode }}">Next &rarr;</a>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="zilch">No sessions found.</div>
+  {% endif %}
+
+  {% js %}
+    document.querySelectorAll('.logs-star-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var fd = new FormData();
+        fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
+        fd.append('id', b.dataset.id);
+        fetch('{{ actionUrl('_cs-chatbot/logs/toggle-star')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+          .then(function(r){ return r.json(); })
+          .then(function(r){
+            if (!r.success) return;
+            b.textContent = r.starred ? '★' : '☆';
+            b.style.color = r.starred ? '#c08a1e' : '#8895a4';
+            b.title = r.starred ? 'Unfavourite' : 'Favourite';
+          });
+      });
+    });
+  {% endjs %}
+{% endblock %}
