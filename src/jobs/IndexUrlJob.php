@@ -17,6 +17,6 @@ class IndexUrlJob extends BaseJob
 
     protected function defaultDescription(): ?string
     {
-        return Craft::t('_cs-chatbot', 'Crawling URL #{id}', ['id' => $this->urlRecId]);
+        return Craft::t('interactive-ai-assistant', 'Crawling URL #{id}', ['id' => $this->urlRecId]);
     }
 }

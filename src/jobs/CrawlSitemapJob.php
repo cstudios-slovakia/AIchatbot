@@ -31,6 +31,6 @@ class CrawlSitemapJob extends BaseJob
 
     protected function defaultDescription(): ?string
     {
-        return Craft::t('_cs-chatbot', 'Importing sitemap');
+        return Craft::t('interactive-ai-assistant', 'Importing sitemap');
     }
 }

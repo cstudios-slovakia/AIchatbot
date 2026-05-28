@@ -1,7 +1,7 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Chat Logs' %}
 {% set selectedSubnavItem = 'logs' %}
-{% import '_cs-chatbot/logs/_macros' as m %}
+{% import 'interactive-ai-assistant/logs/_macros' as m %}
 
 {% block content %}
   <form method="get" class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:36px;align-items:center;">
@@ -33,7 +33,7 @@
     </label>
     <button class="btn submit" type="submit">Filter</button>
     {% if q or rating or confidence or starredOnly or activeOnly %}
-      <a class="btn" href="{{ url('_cs-chatbot/logs') }}">Clear</a>
+      <a class="btn" href="{{ url('interactive-ai-assistant/logs') }}">Clear</a>
     {% endif %}
   </form>
 
@@ -72,7 +72,7 @@
                   </button>
                 </td>
                 <td style="overflow:hidden;text-overflow:ellipsis;">
-                  <a href="{{ url('_cs-chatbot/logs/session/' ~ r.id) }}" class="code">
+                  <a href="{{ url('interactive-ai-assistant/logs/session/' ~ r.id) }}" class="code">
                     {{ '%05d-%s'|format(r.id, r.sessionToken|slice(0, 4)|upper) }}
                   </a>
                   {% if r.adminNotes %}
@@ -123,7 +123,7 @@
         var fd = new FormData();
         fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
         fd.append('id', b.dataset.id);
-        fetch('{{ actionUrl('_cs-chatbot/logs/toggle-star')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+        fetch('{{ actionUrl('interactive-ai-assistant/logs/toggle-star')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
           .then(function(r){ return r.json(); })
           .then(function(r){
             if (!r.success) return;

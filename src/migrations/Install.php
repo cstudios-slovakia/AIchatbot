@@ -22,7 +22,10 @@ class Install extends Migration
         $this->dropTableIfExists('{{%chatbot_training_files}}');
         $this->dropTableIfExists('{{%chatbot_training_urls}}');
         $this->dropTableIfExists('{{%chatbot_training_qa}}');
+        $this->dropTableIfExists('{{%chatbot_training_categories}}');
+        $this->dropTableIfExists('{{%chatbot_training_globals}}');
         $this->dropTableIfExists('{{%chatbot_suggestion_stats}}');
+        $this->dropTableIfExists('{{%chatbot_bans}}');
         return true;
     }
 
@@ -141,6 +144,8 @@ class Install extends Migration
             'lowConfStreak' => $this->integer()->notNull()->defaultValue(0),
             'chatRating' => $this->integer(), // null|1|-1 (overall chat rating from user)
             'chatEndedAt' => $this->dateTime(),
+            'starred' => $this->boolean()->notNull()->defaultValue(false),
+            'adminNotes' => $this->text(),
             'dateCreated' => $this->dateTime()->notNull(),
             'dateUpdated' => $this->dateTime()->notNull(),
             'uid' => $this->uid(),
@@ -156,6 +161,18 @@ class Install extends Migration
             'rating' => $this->integer(), // null|1|-1
             'usedAsQa' => $this->boolean()->notNull()->defaultValue(false),
             'adminId' => $this->integer(),
+            'offerHuman' => $this->boolean()->notNull()->defaultValue(false),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
+
+        $this->createTable('{{%chatbot_bans}}', [
+            'id' => $this->primaryKey(),
+            'ip' => $this->string(64)->notNull(),
+            'reason' => $this->string(512),
+            'bannedByAdminId' => $this->integer(),
+            'expiresAt' => $this->dateTime(),
             'dateCreated' => $this->dateTime()->notNull(),
             'dateUpdated' => $this->dateTime()->notNull(),
             'uid' => $this->uid(),
@@ -200,11 +217,15 @@ class Install extends Migration
         $this->createIndex(null, '{{%chatbot_sessions}}', ['dateCreated']);
         $this->createIndex(null, '{{%chatbot_sessions}}', ['handoffStatus']);
         $this->createIndex(null, '{{%chatbot_sessions}}', ['handoffStatus', 'dateUpdated']);
+        $this->createIndex(null, '{{%chatbot_sessions}}', ['starred']);
 
         $this->createIndex(null, '{{%chatbot_messages}}', ['sessionId']);
         $this->createIndex(null, '{{%chatbot_messages}}', ['rating']);
         $this->createIndex(null, '{{%chatbot_messages}}', ['dateCreated']);
 
         $this->createIndex(null, '{{%chatbot_suggestion_stats}}', ['suggestion(191)'], true);
+
+        $this->createIndex(null, '{{%chatbot_bans}}', ['ip']);
+        $this->createIndex(null, '{{%chatbot_bans}}', ['expiresAt']);
     }
 }

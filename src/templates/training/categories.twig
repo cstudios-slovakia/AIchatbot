@@ -1,20 +1,20 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Training · Categories' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
-  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
-  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
-  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
-  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
-  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
-  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
 } %}
 {% set selectedTab = 'categories' %}
 
 {% block content %}
   <form method="post" accept-charset="UTF-8">
     {{ csrfInput() }}
-    {{ actionInput('_cs-chatbot/training/train-category-groups') }}
+    {{ actionInput('interactive-ai-assistant/training/train-category-groups') }}
     <div class="field">
       <div class="heading"><label>Category groups to train</label></div>
       <div class="input">
@@ -45,7 +45,7 @@
         {% for r in rows %}
           <tr>
             <td>
-              <a href="{{ url('_cs-chatbot/training/category-chunks/' ~ r.id) }}">
+              <a href="{{ url('interactive-ai-assistant/training/category-chunks/' ~ r.id) }}">
                 {{ titles[r.categoryId] ?? 'Category #' ~ r.categoryId }}
               </a>
             </td>
@@ -73,12 +73,12 @@
         return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
       }
       document.querySelectorAll('.js-train').forEach(function(b){
-        b.addEventListener('click', function(){ post('_cs-chatbot/training/train-category', b.dataset.id).then(function(){ location.reload(); }); });
+        b.addEventListener('click', function(){ post('interactive-ai-assistant/training/train-category', b.dataset.id).then(function(){ location.reload(); }); });
       });
       document.querySelectorAll('.js-delete').forEach(function(b){
         b.addEventListener('click', function(){
           if (!confirm('Remove this category from index?')) return;
-          post('_cs-chatbot/training/delete-category', b.dataset.id).then(function(){ location.reload(); });
+          post('interactive-ai-assistant/training/delete-category', b.dataset.id).then(function(){ location.reload(); });
         });
       });
     })();

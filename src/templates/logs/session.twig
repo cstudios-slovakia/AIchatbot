@@ -1,7 +1,7 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Session ' ~ session.sessionToken|slice(0, 10) %}
 {% set selectedSubnavItem = 'logs' %}
-{% import '_cs-chatbot/logs/_macros' as m %}
+{% import 'interactive-ai-assistant/logs/_macros' as m %}
 
 {% block content %}
   <style>
@@ -41,7 +41,7 @@
       .cs-log-meta { width:100%; flex-basis:auto; position:static; }
     }
   </style>
-  <p><a class="btn" href="{{ url('_cs-chatbot/logs') }}">&larr; Back to logs</a></p>
+  <p><a class="btn" href="{{ url('interactive-ai-assistant/logs') }}">&larr; Back to logs</a></p>
 
   <div class="cs-log-layout">
     <div class="cs-log-chat">
@@ -123,7 +123,7 @@
         fd.append('id', '{{ session.id }}');
         fd.append('note', $note.value);
         $status.textContent = 'Saving…';
-        fetch(Craft.getActionUrl('_cs-chatbot/logs/save-note'), {method:'POST', body:fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}})
+        fetch(Craft.getActionUrl('interactive-ai-assistant/logs/save-note'), {method:'POST', body:fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}})
           .then(function(r){return r.json();})
           .then(function(r){ $status.textContent = r.success ? 'Saved ✓' : 'Save failed'; setTimeout(function(){$status.textContent='';}, 2000); });
       }
@@ -157,7 +157,7 @@
           var data = new FormData();
           data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
           data.append('messageId', b.dataset.id);
-          fetch(Craft.getActionUrl('_cs-chatbot/logs/use-as-qa'), {method:'POST', body:data, credentials:'same-origin'})
+          fetch(Craft.getActionUrl('interactive-ai-assistant/logs/use-as-qa'), {method:'POST', body:data, credentials:'same-origin'})
             .then(function(r){return r.json();})
             .then(function(j){ if (j.success){ location.reload(); } else { alert(j.error || 'Failed'); } });
         });

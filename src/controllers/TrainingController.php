@@ -33,7 +33,7 @@ class TrainingController extends Controller
         if (!parent::beforeAction($action)) {
             return false;
         }
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         return true;
     }
 
@@ -52,7 +52,7 @@ class TrainingController extends Controller
         }
         $sections = Craft::$app->entries->getAllSections();
         $settings = Plugin::getInstance()->getSettings();
-        return $this->renderTemplate('_cs-chatbot/training/entries', [
+        return $this->renderTemplate('interactive-ai-assistant/training/entries', [
             'rows' => $rows,
             'entryTitles' => $entryTitles,
             'sections' => $sections,
@@ -120,11 +120,11 @@ class TrainingController extends Controller
             ->orderBy(['position' => SORT_ASC])
             ->all();
         $entry = Entry::find()->id($rec->entryId)->siteId($rec->siteId)->status(null)->one();
-        return $this->renderTemplate('_cs-chatbot/training/_chunks', [
+        return $this->renderTemplate('interactive-ai-assistant/training/_chunks', [
             'title' => $entry ? $entry->title : ('Entry #' . $rec->entryId),
             'subtitle' => 'Entry',
             'chunks' => $chunks,
-            'backUrl' => 'admin/_cs-chatbot/training/entries',
+            'backUrl' => 'admin/interactive-ai-assistant/training/entries',
         ]);
     }
 
@@ -142,7 +142,7 @@ class TrainingController extends Controller
             }
         }
         $settings = Plugin::getInstance()->getSettings();
-        return $this->renderTemplate('_cs-chatbot/training/categories', [
+        return $this->renderTemplate('interactive-ai-assistant/training/categories', [
             'rows' => $rows,
             'titles' => $titles,
             'groups' => Craft::$app->categories->getAllGroups(),
@@ -210,11 +210,11 @@ class TrainingController extends Controller
             ->orderBy(['position' => SORT_ASC])
             ->all();
         $cat = Category::find()->id($rec->categoryId)->siteId($rec->siteId)->status(null)->one();
-        return $this->renderTemplate('_cs-chatbot/training/_chunks', [
+        return $this->renderTemplate('interactive-ai-assistant/training/_chunks', [
             'title' => $cat ? $cat->title : ('Category #' . $rec->categoryId),
             'subtitle' => 'Category',
             'chunks' => $chunks,
-            'backUrl' => 'admin/_cs-chatbot/training/categories',
+            'backUrl' => 'admin/interactive-ai-assistant/training/categories',
         ]);
     }
 
@@ -232,7 +232,7 @@ class TrainingController extends Controller
             }
         }
         $settings = Plugin::getInstance()->getSettings();
-        return $this->renderTemplate('_cs-chatbot/training/globals', [
+        return $this->renderTemplate('interactive-ai-assistant/training/globals', [
             'rows' => $rows,
             'names' => $names,
             'allSets' => Craft::$app->globals->getAllSets(),
@@ -291,11 +291,11 @@ class TrainingController extends Controller
             ->orderBy(['position' => SORT_ASC])
             ->all();
         $set = GlobalSet::find()->id($rec->globalSetId)->siteId($rec->siteId)->status(null)->one();
-        return $this->renderTemplate('_cs-chatbot/training/_chunks', [
+        return $this->renderTemplate('interactive-ai-assistant/training/_chunks', [
             'title' => $set ? $set->name : ('Global Set #' . $rec->globalSetId),
             'subtitle' => 'Global Set',
             'chunks' => $chunks,
-            'backUrl' => 'admin/_cs-chatbot/training/globals',
+            'backUrl' => 'admin/interactive-ai-assistant/training/globals',
         ]);
     }
 
@@ -304,7 +304,7 @@ class TrainingController extends Controller
     public function actionFiles(): Response
     {
         $rows = TrainingFileRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
-        return $this->renderTemplate('_cs-chatbot/training/files', [
+        return $this->renderTemplate('interactive-ai-assistant/training/files', [
             'rows' => $rows,
         ]);
     }
@@ -371,7 +371,7 @@ class TrainingController extends Controller
     public function actionUrls(): Response
     {
         $rows = TrainingUrlRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
-        return $this->renderTemplate('_cs-chatbot/training/urls', [
+        return $this->renderTemplate('interactive-ai-assistant/training/urls', [
             'rows' => $rows,
         ]);
     }
@@ -451,11 +451,11 @@ class TrainingController extends Controller
             ->where(['sourceType' => 'url', 'sourceId' => $rec->id])
             ->orderBy(['position' => SORT_ASC])
             ->all();
-        return $this->renderTemplate('_cs-chatbot/training/_chunks', [
+        return $this->renderTemplate('interactive-ai-assistant/training/_chunks', [
             'title' => $rec->url,
             'subtitle' => 'URL',
             'chunks' => $chunks,
-            'backUrl' => 'admin/_cs-chatbot/training/urls',
+            'backUrl' => 'admin/interactive-ai-assistant/training/urls',
         ]);
     }
 
@@ -464,7 +464,7 @@ class TrainingController extends Controller
     public function actionQa(): Response
     {
         $rows = TrainingQaRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
-        return $this->renderTemplate('_cs-chatbot/training/qa', [
+        return $this->renderTemplate('interactive-ai-assistant/training/qa', [
             'rows' => $rows,
         ]);
     }

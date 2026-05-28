@@ -4,13 +4,13 @@
 {% set selectedSubnavItem = selectedSubnavItem ?? 'dashboard' %}
 
 {% set crumbs = [
-  { label: 'AI Assistant', url: url('_cs-chatbot') },
+  { label: 'AI Assistant', url: url('interactive-ai-assistant') },
 ] %}
 
 {% set subnav = {
-  dashboard:   { label: 'Dashboard', url: '_cs-chatbot' },
-  'live-chat': { label: 'Live Chat', url: '_cs-chatbot/live-chat' },
-  training:    { label: 'Training',  url: '_cs-chatbot/training/entries' },
-  logs:        { label: 'Chat Logs', url: '_cs-chatbot/logs' },
-  settings:    { label: 'Settings',  url: '_cs-chatbot/settings' },
+  dashboard:   { label: 'Dashboard', url: 'interactive-ai-assistant' },
+  'live-chat': { label: 'Live Chat', url: 'interactive-ai-assistant/live-chat' },
+  training:    { label: 'Training',  url: 'interactive-ai-assistant/training/entries' },
+  logs:        { label: 'Chat Logs', url: 'interactive-ai-assistant/logs' },
+  settings:    { label: 'Settings',  url: 'interactive-ai-assistant/settings' },
 } %}

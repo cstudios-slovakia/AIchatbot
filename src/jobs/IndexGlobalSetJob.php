@@ -18,6 +18,6 @@ class IndexGlobalSetJob extends BaseJob
 
     protected function defaultDescription(): ?string
     {
-        return Craft::t('_cs-chatbot', 'Indexing global set #{id}', ['id' => $this->globalSetId]);
+        return Craft::t('interactive-ai-assistant', 'Indexing global set #{id}', ['id' => $this->globalSetId]);
     }
 }

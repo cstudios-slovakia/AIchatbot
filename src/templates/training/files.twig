@@ -1,13 +1,13 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Training · Files' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
-  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
-  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
-  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
-  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
-  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
-  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
 } %}
 {% set selectedTab = 'files' %}
 
@@ -67,7 +67,7 @@
           var data = new FormData();
           data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
           data.append('file', f);
-          fetch(Craft.getActionUrl('_cs-chatbot/training/upload-file'), {method:'POST', body:data, credentials:'same-origin'})
+          fetch(Craft.getActionUrl('interactive-ai-assistant/training/upload-file'), {method:'POST', body:data, credentials:'same-origin'})
             .then(function(r){return r.json();})
             .then(function(j){
               status.textContent = j.success ? ('Uploaded: ' + f.name) : ('Error: ' + (j.error||'unknown'));
@@ -83,8 +83,8 @@
         data.append('id', id);
         return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
       }
-      document.querySelectorAll('.js-reindex').forEach(function(b){ b.addEventListener('click', function(){ post('_cs-chatbot/training/reindex-file', b.dataset.id).then(function(){ location.reload(); }); }); });
-      document.querySelectorAll('.js-delete').forEach(function(b){ b.addEventListener('click', function(){ if(!confirm('Delete?'))return; post('_cs-chatbot/training/delete-file', b.dataset.id).then(function(){ location.reload(); }); }); });
+      document.querySelectorAll('.js-reindex').forEach(function(b){ b.addEventListener('click', function(){ post('interactive-ai-assistant/training/reindex-file', b.dataset.id).then(function(){ location.reload(); }); }); });
+      document.querySelectorAll('.js-delete').forEach(function(b){ b.addEventListener('click', function(){ if(!confirm('Delete?'))return; post('interactive-ai-assistant/training/delete-file', b.dataset.id).then(function(){ location.reload(); }); }); });
     })();
   </script>
 {% endblock %}

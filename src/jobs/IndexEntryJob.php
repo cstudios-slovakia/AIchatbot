@@ -18,6 +18,6 @@ class IndexEntryJob extends BaseJob
 
     protected function defaultDescription(): ?string
     {
-        return Craft::t('_cs-chatbot', 'Indexing entry #{id}', ['id' => $this->entryId]);
+        return Craft::t('interactive-ai-assistant', 'Indexing entry #{id}', ['id' => $this->entryId]);
     }
 }

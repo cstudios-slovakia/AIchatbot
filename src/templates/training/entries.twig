@@ -1,20 +1,20 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Training · Entries' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
-  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
-  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
-  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
-  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
-  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
-  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
 } %}
 {% set selectedTab = 'entries' %}
 
 {% block content %}
   <form method="post" accept-charset="UTF-8">
     {{ csrfInput() }}
-    {{ actionInput('_cs-chatbot/training/train-sections') }}
+    {{ actionInput('interactive-ai-assistant/training/train-sections') }}
     <div class="field">
       <div class="heading"><label>Sections to train</label></div>
       <div class="input">
@@ -43,7 +43,7 @@
         {% for r in rows %}
           <tr>
             <td>
-              <a href="{{ url('_cs-chatbot/training/entry-chunks/' ~ r.id) }}">
+              <a href="{{ url('interactive-ai-assistant/training/entry-chunks/' ~ r.id) }}">
                 {{ entryTitles[r.entryId] ?? 'Entry #' ~ r.entryId }}
               </a>
             </td>
@@ -73,13 +73,13 @@
       }
       document.querySelectorAll('.js-train-entry').forEach(function(b){
         b.addEventListener('click', function(){
-          post('_cs-chatbot/training/train-entry', b.dataset.id).then(function(){ location.reload(); });
+          post('interactive-ai-assistant/training/train-entry', b.dataset.id).then(function(){ location.reload(); });
         });
       });
       document.querySelectorAll('.js-delete-entry').forEach(function(b){
         b.addEventListener('click', function(){
           if (!confirm('Remove this entry from index?')) return;
-          post('_cs-chatbot/training/delete-entry', b.dataset.id).then(function(){ location.reload(); });
+          post('interactive-ai-assistant/training/delete-entry', b.dataset.id).then(function(){ location.reload(); });
         });
       });
     })();

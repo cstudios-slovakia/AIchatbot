@@ -14,7 +14,7 @@ class SettingsController extends Controller
         if (!parent::beforeAction($action)) {
             return false;
         }
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         return true;
     }
 
@@ -22,7 +22,7 @@ class SettingsController extends Controller
     {
         $tab ??= 'general';
         $plugin = Plugin::getInstance();
-        return $this->renderTemplate('_cs-chatbot/settings/_index', [
+        return $this->renderTemplate('interactive-ai-assistant/settings/_index', [
             'plugin' => $plugin,
             'settings' => $plugin->getSettings(),
             'sections' => Craft::$app->entries->getAllSections(),
@@ -85,7 +85,7 @@ class SettingsController extends Controller
         if (!$settings->validate()) {
             Craft::$app->session->setError('Could not save settings.');
             Craft::$app->urlManager->setRouteParams(['settings' => $settings]);
-            return $this->renderTemplate('_cs-chatbot/settings/_index', [
+            return $this->renderTemplate('interactive-ai-assistant/settings/_index', [
                 'plugin' => $plugin,
                 'settings' => $settings,
                 'sections' => Craft::$app->entries->getAllSections(),

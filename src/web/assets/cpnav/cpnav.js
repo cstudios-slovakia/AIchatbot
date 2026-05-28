@@ -2,7 +2,7 @@
   if (window.__csChatbotCpNav) return;
   window.__csChatbotCpNav = true;
 
-  var URL = (window.csChatbotCpNav && window.csChatbotCpNav.badgeUrl) || '/actions/_cs-chatbot/handoff/badge-count';
+  var URL = (window.csChatbotCpNav && window.csChatbotCpNav.badgeUrl) || '/actions/interactive-ai-assistant/handoff/badge-count';
   var INTERVAL = 15000;
   var STORAGE_KEY = 'csChatbotNavCounts';
   var origTitle = document.title.replace(/^\(\d+\)\s*/, '');
@@ -80,12 +80,12 @@
   }
 
   function endsWithChatbotRoot(href) {
-    if (/[?&]p=admin\/_cs-chatbot(?:&|$)/.test(href)) return true;
+    if (/[?&]p=admin\/interactive-ai-assistant(?:&|$)/.test(href)) return true;
     var path = href.split('?')[0].split('#')[0].replace(/\/+$/, '');
-    return /\/_cs-chatbot$/.test(path);
+    return /\/interactive-ai-assistant$/.test(path);
   }
   function isLiveChatHref(href) {
-    return /_cs-chatbot\/live-chat(?:[\/?#&]|$)/.test(href);
+    return /interactive-ai-assistant\/live-chat(?:[\/?#&]|$)/.test(href);
   }
 
   function findTargets() {
@@ -104,7 +104,7 @@
     var anchors = document.querySelectorAll('#global-sidebar a, #subnav a, #nav a');
     anchors.forEach(function (a) {
       var href = a.getAttribute('href') || '';
-      if (href.indexOf('_cs-chatbot') === -1) return;
+      if (href.indexOf('interactive-ai-assistant') === -1) return;
       if (a !== keep.top && a !== keep.sub) {
         var b = a.querySelector('.badge, .cs-bot-badges');
         if (b) b.remove();

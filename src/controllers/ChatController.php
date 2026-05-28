@@ -286,6 +286,6 @@ class ChatController extends Controller
             return $url;
         }
         // Asset has no public URL (no public volume) → serve via proxy with cache buster
-        return \craft\helpers\UrlHelper::actionUrl('_cs-chatbot/chat/logo', ['v' => $asset->dateUpdated ? $asset->dateUpdated->getTimestamp() : $asset->id]);
+        return \craft\helpers\UrlHelper::actionUrl('interactive-ai-assistant/chat/logo', ['v' => $asset->dateUpdated ? $asset->dateUpdated->getTimestamp() : $asset->id]);
     }
 }

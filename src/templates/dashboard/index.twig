@@ -1,4 +1,4 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Dashboard' %}
 {% set selectedSubnavItem = 'dashboard' %}
 
@@ -15,13 +15,13 @@
 
     <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:24px;">
       {% set kpis = [
-        { label: 'Active now', value: stats.activeNow ?? 0, href: url('_cs-chatbot/logs', { active: 1 }), color: '#2563eb' },
+        { label: 'Active now', value: stats.activeNow ?? 0, href: url('interactive-ai-assistant/logs', { active: 1 }), color: '#2563eb' },
         { label: 'Conversations', value: stats.totalConversations, href: null },
         { label: 'Messages', value: stats.totalMessages, href: null },
         { label: 'Avg response (s)', value: stats.avgResponseTime, href: null },
         { label: 'Avg / day', value: stats.avgPerDay, href: null },
-        { label: 'Positive', value: stats.positive, href: url('_cs-chatbot/logs', { rating: 'pos' }), color: '#27ab46' },
-        { label: 'Negative', value: stats.negative, href: url('_cs-chatbot/logs', { rating: 'neg' }), color: '#cf1124' },
+        { label: 'Positive', value: stats.positive, href: url('interactive-ai-assistant/logs', { rating: 'pos' }), color: '#27ab46' },
+        { label: 'Negative', value: stats.negative, href: url('interactive-ai-assistant/logs', { rating: 'neg' }), color: '#cf1124' },
       ] %}
       {% for k in kpis %}
         {% if k.href %}

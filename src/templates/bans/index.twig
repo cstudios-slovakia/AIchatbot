@@ -1,4 +1,4 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Bans' %}
 {% set selectedSubnavItem = 'bans' %}
 
@@ -33,7 +33,7 @@
       <h2 style="margin-top:0;">Add ban</h2>
       <form method="post" accept-charset="UTF-8">
         {{ csrfInput() }}
-        {{ actionInput('_cs-chatbot/bans/create') }}
+        {{ actionInput('interactive-ai-assistant/bans/create') }}
         <div class="field">
           <label>IP address</label>
           <input type="text" name="ip" class="text fullwidth" placeholder="1.2.3.4" required>
@@ -64,7 +64,7 @@
         var fd = new FormData();
         fd.append('id', b.dataset.id);
         fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
-        fetch('{{ actionUrl('_cs-chatbot/bans/delete')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+        fetch('{{ actionUrl('interactive-ai-assistant/bans/delete')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
           .then(function (r) { return r.json(); })
           .then(function (r) {
             if (r.success) {

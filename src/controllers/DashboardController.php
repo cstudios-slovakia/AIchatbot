@@ -14,7 +14,7 @@ class DashboardController extends Controller
 
     public function actionIndex(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $from = Craft::$app->request->getParam('from');
         $to = Craft::$app->request->getParam('to');
         $fromDt = $from ? new DateTime($from) : (new DateTime())->modify('-30 days');
@@ -24,7 +24,7 @@ class DashboardController extends Controller
         $suggestions = Plugin::getInstance()->stats->suggestionStats();
         $training = Plugin::getInstance()->stats->trainingSummary();
 
-        return $this->renderTemplate('_cs-chatbot/dashboard/index', [
+        return $this->renderTemplate('interactive-ai-assistant/dashboard/index', [
             'stats' => $stats,
             'suggestions' => $suggestions,
             'training' => $training,
@@ -35,7 +35,7 @@ class DashboardController extends Controller
 
     public function actionStats(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $from = Craft::$app->request->getRequiredParam('from');
         $to = Craft::$app->request->getRequiredParam('to');
         return $this->asJson(Plugin::getInstance()->stats->summary(new DateTime($from), new DateTime($to)));

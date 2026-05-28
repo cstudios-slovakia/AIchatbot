@@ -18,6 +18,6 @@ class IndexCategoryJob extends BaseJob
 
     protected function defaultDescription(): ?string
     {
-        return Craft::t('_cs-chatbot', 'Indexing category #{id}', ['id' => $this->categoryId]);
+        return Craft::t('interactive-ai-assistant', 'Indexing category #{id}', ['id' => $this->categoryId]);
     }
 }

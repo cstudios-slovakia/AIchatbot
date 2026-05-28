@@ -18,7 +18,7 @@ class LogsController extends Controller
         if (!parent::beforeAction($action)) {
             return false;
         }
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         return true;
     }
 
@@ -112,7 +112,7 @@ class LogsController extends Controller
 
         $total = (int)(new Query())->from('{{%chatbot_sessions}}')->count();
 
-        return $this->renderTemplate('_cs-chatbot/logs/index', [
+        return $this->renderTemplate('interactive-ai-assistant/logs/index', [
             'rows' => $rows,
             'total' => $total,
             'page' => $page,
@@ -158,7 +158,7 @@ class LogsController extends Controller
             ->where(['sessionId' => $id])
             ->orderBy(['id' => SORT_ASC])
             ->all();
-        return $this->renderTemplate('_cs-chatbot/logs/session', [
+        return $this->renderTemplate('interactive-ai-assistant/logs/session', [
             'session' => $session,
             'messages' => $messages,
         ]);

@@ -1,15 +1,15 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Settings' %}
 {% set selectedSubnavItem = 'settings' %}
 
 {% set tabs = {
-  general:     { label: 'General',          url: cpUrl('_cs-chatbot/settings', { tab: 'general' }) },
-  ai:          { label: 'AI Configuration', url: cpUrl('_cs-chatbot/settings', { tab: 'ai' }) },
-  training:    { label: 'Training',         url: cpUrl('_cs-chatbot/settings', { tab: 'training' }) },
-  suggestions: { label: 'Suggestions',      url: cpUrl('_cs-chatbot/settings', { tab: 'suggestions' }) },
-  livechat:    { label: 'Live Chat',        url: cpUrl('_cs-chatbot/settings', { tab: 'livechat' }) },
-  filter:      { label: 'Filter',           url: cpUrl('_cs-chatbot/settings', { tab: 'filter' }) },
-  logging:     { label: 'Logging',          url: cpUrl('_cs-chatbot/settings', { tab: 'logging' }) },
+  general:     { label: 'General',          url: cpUrl('interactive-ai-assistant/settings', { tab: 'general' }) },
+  ai:          { label: 'AI Configuration', url: cpUrl('interactive-ai-assistant/settings', { tab: 'ai' }) },
+  training:    { label: 'Training',         url: cpUrl('interactive-ai-assistant/settings', { tab: 'training' }) },
+  suggestions: { label: 'Suggestions',      url: cpUrl('interactive-ai-assistant/settings', { tab: 'suggestions' }) },
+  livechat:    { label: 'Live Chat',        url: cpUrl('interactive-ai-assistant/settings', { tab: 'livechat' }) },
+  filter:      { label: 'Filter',           url: cpUrl('interactive-ai-assistant/settings', { tab: 'filter' }) },
+  logging:     { label: 'Logging',          url: cpUrl('interactive-ai-assistant/settings', { tab: 'logging' }) },
 } %}
 {% set selectedTab = tab %}
 
@@ -17,11 +17,11 @@
 
   <form method="post" accept-charset="UTF-8" enctype="multipart/form-data" id="cs-chatbot-settings-form">
     {{ csrfInput() }}
-    {{ actionInput('_cs-chatbot/settings/save') }}
-    {{ redirectInput('_cs-chatbot/settings?tab=' ~ tab) }}
+    {{ actionInput('interactive-ai-assistant/settings/save') }}
+    {{ redirectInput('interactive-ai-assistant/settings?tab=' ~ tab) }}
     <input type="hidden" name="tab" value="{{ tab }}">
 
-    {% include '_cs-chatbot/settings/_' ~ tab with { settings: settings, sections: sections } %}
+    {% include 'interactive-ai-assistant/settings/_' ~ tab with { settings: settings, sections: sections } %}
 
     <hr>
     <button type="submit" class="btn submit">Save</button>

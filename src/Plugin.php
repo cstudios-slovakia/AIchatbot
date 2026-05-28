@@ -51,7 +51,7 @@ use yii\base\Event;
  */
 class Plugin extends BasePlugin
 {
-    public string $schemaVersion = '1.7.0';
+    public string $schemaVersion = '1.0.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -93,7 +93,7 @@ class Plugin extends BasePlugin
             $view = Craft::$app->getView();
             $view->registerAssetBundle(CpNavAsset::class);
             $view->registerJs(
-                "window.csChatbotCpNav = { badgeUrl: " . json_encode(UrlHelper::actionUrl('_cs-chatbot/handoff/badge-count')) . " };",
+                "window.csChatbotCpNav = { badgeUrl: " . json_encode(UrlHelper::actionUrl('interactive-ai-assistant/handoff/badge-count')) . " };",
                 View::POS_HEAD,
             );
         });
@@ -103,24 +103,24 @@ class Plugin extends BasePlugin
     {
         $item = parent::getCpNavItem();
         $item['label'] = 'AI Assistant';
-        $item['url'] = '_cs-chatbot';
+        $item['url'] = 'interactive-ai-assistant';
 
         // Badges are rendered client-side by cpnav.js to avoid a flash of the
         // native single badge before the 3-color custom badges replace it.
         $item['subnav'] = [
-            'dashboard' => ['label' => 'Dashboard', 'url' => '_cs-chatbot'],
-            'live-chat' => ['label' => 'Live Chat', 'url' => '_cs-chatbot/live-chat'],
-            'training' => ['label' => 'Training', 'url' => '_cs-chatbot/training/entries'],
-            'logs' => ['label' => 'Chat Logs', 'url' => '_cs-chatbot/logs'],
-            'bans' => ['label' => 'Bans', 'url' => '_cs-chatbot/bans'],
-            'settings' => ['label' => 'Settings', 'url' => '_cs-chatbot/settings'],
+            'dashboard' => ['label' => 'Dashboard', 'url' => 'interactive-ai-assistant'],
+            'live-chat' => ['label' => 'Live Chat', 'url' => 'interactive-ai-assistant/live-chat'],
+            'training' => ['label' => 'Training', 'url' => 'interactive-ai-assistant/training/entries'],
+            'logs' => ['label' => 'Chat Logs', 'url' => 'interactive-ai-assistant/logs'],
+            'bans' => ['label' => 'Bans', 'url' => 'interactive-ai-assistant/bans'],
+            'settings' => ['label' => 'Settings', 'url' => 'interactive-ai-assistant/settings'],
         ];
         return $item;
     }
 
     public function getSettingsResponse(): mixed
     {
-        return Craft::$app->controller->redirect(UrlHelper::cpUrl('_cs-chatbot/settings'));
+        return Craft::$app->controller->redirect(UrlHelper::cpUrl('interactive-ai-assistant/settings'));
     }
 
     protected function createSettingsModel(): ?Model
@@ -167,34 +167,34 @@ class Plugin extends BasePlugin
     {
         Event::on(UrlManager::class, UrlManager::EVENT_REGISTER_CP_URL_RULES, function (RegisterUrlRulesEvent $event) {
             $rules = [
-                '_cs-chatbot' => '_cs-chatbot/dashboard/index',
-                '_cs-chatbot/dashboard' => '_cs-chatbot/dashboard/index',
+                'interactive-ai-assistant' => 'interactive-ai-assistant/dashboard/index',
+                'interactive-ai-assistant/dashboard' => 'interactive-ai-assistant/dashboard/index',
 
-                '_cs-chatbot/training' => '_cs-chatbot/training/entries',
-                '_cs-chatbot/training/entries' => '_cs-chatbot/training/entries',
-                '_cs-chatbot/training/categories' => '_cs-chatbot/training/categories',
-                '_cs-chatbot/training/globals' => '_cs-chatbot/training/globals',
-                '_cs-chatbot/training/files' => '_cs-chatbot/training/files',
-                '_cs-chatbot/training/urls' => '_cs-chatbot/training/urls',
-                '_cs-chatbot/training/qa' => '_cs-chatbot/training/qa',
-                '_cs-chatbot/training/entry-chunks/<id:\d+>' => '_cs-chatbot/training/entry-chunks',
-                '_cs-chatbot/training/url-chunks/<id:\d+>' => '_cs-chatbot/training/url-chunks',
-                '_cs-chatbot/training/category-chunks/<id:\d+>' => '_cs-chatbot/training/category-chunks',
-                '_cs-chatbot/training/global-chunks/<id:\d+>' => '_cs-chatbot/training/global-chunks',
+                'interactive-ai-assistant/training' => 'interactive-ai-assistant/training/entries',
+                'interactive-ai-assistant/training/entries' => 'interactive-ai-assistant/training/entries',
+                'interactive-ai-assistant/training/categories' => 'interactive-ai-assistant/training/categories',
+                'interactive-ai-assistant/training/globals' => 'interactive-ai-assistant/training/globals',
+                'interactive-ai-assistant/training/files' => 'interactive-ai-assistant/training/files',
+                'interactive-ai-assistant/training/urls' => 'interactive-ai-assistant/training/urls',
+                'interactive-ai-assistant/training/qa' => 'interactive-ai-assistant/training/qa',
+                'interactive-ai-assistant/training/entry-chunks/<id:\d+>' => 'interactive-ai-assistant/training/entry-chunks',
+                'interactive-ai-assistant/training/url-chunks/<id:\d+>' => 'interactive-ai-assistant/training/url-chunks',
+                'interactive-ai-assistant/training/category-chunks/<id:\d+>' => 'interactive-ai-assistant/training/category-chunks',
+                'interactive-ai-assistant/training/global-chunks/<id:\d+>' => 'interactive-ai-assistant/training/global-chunks',
 
-                '_cs-chatbot/logs' => '_cs-chatbot/logs/index',
-                '_cs-chatbot/logs/toggle-star' => '_cs-chatbot/logs/toggle-star',
-                '_cs-chatbot/logs/save-note' => '_cs-chatbot/logs/save-note',
-                '_cs-chatbot/logs/session/<id:\d+>' => '_cs-chatbot/logs/session',
+                'interactive-ai-assistant/logs' => 'interactive-ai-assistant/logs/index',
+                'interactive-ai-assistant/logs/toggle-star' => 'interactive-ai-assistant/logs/toggle-star',
+                'interactive-ai-assistant/logs/save-note' => 'interactive-ai-assistant/logs/save-note',
+                'interactive-ai-assistant/logs/session/<id:\d+>' => 'interactive-ai-assistant/logs/session',
 
-                '_cs-chatbot/live-chat' => '_cs-chatbot/handoff/index',
-                '_cs-chatbot/live-chat/toggle-star' => '_cs-chatbot/handoff/toggle-star',
+                'interactive-ai-assistant/live-chat' => 'interactive-ai-assistant/handoff/index',
+                'interactive-ai-assistant/live-chat/toggle-star' => 'interactive-ai-assistant/handoff/toggle-star',
 
-                '_cs-chatbot/bans' => '_cs-chatbot/bans/index',
-                '_cs-chatbot/bans/create' => '_cs-chatbot/bans/create',
-                '_cs-chatbot/bans/delete' => '_cs-chatbot/bans/delete',
+                'interactive-ai-assistant/bans' => 'interactive-ai-assistant/bans/index',
+                'interactive-ai-assistant/bans/create' => 'interactive-ai-assistant/bans/create',
+                'interactive-ai-assistant/bans/delete' => 'interactive-ai-assistant/bans/delete',
 
-                '_cs-chatbot/settings' => '_cs-chatbot/settings/edit',
+                'interactive-ai-assistant/settings' => 'interactive-ai-assistant/settings/edit',
             ];
             $event->rules = array_merge($event->rules, $rules);
         });
@@ -203,7 +203,7 @@ class Plugin extends BasePlugin
     private function registerPermissions(): void
     {
         Event::on(UserPermissions::class, UserPermissions::EVENT_REGISTER_PERMISSIONS, function (RegisterUserPermissionsEvent $event) {
-            // accessPlugin-_cs-chatbot is auto-registered. Add granular perms here if needed.
+            // accessPlugin-interactive-ai-assistant is auto-registered. Add granular perms here if needed.
         });
     }
 
@@ -283,15 +283,15 @@ class Plugin extends BasePlugin
             $view = Craft::$app->getView();
             $view->registerAssetBundle(WidgetAsset::class);
             $urls = [
-                'config' => UrlHelper::actionUrl('_cs-chatbot/chat/config'),
-                'send' => UrlHelper::actionUrl('_cs-chatbot/chat/send'),
-                'rate' => UrlHelper::actionUrl('_cs-chatbot/chat/rate'),
-                'suggestionClick' => UrlHelper::actionUrl('_cs-chatbot/chat/suggestion-click'),
-                'poll' => UrlHelper::actionUrl('_cs-chatbot/chat/poll'),
-                'requestHuman' => UrlHelper::actionUrl('_cs-chatbot/chat/request-human'),
-                'end' => UrlHelper::actionUrl('_cs-chatbot/chat/end'),
-                'rateChat' => UrlHelper::actionUrl('_cs-chatbot/chat/rate-chat'),
-                'og' => UrlHelper::actionUrl('_cs-chatbot/og/fetch'),
+                'config' => UrlHelper::actionUrl('interactive-ai-assistant/chat/config'),
+                'send' => UrlHelper::actionUrl('interactive-ai-assistant/chat/send'),
+                'rate' => UrlHelper::actionUrl('interactive-ai-assistant/chat/rate'),
+                'suggestionClick' => UrlHelper::actionUrl('interactive-ai-assistant/chat/suggestion-click'),
+                'poll' => UrlHelper::actionUrl('interactive-ai-assistant/chat/poll'),
+                'requestHuman' => UrlHelper::actionUrl('interactive-ai-assistant/chat/request-human'),
+                'end' => UrlHelper::actionUrl('interactive-ai-assistant/chat/end'),
+                'rateChat' => UrlHelper::actionUrl('interactive-ai-assistant/chat/rate-chat'),
+                'og' => UrlHelper::actionUrl('interactive-ai-assistant/og/fetch'),
             ];
             $view->registerJs(
                 "window.csChatbot = window.csChatbot || {};" .

@@ -1,20 +1,20 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Training · Globals' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
-  entries:    { label: 'Craft Entries', url: cpUrl('_cs-chatbot/training/entries') },
-  categories: { label: 'Categories',   url: cpUrl('_cs-chatbot/training/categories') },
-  globals:    { label: 'Globals',      url: cpUrl('_cs-chatbot/training/globals') },
-  files:   { label: 'File Upload',   url: cpUrl('_cs-chatbot/training/files') },
-  urls:    { label: 'URL / Sitemap', url: cpUrl('_cs-chatbot/training/urls') },
-  qa:      { label: 'Q&A Pairs',     url: cpUrl('_cs-chatbot/training/qa') },
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
 } %}
 {% set selectedTab = 'globals' %}
 
 {% block content %}
   <form method="post" accept-charset="UTF-8">
     {{ csrfInput() }}
-    {{ actionInput('_cs-chatbot/training/train-global-sets') }}
+    {{ actionInput('interactive-ai-assistant/training/train-global-sets') }}
     <div class="field">
       <div class="heading"><label>Global sets to train</label></div>
       <div class="input">
@@ -45,7 +45,7 @@
         {% for r in rows %}
           <tr>
             <td>
-              <a href="{{ url('_cs-chatbot/training/global-chunks/' ~ r.id) }}">
+              <a href="{{ url('interactive-ai-assistant/training/global-chunks/' ~ r.id) }}">
                 {{ names[r.globalSetId] ?? 'Global #' ~ r.globalSetId }}
               </a>
             </td>
@@ -73,12 +73,12 @@
         return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'}).then(function(r){return r.json();});
       }
       document.querySelectorAll('.js-train').forEach(function(b){
-        b.addEventListener('click', function(){ post('_cs-chatbot/training/train-global-set', b.dataset.id).then(function(){ location.reload(); }); });
+        b.addEventListener('click', function(){ post('interactive-ai-assistant/training/train-global-set', b.dataset.id).then(function(){ location.reload(); }); });
       });
       document.querySelectorAll('.js-delete').forEach(function(b){
         b.addEventListener('click', function(){
           if (!confirm('Remove this global set from index?')) return;
-          post('_cs-chatbot/training/delete-global-set', b.dataset.id).then(function(){ location.reload(); });
+          post('interactive-ai-assistant/training/delete-global-set', b.dataset.id).then(function(){ location.reload(); });
         });
       });
     })();

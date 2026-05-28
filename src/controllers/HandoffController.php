@@ -14,10 +14,10 @@ class HandoffController extends Controller
 {
     public function actionIndex(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $selectedId = (int)Craft::$app->request->getQueryParam('id', 0);
         $templates = array_values(array_filter(Plugin::getInstance()->getSettings()->chatTemplates ?? []));
-        return $this->renderTemplate('_cs-chatbot/live-chat/index', [
+        return $this->renderTemplate('interactive-ai-assistant/live-chat/index', [
             'selectedSessionId' => $selectedId,
             'chatTemplates' => $templates,
         ]);
@@ -25,7 +25,7 @@ class HandoffController extends Controller
 
     public function actionPoll(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $this->requireAcceptsJson();
         $lists = Plugin::getInstance()->handoff->listForAdmin();
         return $this->asJson([
@@ -37,7 +37,7 @@ class HandoffController extends Controller
 
     public function actionBadgeCount(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $this->requireAcceptsJson();
         $this->maybeSweep();
         $userId = (int)(Craft::$app->user->id ?? 0);
@@ -61,7 +61,7 @@ class HandoffController extends Controller
 
     public function actionPollSession(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $this->requireAcceptsJson();
         $req = Craft::$app->request;
         $sessionId = (int)$req->getQueryParam('id', 0);
@@ -105,7 +105,7 @@ class HandoffController extends Controller
 
     public function actionHistory(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $this->requireAcceptsJson();
         $sessionId = (int)Craft::$app->request->getQueryParam('id', 0);
         if ($sessionId <= 0) {
@@ -136,7 +136,7 @@ class HandoffController extends Controller
     public function actionClaim(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $sessionId = (int)Craft::$app->request->getRequiredBodyParam('id');
         $session = Plugin::getInstance()->handoff->claim($sessionId, (int)Craft::$app->user->id);
         if (!$session) {
@@ -148,7 +148,7 @@ class HandoffController extends Controller
     public function actionReply(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $req = Craft::$app->request;
         $sessionId = (int)$req->getRequiredBodyParam('id');
         $text = (string)$req->getRequiredBodyParam('message');
@@ -172,7 +172,7 @@ class HandoffController extends Controller
     public function actionToggleStar(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $sessionId = (int)Craft::$app->request->getRequiredBodyParam('id');
         $starred = Plugin::getInstance()->handoff->toggleStar($sessionId);
         return $this->asJson(['success' => $starred !== null, 'starred' => (bool)$starred]);
@@ -181,7 +181,7 @@ class HandoffController extends Controller
     public function actionEnd(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $req = Craft::$app->request;
         $sessionId = (int)$req->getRequiredBodyParam('id');
         $adminId = (int)Craft::$app->user->id;

@@ -18,6 +18,6 @@ class IndexFileJob extends BaseJob
 
     protected function defaultDescription(): ?string
     {
-        return Craft::t('_cs-chatbot', 'Indexing training file #{id}', ['id' => $this->fileRecId]);
+        return Craft::t('interactive-ai-assistant', 'Indexing training file #{id}', ['id' => $this->fileRecId]);
     }
 }

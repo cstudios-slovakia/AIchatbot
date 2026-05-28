@@ -1,13 +1,13 @@
-{% extends '_cs-chatbot/_layout' %}
+{% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Live Chat' %}
 {% set selectedSubnavItem = 'live-chat' %}
 
-{% set pollUrl = actionUrl('_cs-chatbot/handoff/poll') %}
-{% set pollSessionUrl = actionUrl('_cs-chatbot/handoff/poll-session') %}
-{% set historyUrl = actionUrl('_cs-chatbot/handoff/history') %}
-{% set claimUrl = actionUrl('_cs-chatbot/handoff/claim') %}
-{% set replyUrl = actionUrl('_cs-chatbot/handoff/reply') %}
-{% set endUrl = actionUrl('_cs-chatbot/handoff/end') %}
+{% set pollUrl = actionUrl('interactive-ai-assistant/handoff/poll') %}
+{% set pollSessionUrl = actionUrl('interactive-ai-assistant/handoff/poll-session') %}
+{% set historyUrl = actionUrl('interactive-ai-assistant/handoff/history') %}
+{% set claimUrl = actionUrl('interactive-ai-assistant/handoff/claim') %}
+{% set replyUrl = actionUrl('interactive-ai-assistant/handoff/reply') %}
+{% set endUrl = actionUrl('interactive-ai-assistant/handoff/end') %}
 
 {% block content %}
   <div id="lc-root" data-current-user-id="{{ currentUser.id }}" data-selected-session="{{ selectedSessionId ?: '' }}"
@@ -374,7 +374,7 @@
         });
         return src;
       }
-      var OG_URL = '{{ actionUrl('_cs-chatbot/og/fetch')|e('js') }}';
+      var OG_URL = '{{ actionUrl('interactive-ai-assistant/og/fetch')|e('js') }}';
       var SITE_HOSTS = (function () {
         var hosts = [];
         {% for s in craft.app.sites.getAllSites() %}
@@ -612,7 +612,7 @@
             var fd = new FormData();
             fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
             fd.append('id', s.id);
-            fetch('{{ actionUrl('_cs-chatbot/handoff/toggle-star')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+            fetch('{{ actionUrl('interactive-ai-assistant/handoff/toggle-star')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
               .then(function(r){ return r.json(); })
               .then(function(r){ if (r.success) pollList(); });
           });

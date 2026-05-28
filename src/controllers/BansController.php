@@ -12,7 +12,7 @@ class BansController extends Controller
 {
     public function actionIndex(): Response
     {
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $bans = Plugin::getInstance()->bans->listActive();
         $admins = [];
         foreach ($bans as &$b) {
@@ -23,7 +23,7 @@ class BansController extends Controller
             }
             $b['bannedByName'] = $aid ? $admins[$aid] : null;
         }
-        return $this->renderTemplate('_cs-chatbot/bans/index', [
+        return $this->renderTemplate('interactive-ai-assistant/bans/index', [
             'bans' => $bans,
         ]);
     }
@@ -31,29 +31,29 @@ class BansController extends Controller
     public function actionCreate(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $req = Craft::$app->request;
         $ip = trim((string)$req->getRequiredBodyParam('ip'));
         $duration = trim((string)$req->getBodyParam('duration', 'forever'));
         $reason = trim((string)$req->getBodyParam('reason', ''));
         if ($ip === '') {
             Craft::$app->session->setError('IP required');
-            return $this->redirect('_cs-chatbot/bans');
+            return $this->redirect('interactive-ai-assistant/bans');
         }
         $ttl = BansService::parseDuration($duration);
         if ($ttl === 0) {
             Craft::$app->session->setError('Invalid duration');
-            return $this->redirect('_cs-chatbot/bans');
+            return $this->redirect('interactive-ai-assistant/bans');
         }
         Plugin::getInstance()->bans->ban($ip, $ttl, $reason ?: null, (int)Craft::$app->user->id);
         Craft::$app->session->setNotice('IP banned');
-        return $this->redirect('_cs-chatbot/bans');
+        return $this->redirect('interactive-ai-assistant/bans');
     }
 
     public function actionDelete(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('accessPlugin-_cs-chatbot');
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
         $id = (int)Craft::$app->request->getRequiredBodyParam('id');
         Plugin::getInstance()->bans->unban($id);
         return $this->asJson(['success' => true]);
