@@ -269,13 +269,30 @@ class Plugin extends BasePlugin
         });
     }
 
+    /**
+     * Whether the chat widget should be served to the current request.
+     * In debug mode the widget is restricted to logged-in control-panel users.
+     */
+    public function widgetVisibleForCurrentUser(): bool
+    {
+        $settings = $this->getSettings();
+        if (!$settings->enabled) {
+            return false;
+        }
+        if (!$settings->debugMode) {
+            return true;
+        }
+        $user = Craft::$app->getUser();
+        return !$user->getIsGuest() && $user->checkPermission('accessCp');
+    }
+
     private function registerWidgetInjection(): void
     {
         $req = Craft::$app->getRequest();
         if ($req->getIsCpRequest() || $req->getIsConsoleRequest() || !$req->getIsSiteRequest()) {
             return;
         }
-        if (!$this->getSettings()->enabled) {
+        if (!$this->widgetVisibleForCurrentUser()) {
             return;
         }
 

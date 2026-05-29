@@ -60,7 +60,7 @@ class ChatController extends Controller
         }
         $siteHosts = array_values(array_unique($siteHosts));
         return $this->asJson([
-            'enabled' => $s->enabled,
+            'enabled' => Plugin::getInstance()->widgetVisibleForCurrentUser(),
             'companyName' => $s->getCompanyNameForSite($siteUid),
             'logoText' => $s->logoText,
             'logoUrl' => $this->logoUrl($s->logoAssetId),
@@ -91,7 +91,7 @@ class ChatController extends Controller
     {
         $this->requirePostRequest();
         if ($blocked = $this->blockIfBanned()) return $blocked;
-        if (!Plugin::getInstance()->getSettings()->enabled) {
+        if (!Plugin::getInstance()->widgetVisibleForCurrentUser()) {
             return $this->asJson(['success' => false, 'error' => 'Chatbot disabled']);
         }
         $req = Craft::$app->request;

@@ -10,6 +10,8 @@ class Settings extends Model
 {
     // General
     public bool $enabled = true;
+    // When true, the widget is only served to logged-in control-panel users (admins/staff), not the public — lets you test before going live.
+    public bool $debugMode = false;
     public string $companyName = 'Chatbot';
     /** @var array<string, string> Craft site UID => override company name. */
     public array $companyNames = [];
@@ -84,7 +86,7 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled'], 'boolean'],
             [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes'], 'integer'],
             [['autoCloseInactiveMinutes'], 'integer', 'min' => 0],
             [['filterMinLength'], 'integer', 'min' => 1],

@@ -6,6 +6,13 @@
   on: settings.enabled,
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Debug Mode',
+  instructions: 'When on, the widget is shown only to logged-in control-panel users (admins/staff), not the public. Use it to test before going live.',
+  name: 'settings[debugMode]',
+  on: settings.debugMode ?? false,
+}) }}
+
 {{ forms.textField({
   label: 'Company Name',
   name: 'settings[companyName]',
