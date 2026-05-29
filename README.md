@@ -22,7 +22,7 @@ Install with Composer and enable the plugin:
 
 ```bash
 composer require cstudios-s-r-o/craft-cs-chatbot
-./craft plugin/install _cs-chatbot
+./craft plugin/install interactive-ai-assistant
 ```
 
 Then open **AI Assistant → Settings** in the control panel and add your OpenAI API key under **AI Configuration**.
