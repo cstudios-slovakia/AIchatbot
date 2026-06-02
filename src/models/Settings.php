@@ -11,7 +11,7 @@ class Settings extends Model
     // General
     public bool $enabled = true;
     // When true, the widget is only served to logged-in control-panel users (admins/staff), not the public — lets you test before going live.
-    public bool $debugMode = false;
+    public bool $debugMode = true;
     public string $companyName = 'Chatbot';
     /** @var array<string, string> Craft site UID => override company name. */
     public array $companyNames = [];
