@@ -84,7 +84,65 @@ class ChatController extends Controller
                 'minLength' => (int)$s->filterMinLength,
                 'maxLength' => (int)$s->filterMaxLength,
             ],
+            'strings' => $this->widgetStrings($site->language ?? null),
         ]);
+    }
+
+    /**
+     * Localized UI strings for the front-end widget. Keys match STR_DEFAULTS in
+     * widget.js; values are translated against the resolved site's language via
+     * the plugin's translation files (src/translations/<locale>/interactive-ai-assistant.php).
+     *
+     * @return array<string, string>
+     */
+    private function widgetStrings(?string $language = null): array
+    {
+        $cat = 'interactive-ai-assistant';
+        $sources = [
+            'previous' => 'Previous',
+            'next' => 'Next',
+            'slide' => 'Slide',
+            'msgTooShort' => 'Message is too short.',
+            'msgTooLong' => 'Message is too long.',
+            'gibberish' => 'Please send a real question or sentence.',
+            'clickMinimize' => 'Click to minimize',
+            'conversationId' => 'Conversation ID — share with support',
+            'endConversation' => 'End conversation',
+            'toggleTheme' => 'Toggle theme',
+            'more' => 'More',
+            'newConversation' => 'New conversation',
+            'minimize' => 'Minimize',
+            'askQuestion' => 'Ask a question…',
+            'send' => 'Send',
+            'talkToHuman' => 'Talk to a human',
+            'startNewConversation' => 'Start a new conversation',
+            'openChat' => 'Open chat',
+            'startNewConfirm' => 'Start a new conversation?',
+            'endConfirm' => 'End this conversation? You will not be able to continue it.',
+            'youEnded' => 'You ended the conversation.',
+            'conversationEnded' => 'Conversation ended',
+            'waitingAgent' => 'Waiting for a human agent…',
+            'chattingWith' => 'Chatting with',
+            'aHumanAgent' => 'a human agent',
+            'replyTo' => 'Reply to',
+            'theAgent' => 'the agent',
+            'messageReachAgent' => 'Message will reach the agent once connected…',
+            'hello' => 'Hello!',
+            'agent' => 'Agent',
+            'howWasChat' => 'How was this chat?',
+            'notFinding' => 'Not finding what you need?',
+            'messageRejected' => 'Message rejected.',
+            'somethingWrong' => 'Sorry, something went wrong:',
+            'unknown' => 'unknown',
+            'networkError' => 'Network error. Please try again.',
+            'couldNotRequestHuman' => 'Could not request human right now.',
+            'askedForHuman' => 'Asked for a human agent.',
+        ];
+        $out = [];
+        foreach ($sources as $key => $source) {
+            $out[$key] = Craft::t($cat, $source, [], $language);
+        }
+        return $out;
     }
 
     public function actionSend(): Response
