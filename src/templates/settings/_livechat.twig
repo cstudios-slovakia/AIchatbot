@@ -34,6 +34,22 @@
   },
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Capture contact details (missed chats)',
+  instructions: 'When on, the bot offers to take an email/phone when it can\'t help and the visitor declines a human, and auto-asks for contact details if no agent claims a handoff in time. Submissions appear under "Missed Chats".',
+  name: 'settings[contactCaptureEnabled]',
+  on: settings.contactCaptureEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Ask for contact after no agent for (minutes)',
+  instructions: 'If a visitor requested a human and none has joined after this many minutes, the widget asks for their email/phone so someone can follow up. 0 = never auto-ask. Evaluated on the widget poll.',
+  name: 'settings[contactPromptTimeoutMinutes]',
+  value: settings.contactPromptTimeoutMinutes,
+  type: 'number',
+  size: 6,
+}) }}
+
 {{ forms.textareaField({
   label: 'Canned Response Templates',
   instructions: 'Separate templates with a line of three dashes (`---`). Each template may span multiple lines. Shown as quick-insert buttons above the reply input in Live Chat.',

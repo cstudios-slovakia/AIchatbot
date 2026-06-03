@@ -28,6 +28,7 @@ class DashboardController extends Controller
             'stats' => $stats,
             'suggestions' => $suggestions,
             'training' => $training,
+            'missedChatsNew' => Plugin::getInstance()->contacts->newCount(),
             'from' => $fromDt->format('Y-m-d'),
             'to' => $toDt->format('Y-m-d'),
         ]);

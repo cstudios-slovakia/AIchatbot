@@ -144,6 +144,8 @@ class Install extends Migration
             'lowConfStreak' => $this->integer()->notNull()->defaultValue(0),
             'chatRating' => $this->integer(), // null|1|-1 (overall chat rating from user)
             'chatEndedAt' => $this->dateTime(),
+            'contactPromptedAt' => $this->dateTime(),
+            'contactCapturedAt' => $this->dateTime(),
             'starred' => $this->boolean()->notNull()->defaultValue(false),
             'adminNotes' => $this->text(),
             'dateCreated' => $this->dateTime()->notNull(),
@@ -173,6 +175,22 @@ class Install extends Migration
             'reason' => $this->string(512),
             'bannedByAdminId' => $this->integer(),
             'expiresAt' => $this->dateTime(),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
+
+        $this->createTable('{{%chatbot_contact_requests}}', [
+            'id' => $this->primaryKey(),
+            'sessionId' => $this->integer(),
+            'name' => $this->string(255),
+            'email' => $this->string(255),
+            'phone' => $this->string(64),
+            'note' => $this->text(),
+            'source' => $this->string(30)->notNull()->defaultValue('ai_unanswered'), // ai_unanswered|handoff_timeout|manual
+            'status' => $this->string(20)->notNull()->defaultValue('new'), // new|resolved
+            'resolvedByAdminId' => $this->integer(),
+            'resolvedAt' => $this->dateTime(),
             'dateCreated' => $this->dateTime()->notNull(),
             'dateUpdated' => $this->dateTime()->notNull(),
             'uid' => $this->uid(),
@@ -212,6 +230,9 @@ class Install extends Migration
         $this->createIndex(null, '{{%chatbot_training_globals}}', ['status']);
 
         $this->createIndex(null, '{{%chatbot_chunks}}', ['sourceType', 'sourceId']);
+
+        $this->createIndex(null, '{{%chatbot_contact_requests}}', ['status']);
+        $this->createIndex(null, '{{%chatbot_contact_requests}}', ['sessionId']);
 
         $this->createIndex(null, '{{%chatbot_sessions}}', ['sessionToken'], true);
         $this->createIndex(null, '{{%chatbot_sessions}}', ['dateCreated']);

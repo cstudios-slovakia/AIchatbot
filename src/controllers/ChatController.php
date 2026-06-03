@@ -12,7 +12,7 @@ use yii\web\Response;
 
 class ChatController extends Controller
 {
-    protected array|bool|int $allowAnonymous = ['send', 'rate', 'suggestion-click', 'config', 'poll', 'request-human', 'end', 'rate-chat', 'logo'];
+    protected array|bool|int $allowAnonymous = ['send', 'rate', 'suggestion-click', 'config', 'poll', 'request-human', 'end', 'rate-chat', 'logo', 'submit-contact'];
     public $enableCsrfValidation = false;
 
     private function maybeSweep(): void
@@ -72,12 +72,14 @@ class ChatController extends Controller
             'defaultTheme' => $s->defaultTheme,
             'operationMode' => in_array($s->operationMode, ['chat', 'agent'], true) ? $s->operationMode : 'chat',
             'agentPanelWidth' => (int)$s->agentPanelWidth ?: 420,
+            'widgetPosition' => in_array($s->widgetPosition, ['bottom-right', 'bottom-left', 'top-right', 'top-left'], true) ? $s->widgetPosition : 'bottom-right',
             'initialMessage' => $s->getInitialMessageForSite($siteUid),
             'suggestionsEnabled' => $s->suggestionsEnabled,
             'suggestions' => $s->getSuggestionsForSite($siteUid),
             'ratingsEnabled' => $s->ratingsEnabled,
             'humanHandoffEnabled' => (bool)$s->humanHandoffEnabled,
             'humanHandoffMode' => in_array($s->humanHandoffMode, ['always', 'ai'], true) ? $s->humanHandoffMode : 'always',
+            'contactCaptureEnabled' => (bool)$s->contactCaptureEnabled,
             'siteHosts' => $siteHosts,
             'filter' => [
                 'enabled' => (bool)$s->filterEnabled,
@@ -137,6 +139,17 @@ class ChatController extends Controller
             'networkError' => 'Network error. Please try again.',
             'couldNotRequestHuman' => 'Could not request human right now.',
             'askedForHuman' => 'Asked for a human agent.',
+            'leaveDetails' => 'Leave your details',
+            'dontWait' => 'Don’t want to wait? Leave your details',
+            'leaveDetailsPrompt' => 'Leave your email or phone and a real person will get back to you.',
+            'contactName' => 'Name (optional)',
+            'contactEmail' => 'Email',
+            'contactPhone' => 'Phone',
+            'contactNote' => 'Anything else? (optional)',
+            'contactSubmit' => 'Send details',
+            'contactNeedOne' => 'Please enter an email or phone number.',
+            'contactThanks' => 'Thanks! We’ll be in touch soon.',
+            'contactError' => 'Could not save your details. Please check and try again.',
         ];
         $out = [];
         foreach ($sources as $key => $source) {
@@ -215,6 +228,11 @@ class ChatController extends Controller
             return $this->asJson(['success' => false, 'error' => 'Unknown session']);
         }
         $handoff = Plugin::getInstance()->handoff;
+        // Evaluate contact-capture timeout before reading messages so any system
+        // line it logs is included in this same response.
+        $contacts = Plugin::getInstance()->contacts;
+        $requestContact = $contacts->shouldPromptForContact($session);
+        $contactCaptured = $contacts->hasCaptured($session);
         $messages = $handoff->messagesAfter((int)$session->id, $afterId);
         // mark read on user side
         $handoff->markUserRead($session);
@@ -234,6 +252,8 @@ class ChatController extends Controller
             'adminName' => $adminName,
             'chatEnded' => (bool)$session->chatEndedAt,
             'chatRating' => $session->chatRating !== null ? (int)$session->chatRating : null,
+            'requestContact' => $requestContact && !$contactCaptured,
+            'contactCaptured' => $contactCaptured,
             'messages' => array_map(function ($m) {
                 return [
                     'id' => (int)$m['id'],
@@ -297,6 +317,46 @@ class ChatController extends Controller
             'sessionId' => (int)$session->id,
             'shortId' => $this->shortId((int)$session->id, (string)$session->sessionToken),
             'handoffStatus' => $session->handoffStatus,
+        ]);
+    }
+
+    public function actionSubmitContact(): Response
+    {
+        $this->requirePostRequest();
+        if ($blocked = $this->blockIfBanned()) return $blocked;
+        if (!Plugin::getInstance()->getSettings()->contactCaptureEnabled) {
+            return $this->asJson(['success' => false, 'error' => 'Contact capture is disabled.']);
+        }
+        $req = Craft::$app->request;
+        $token = (string)$req->getBodyParam('sessionToken', '');
+        $pageUrl = $req->getBodyParam('pageUrl');
+        $session = null;
+        if ($token !== '') {
+            $session = ChatSessionRecord::findOne(['sessionToken' => $token]);
+        }
+        if (!$session) {
+            $session = Plugin::getInstance()->chat->getOrCreateSession(null, is_string($pageUrl) ? $pageUrl : null);
+        }
+
+        $sourceParam = (string)$req->getBodyParam('source', '');
+        $source = $sourceParam === 'handoff_timeout'
+            ? \cstudiossro\craftcschatbot\services\Contacts::SOURCE_TIMEOUT
+            : \cstudiossro\craftcschatbot\services\Contacts::SOURCE_AI;
+
+        $rec = Plugin::getInstance()->contacts->capture(
+            $session,
+            (string)$req->getBodyParam('name', ''),
+            (string)$req->getBodyParam('email', ''),
+            (string)$req->getBodyParam('phone', ''),
+            (string)$req->getBodyParam('note', ''),
+            $source
+        );
+        if (!$rec) {
+            return $this->asJson(['success' => false, 'error' => 'Please provide a valid email or phone.']);
+        }
+        return $this->asJson([
+            'success' => true,
+            'sessionToken' => $session->sessionToken,
         ]);
     }
 

@@ -1,0 +1,168 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Missed Chats' %}
+{% set selectedSubnavItem = 'missed-chats' %}
+
+{% set sourceLabels = {
+  ai_unanswered: 'Bot couldn’t help',
+  handoff_timeout: 'No agent available',
+  manual: 'Manual',
+} %}
+
+{% block content %}
+  <form method="get" class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:24px;align-items:center;">
+    <div class="select">
+      <select name="status" onchange="this.form.submit()">
+        <option value="" {{ status == '' ? 'selected' }}>All</option>
+        <option value="new" {{ status == 'new' ? 'selected' }}>New only</option>
+        <option value="resolved" {{ status == 'resolved' ? 'selected' }}>Resolved only</option>
+        <option value="deleted" {{ status == 'deleted' ? 'selected' }}>Deleted</option>
+      </select>
+    </div>
+    {% if newCount %}
+      <span class="light">{{ newCount }} new awaiting follow-up</span>
+    {% endif %}
+  </form>
+
+  {% if rows|length %}
+    <div class="tableview">
+      <div class="tablepane">
+        <table class="data fullwidth" style="table-layout:fixed;">
+          <colgroup>
+            <col style="width:13%">
+            <col style="width:15%">
+            <col style="width:18%">
+            <col style="width:13%">
+            <col style="width:13%">
+            <col style="width:12%">
+            <col style="width:16%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Phone</th>
+              <th scope="col">Reason</th>
+              <th scope="col">Chat</th>
+              <th scope="col">When</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr data-id="{{ r.id }}" class="{{ r.status == 'new' ? 'mc-new' }}">
+                <td style="overflow:hidden;text-overflow:ellipsis;">
+                  {{ r.name ?: '—' }}
+                  {% if r.note %}
+                    <span title="{{ r.note|slice(0, 400) }}" style="margin-left:4px;color:#c08a1e;cursor:help;">💬</span>
+                  {% endif %}
+                </td>
+                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  {% if r.email %}<a href="mailto:{{ r.email }}">{{ r.email }}</a>{% else %}—{% endif %}
+                </td>
+                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  {% if r.phone %}<a href="tel:{{ r.phone }}">{{ r.phone }}</a>{% else %}—{% endif %}
+                </td>
+                <td>{{ sourceLabels[r.source] ?? r.source }}</td>
+                <td style="overflow:hidden;text-overflow:ellipsis;">
+                  {% if r.sessionId %}
+                    <a href="{{ url('interactive-ai-assistant/logs/session/' ~ r.sessionId) }}" class="code">
+                      {{ '%05d-%s'|format(r.sessionId, (r.sessionToken ?? '')|slice(0, 4)|upper) }}
+                    </a>
+                  {% else %}—{% endif %}
+                </td>
+                <td style="white-space:nowrap;">{{ r.dateCreated|datetime('short') }}</td>
+                <td style="white-space:nowrap;">
+                  {% if r.status == 'deleted' %}
+                    <button type="button" class="btn small mc-restore" data-id="{{ r.id }}">↩ Restore</button>
+                    <button type="button" class="btn small mc-destroy" data-id="{{ r.id }}" title="Delete permanently from the database">🗑 Delete permanently</button>
+                  {% else %}
+                    <button type="button" class="btn small mc-resolve" data-id="{{ r.id }}" data-resolved="{{ r.status == 'resolved' ? '1' : '0' }}">
+                      {{ r.status == 'resolved' ? '↩ Reopen' : '✓ Resolve' }}
+                    </button>
+                    <button type="button" class="btn small mc-delete" data-id="{{ r.id }}" title="Move to Deleted">✕</button>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="flex" style="margin-top:14px;gap:8px;align-items:center;">
+      {% if page > 1 %}
+        <a class="btn" href="?{{ {status:status, page:page-1}|url_encode }}">&larr; Prev</a>
+      {% endif %}
+      <span class="light">Page {{ page }} &middot; {{ total }} total</span>
+      {% if rows|length == perPage %}
+        <a class="btn" href="?{{ {status:status, page:page+1}|url_encode }}">Next &rarr;</a>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="zilch">No missed chats. When the bot can’t help and a visitor leaves their details, they’ll show up here.</div>
+  {% endif %}
+
+  {% css %}
+    tr.mc-new td { background: rgba(217,119,6,0.06); }
+    .mc-resolve, .mc-delete, .mc-restore, .mc-destroy { cursor:pointer; }
+    .mc-destroy { color:#cf1124; }
+  {% endcss %}
+
+  {% js %}
+    function csPost(url, id, extra) {
+      var fd = new FormData();
+      fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
+      fd.append('id', id);
+      if (extra) Object.keys(extra).forEach(function(k){ fd.append(k, extra[k]); });
+      return fetch(url, { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} }).then(function(r){ return r.json(); });
+    }
+    document.querySelectorAll('.mc-resolve').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var makeResolved = b.dataset.resolved !== '1';
+        csPost('{{ actionUrl('interactive-ai-assistant/contacts/resolve')|e('js') }}', b.dataset.id, { resolved: makeResolved ? '1' : '0' })
+          .then(function (r) {
+            if (!r.success) return;
+            var row = b.closest('tr');
+            b.dataset.resolved = makeResolved ? '1' : '0';
+            b.textContent = makeResolved ? '↩ Reopen' : '✓ Resolve';
+            if (row) row.classList.toggle('mc-new', !makeResolved);
+            window.dispatchEvent(new Event('cs-chatbot:read'));
+          });
+      });
+    });
+    document.querySelectorAll('.mc-delete').forEach(function (b) {
+      b.addEventListener('click', function () {
+        csPost('{{ actionUrl('interactive-ai-assistant/contacts/delete')|e('js') }}', b.dataset.id)
+          .then(function (r) {
+            if (!r.success) return;
+            var row = b.closest('tr');
+            if (row) row.remove();
+            window.dispatchEvent(new Event('cs-chatbot:read'));
+          });
+      });
+    });
+    document.querySelectorAll('.mc-restore').forEach(function (b) {
+      b.addEventListener('click', function () {
+        csPost('{{ actionUrl('interactive-ai-assistant/contacts/restore')|e('js') }}', b.dataset.id)
+          .then(function (r) {
+            if (!r.success) return;
+            var row = b.closest('tr');
+            if (row) row.remove();
+            window.dispatchEvent(new Event('cs-chatbot:read'));
+          });
+      });
+    });
+    document.querySelectorAll('.mc-destroy').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Permanently delete this contact request? This cannot be undone.')) return;
+        csPost('{{ actionUrl('interactive-ai-assistant/contacts/destroy')|e('js') }}', b.dataset.id)
+          .then(function (r) {
+            if (!r.success) return;
+            var row = b.closest('tr');
+            if (row) row.remove();
+            window.dispatchEvent(new Event('cs-chatbot:read'));
+          });
+      });
+    });
+  {% endjs %}
+{% endblock %}

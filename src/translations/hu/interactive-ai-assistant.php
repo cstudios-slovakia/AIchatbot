@@ -56,4 +56,17 @@ return [
     'Network error. Please try again.' => 'Hálózati hiba. Kérjük, próbálja újra.',
     'Could not request human right now.' => 'Most nem lehet munkatársat kérni.',
     'Asked for a human agent.' => 'Munkatársat kért.',
+
+    // Widget — contact capture
+    'Leave your details' => 'Hagyja meg elérhetőségét',
+    'Don’t want to wait? Leave your details' => 'Nem szeretne várni? Hagyja meg elérhetőségét',
+    'Leave your email or phone and a real person will get back to you.' => 'Adja meg e-mail-címét vagy telefonszámát, és egy munkatárs visszajelez.',
+    'Name (optional)' => 'Név (nem kötelező)',
+    'Email' => 'E-mail',
+    'Phone' => 'Telefon',
+    'Anything else? (optional)' => 'Bármi más? (nem kötelező)',
+    'Send details' => 'Elérhetőség elküldése',
+    'Please enter an email or phone number.' => 'Adjon meg egy e-mail-címet vagy telefonszámot.',
+    'Thanks! We’ll be in touch soon.' => 'Köszönjük! Hamarosan jelentkezünk.',
+    'Could not save your details. Please check and try again.' => 'Nem sikerült menteni az adatokat. Ellenőrizze, és próbálja újra.',
 ];

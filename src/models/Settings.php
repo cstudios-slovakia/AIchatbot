@@ -26,6 +26,8 @@ class Settings extends Model
     // Operation mode: 'chat' = floating bubble (current behavior). 'agent' = docked full-height side panel that squeezes page content.
     public string $operationMode = 'chat'; // chat|agent
     public int $agentPanelWidth = 420; // px width of the docked agent panel
+    // Corner the widget bubble/panel sits in (agent mode uses only the left/right part to pick the dock side).
+    public string $widgetPosition = 'bottom-right'; // bottom-right|bottom-left|top-right|top-left
 
     // AI configuration
     public string $openaiApiKey = '';
@@ -66,6 +68,10 @@ class Settings extends Model
     public string $humanHandoffMode = 'always';
     // Auto-close inactive handoff sessions after N minutes. 0 = disabled.
     public int $autoCloseInactiveMinutes = 15;
+    // Contact capture: offer to collect email/phone when the bot can't help or no agent shows up.
+    public bool $contactCaptureEnabled = true;
+    // Minutes a handoff can sit unclaimed before the widget auto-asks for contact details. 0 = never.
+    public int $contactPromptTimeoutMinutes = 5;
 
     // Filter
     public bool $filterEnabled = true;
@@ -77,7 +83,7 @@ class Settings extends Model
     public array $filterBlockedWords = [];
 
     // Logging
-    public bool $ratingsEnabled = true;
+    public bool $ratingsEnabled = false;
     public bool $loggingEnabled = true;
     public int $logRetentionDays = 0; // 0 = forever
 
@@ -86,9 +92,9 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled'], 'boolean'],
-            [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes'], 'integer'],
-            [['autoCloseInactiveMinutes'], 'integer', 'min' => 0],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled'], 'boolean'],
+            [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes'], 'integer'],
+            [['autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes'], 'integer', 'min' => 0],
             [['filterMinLength'], 'integer', 'min' => 1],
             [['filterMaxLength'], 'integer', 'min' => 10],
             [['filterRateWindowSeconds', 'filterRateMaxMessages'], 'integer', 'min' => 0],
@@ -98,6 +104,8 @@ class Settings extends Model
             [['minSimilarityScore'], 'number', 'min' => 0, 'max' => 1],
             [['defaultTheme'], 'in', 'range' => ['light', 'dark']],
             [['operationMode'], 'in', 'range' => ['chat', 'agent']],
+            [['widgetPosition'], 'string'],
+            [['widgetPosition'], 'in', 'range' => ['bottom-right', 'bottom-left', 'top-right', 'top-left']],
             [['agentPanelWidth'], 'integer', 'min' => 280, 'max' => 900],
             [['humanHandoffMode'], 'in', 'range' => ['always', 'ai']],
             [['humanHandoffMode'], 'string'],

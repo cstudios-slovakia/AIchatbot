@@ -23,6 +23,10 @@ use craft\db\ActiveRecord;
  * @property int $lowConfStreak
  * @property int|null $chatRating
  * @property string|null $chatEndedAt
+ * @property string|null $contactPromptedAt
+ * @property string|null $contactCapturedAt
+ * @property bool $starred
+ * @property string|null $adminNotes
  * @property string $dateCreated
  * @property string $dateUpdated
  */

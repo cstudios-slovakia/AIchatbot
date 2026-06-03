@@ -16,6 +16,7 @@
     <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:24px;">
       {% set kpis = [
         { label: 'Active now', value: stats.activeNow ?? 0, href: url('interactive-ai-assistant/logs', { active: 1 }), color: '#2563eb' },
+        { label: 'Missed chats', value: missedChatsNew ?? 0, href: url('interactive-ai-assistant/missed-chats', { status: 'new' }), color: '#7c3aed' },
         { label: 'Conversations', value: stats.totalConversations, href: null },
         { label: 'Messages', value: stats.totalMessages, href: null },
         { label: 'Avg response (s)', value: stats.avgResponseTime, href: null },

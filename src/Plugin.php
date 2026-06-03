@@ -23,6 +23,7 @@ use cstudiossro\craftcschatbot\jobs\IndexGlobalSetJob;
 use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\services\Bans;
 use cstudiossro\craftcschatbot\services\Chat as ChatService;
+use cstudiossro\craftcschatbot\services\Contacts;
 use cstudiossro\craftcschatbot\services\Embeddings;
 use cstudiossro\craftcschatbot\services\Filter;
 use cstudiossro\craftcschatbot\services\Handoff;
@@ -48,10 +49,11 @@ use yii\base\Event;
  * @property-read Handoff $handoff
  * @property-read Bans $bans
  * @property-read Filter $filter
+ * @property-read Contacts $contacts
  */
 class Plugin extends BasePlugin
 {
-    public string $schemaVersion = '1.0.0';
+    public string $schemaVersion = '1.1.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -68,6 +70,7 @@ class Plugin extends BasePlugin
                 'handoff' => Handoff::class,
                 'bans' => Bans::class,
                 'filter' => Filter::class,
+                'contacts' => Contacts::class,
             ],
         ];
     }
@@ -110,6 +113,7 @@ class Plugin extends BasePlugin
         $item['subnav'] = [
             'dashboard' => ['label' => 'Dashboard', 'url' => 'interactive-ai-assistant'],
             'live-chat' => ['label' => 'Live Chat', 'url' => 'interactive-ai-assistant/live-chat'],
+            'missed-chats' => ['label' => 'Missed Chats', 'url' => 'interactive-ai-assistant/missed-chats'],
             'training' => ['label' => 'Training', 'url' => 'interactive-ai-assistant/training/entries'],
             'logs' => ['label' => 'Chat Logs', 'url' => 'interactive-ai-assistant/logs'],
             'bans' => ['label' => 'Bans', 'url' => 'interactive-ai-assistant/bans'],
@@ -189,6 +193,12 @@ class Plugin extends BasePlugin
 
                 'interactive-ai-assistant/live-chat' => 'interactive-ai-assistant/handoff/index',
                 'interactive-ai-assistant/live-chat/toggle-star' => 'interactive-ai-assistant/handoff/toggle-star',
+
+                'interactive-ai-assistant/missed-chats' => 'interactive-ai-assistant/contacts/index',
+                'interactive-ai-assistant/missed-chats/resolve' => 'interactive-ai-assistant/contacts/resolve',
+                'interactive-ai-assistant/missed-chats/delete' => 'interactive-ai-assistant/contacts/delete',
+                'interactive-ai-assistant/missed-chats/restore' => 'interactive-ai-assistant/contacts/restore',
+                'interactive-ai-assistant/missed-chats/destroy' => 'interactive-ai-assistant/contacts/destroy',
 
                 'interactive-ai-assistant/bans' => 'interactive-ai-assistant/bans/index',
                 'interactive-ai-assistant/bans/create' => 'interactive-ai-assistant/bans/create',
@@ -306,6 +316,7 @@ class Plugin extends BasePlugin
                 'suggestionClick' => UrlHelper::actionUrl('interactive-ai-assistant/chat/suggestion-click'),
                 'poll' => UrlHelper::actionUrl('interactive-ai-assistant/chat/poll'),
                 'requestHuman' => UrlHelper::actionUrl('interactive-ai-assistant/chat/request-human'),
+                'submitContact' => UrlHelper::actionUrl('interactive-ai-assistant/chat/submit-contact'),
                 'end' => UrlHelper::actionUrl('interactive-ai-assistant/chat/end'),
                 'rateChat' => UrlHelper::actionUrl('interactive-ai-assistant/chat/rate-chat'),
                 'og' => UrlHelper::actionUrl('interactive-ai-assistant/og/fetch'),

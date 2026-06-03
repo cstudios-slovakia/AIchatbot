@@ -93,14 +93,18 @@ class Chat extends Component
 
         $contextBlocks = [];
         foreach ($usableHits as $i => $h) {
-            $contextBlocks[] = sprintf("[%d] (%s) %s", $i + 1, $h['sourceType'], $h['content']);
+            $url = $this->resolveSourceUrl($h['sourceType'], (int)$h['sourceId']);
+            $head = $url
+                ? sprintf("[%d] (%s) URL: %s", $i + 1, $h['sourceType'], $url)
+                : sprintf("[%d] (%s)", $i + 1, $h['sourceType']);
+            $contextBlocks[] = $head . "\n" . $h['content'];
         }
         $context = implode("\n\n---\n\n", $contextBlocks);
 
         $site = \cstudiossro\craftcschatbot\models\Settings::resolveSiteFromUrl($session->pageUrl);
         $siteUid = $site->uid ?? null;
         $systemPrompt = $settings->getSystemPromptForSite($siteUid);
-        $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](https://full-url)` (the UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph).";
+        $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](url)`, using the exact `URL:` value given for the relevant context block below. Never invent, guess, or use placeholder URLs — only link to a page when its real URL is present in the context. The UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph.";
         if ($settings->humanHandoffEnabled) {
             $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";
         }
@@ -131,7 +135,7 @@ class Chat extends Component
 
         $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime);
 
-        // low-confidence streak tracking → auto-offer human handoff
+        // low-confidence streak tracking → offer help (human handoff and/or contact capture)
         $offerHuman = false;
         if ($confidence < $settings->minSimilarityScore) {
             $session->lowConfStreak = (int)$session->lowConfStreak + 1;
@@ -144,7 +148,8 @@ class Chat extends Component
         if ($hasHandoffToken) {
             $offerHuman = true;
         }
-        if (!$settings->humanHandoffEnabled) {
+        // Nothing to offer if both human handoff and contact capture are off.
+        if (!$settings->humanHandoffEnabled && !$settings->contactCaptureEnabled) {
             $offerHuman = false;
         }
         if ($offerHuman) {
@@ -164,6 +169,42 @@ class Chat extends Component
             'shortId' => sprintf('%05d-%s', (int)$session->id, strtoupper(substr((string)$session->sessionToken, 0, 4))),
             'offerHuman' => $offerHuman,
         ];
+    }
+
+    /**
+     * Resolve a public URL for a retrieved chunk, keyed by its source.
+     * chunk.sourceId points at the training record id, not the element id.
+     */
+    private function resolveSourceUrl(string $sourceType, int $sourceId): ?string
+    {
+        try {
+            switch ($sourceType) {
+                case 'entry':
+                    $rec = \cstudiossro\craftcschatbot\records\TrainingEntryRecord::findOne($sourceId);
+                    if (!$rec) {
+                        return null;
+                    }
+                    $entry = \craft\elements\Entry::find()
+                        ->id($rec->entryId)->siteId($rec->siteId)->status(null)->one();
+                    return $entry?->getUrl();
+                case 'category':
+                    $rec = \cstudiossro\craftcschatbot\records\TrainingCategoryRecord::findOne($sourceId);
+                    if (!$rec) {
+                        return null;
+                    }
+                    $cat = \craft\elements\Category::find()
+                        ->id($rec->categoryId)->siteId($rec->siteId)->status(null)->one();
+                    return $cat?->getUrl();
+                case 'url':
+                    $rec = \cstudiossro\craftcschatbot\records\TrainingUrlRecord::findOne($sourceId);
+                    return $rec?->url ?: null;
+                default:
+                    // file, global, qa have no public URL
+                    return null;
+            }
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function logMessage(ChatSessionRecord $session, string $role, string $content, ?float $confidence, ?float $responseTime): ChatMessageRecord

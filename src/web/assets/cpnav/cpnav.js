@@ -72,7 +72,7 @@
       if (!raw) return null;
       var c = JSON.parse(raw);
       if (typeof c !== 'object' || c === null) return null;
-      return { waiting: c.waiting|0, active: c.active|0, unread: c.unread|0 };
+      return { waiting: c.waiting|0, active: c.active|0, unread: c.unread|0, leads: c.leads|0 };
     } catch (e) { return null; }
   }
   function writeCached(counts) {
@@ -87,17 +87,22 @@
   function isLiveChatHref(href) {
     return /interactive-ai-assistant\/live-chat(?:[\/?#&]|$)/.test(href);
   }
+  function isMissedChatsHref(href) {
+    return /interactive-ai-assistant\/missed-chats(?:[\/?#&]|$)/.test(href);
+  }
 
   function findTargets() {
     var anchors = document.querySelectorAll('#global-sidebar a, #subnav a, #nav a');
     var top = null;
     var sub = null;
+    var lead = null;
     anchors.forEach(function (a) {
       var href = a.getAttribute('href') || '';
+      if (!lead && isMissedChatsHref(href)) { lead = a; return; }
       if (!sub && isLiveChatHref(href)) { sub = a; return; }
       if (!top && endsWithChatbotRoot(href)) { top = a; }
     });
-    return { top: top, sub: sub };
+    return { top: top, sub: sub, lead: lead };
   }
 
   function clearStrayBadges(keep) {
@@ -105,15 +110,14 @@
     anchors.forEach(function (a) {
       var href = a.getAttribute('href') || '';
       if (href.indexOf('interactive-ai-assistant') === -1) return;
-      if (a !== keep.top && a !== keep.sub) {
+      if (a !== keep.top && a !== keep.sub && a !== keep.lead) {
         var b = a.querySelector('.badge, .cs-bot-badges');
         if (b) b.remove();
       }
     });
   }
 
-  function setBadges(el, counts) {
-    if (!el) return;
+  function badgeWrap(el) {
     // Remove Craft's native single badge to avoid double display
     var native = el.querySelector('.badge');
     if (native) native.remove();
@@ -125,12 +129,26 @@
       wrap.className = 'cs-bot-badges';
       host.appendChild(wrap);
     }
+    return wrap;
+  }
+
+  function setBadges(el, counts, includeLeads) {
+    if (!el) return;
+    var wrap = badgeWrap(el);
     var parts = [];
     if (counts.waiting > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--waiting" title="Waiting for an agent">' + counts.waiting + '</span>');
     if (counts.active > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--active" title="Active conversations">' + counts.active + '</span>');
     if (counts.unread > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--unread" title="Unread messages">' + counts.unread + '</span>');
+    if (includeLeads && counts.leads > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--lead" title="New missed chats">' + counts.leads + '</span>');
     wrap.innerHTML = parts.join('');
     if (!parts.length) wrap.remove();
+  }
+
+  function setLeadBadge(el, n) {
+    if (!el) return;
+    var wrap = badgeWrap(el);
+    wrap.innerHTML = n > 0 ? '<span class="cs-bot-badge cs-bot-badge--lead" title="New missed chats">' + n + '</span>' : '';
+    if (n <= 0) wrap.remove();
   }
 
   function refreshTitle(total) {
@@ -147,6 +165,7 @@
       '.cs-bot-badge--waiting { background:#d97706; }',
       '.cs-bot-badge--active { background:#2563eb; }',
       '.cs-bot-badge--unread { background:#dc2626; animation: cs-bot-pulse 1.5s infinite; }',
+      '.cs-bot-badge--lead { background:#7c3aed; }',
       '@keyframes cs-bot-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }',
     ].join('\n');
     document.head.appendChild(s);
@@ -154,16 +173,18 @@
 
   var lastTotal = -1;
   function applyCounts(counts) {
+    var leads = counts.leads | 0;
     var total = counts.waiting + counts.active + counts.unread;
-    var sig = counts.waiting + ':' + counts.active + ':' + counts.unread;
+    var sig = counts.waiting + ':' + counts.active + ':' + counts.unread + ':' + leads;
     var targets = findTargets();
     clearStrayBadges(targets);
     ensureStyles();
     if (sig === lastSig) return;
     lastSig = sig;
     lastTotal = total;
-    setBadges(targets.top, counts);
-    setBadges(targets.sub, counts);
+    setBadges(targets.top, counts, true);
+    setBadges(targets.sub, counts, false);
+    setLeadBadge(targets.lead, leads);
     refreshTitle(total);
     // Audio is handled per-chat by pingNewMessages() (distinct tone per conversation).
   }
@@ -173,7 +194,7 @@
       .then(function (r) { return r.json(); })
       .then(function (r) {
         if (!r.success) return;
-        var counts = { waiting: (r.waiting|0), active: (r.active|0), unread: (r.unread|0) };
+        var counts = { waiting: (r.waiting|0), active: (r.active|0), unread: (r.unread|0), leads: (r.leads|0) };
         writeCached(counts);
         applyCounts(counts);
         pingNewMessages(r.sessions);

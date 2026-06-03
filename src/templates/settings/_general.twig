@@ -64,6 +64,19 @@
   options: { chat: 'Chat (floating bubble)', agent: 'Agent (docked side panel)' },
 }) }}
 
+{{ forms.selectField({
+  label: 'Widget Position',
+  instructions: 'Which corner the chat bubble sits in. In Agent mode only the left/right side is used to pick the dock side.',
+  name: 'settings[widgetPosition]',
+  value: settings.widgetPosition ?? 'bottom-right',
+  options: {
+    'bottom-right': 'Bottom right',
+    'bottom-left': 'Bottom left',
+    'top-right': 'Top right',
+    'top-left': 'Top left',
+  },
+}) }}
+
 {{ forms.textField({
   label: 'Agent Panel Width',
   instructions: 'Width in pixels of the docked panel (Agent mode only). 280–900.',

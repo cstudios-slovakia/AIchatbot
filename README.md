@@ -21,7 +21,7 @@ Craft CMS 5 or later, and PHP 8.2 or later. An OpenAI API key is required for em
 Install with Composer and enable the plugin:
 
 ```bash
-composer require cstudios-s-r-o/craft-cs-chatbot
+composer require cstudios-s-r-o/interactive-ai-chatbot
 ./craft plugin/install interactive-ai-assistant
 ```
 

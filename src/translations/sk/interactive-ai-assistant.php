@@ -56,4 +56,17 @@ return [
     'Network error. Please try again.' => 'Chyba siete. Skúste to znova.',
     'Could not request human right now.' => 'Teraz sa nedá vyžiadať operátor.',
     'Asked for a human agent.' => 'Požiadali ste o operátora.',
+
+    // Widget — contact capture
+    'Leave your details' => 'Zanechajte kontakt',
+    'Don’t want to wait? Leave your details' => 'Nechcete čakať? Zanechajte kontakt',
+    'Leave your email or phone and a real person will get back to you.' => 'Zanechajte e-mail alebo telefón a ozve sa vám skutočný človek.',
+    'Name (optional)' => 'Meno (nepovinné)',
+    'Email' => 'E-mail',
+    'Phone' => 'Telefón',
+    'Anything else? (optional)' => 'Ešte niečo? (nepovinné)',
+    'Send details' => 'Odoslať kontakt',
+    'Please enter an email or phone number.' => 'Zadajte e-mail alebo telefónne číslo.',
+    'Thanks! We’ll be in touch soon.' => 'Ďakujeme! Čoskoro sa vám ozveme.',
+    'Could not save your details. Please check and try again.' => 'Kontakt sa nepodarilo uložiť. Skontrolujte údaje a skúste znova.',
 ];
