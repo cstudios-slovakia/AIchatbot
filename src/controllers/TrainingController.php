@@ -16,6 +16,7 @@ use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
 use cstudiossro\craftcschatbot\jobs\IndexFileJob;
 use cstudiossro\craftcschatbot\jobs\IndexGlobalSetJob;
+use cstudiossro\craftcschatbot\jobs\IndexSourceJob;
 use cstudiossro\craftcschatbot\jobs\IndexUrlJob;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\ChunkRecord;
@@ -24,6 +25,7 @@ use cstudiossro\craftcschatbot\records\TrainingEntryRecord;
 use cstudiossro\craftcschatbot\records\TrainingFileRecord;
 use cstudiossro\craftcschatbot\records\TrainingGlobalSetRecord;
 use cstudiossro\craftcschatbot\records\TrainingQaRecord;
+use cstudiossro\craftcschatbot\records\TrainingSourceRecord;
 use cstudiossro\craftcschatbot\records\TrainingUrlRecord;
 use yii\web\Response;
 
@@ -459,6 +461,100 @@ class TrainingController extends Controller
             'subtitle' => 'URL',
             'chunks' => $chunks,
             'backUrl' => 'admin/interactive-ai-assistant/training/urls',
+        ]);
+    }
+
+    // ---------- CUSTOM SOURCES (plugin-contributed) ----------
+
+    public function actionSources(): Response
+    {
+        $sources = Plugin::getInstance()->sources->all();
+        $blocks = [];
+        foreach ($sources as $source) {
+            $handle = $source->handle();
+            $blocks[] = [
+                'handle' => $handle,
+                'label' => $source->label(),
+                'rows' => TrainingSourceRecord::find()
+                    ->where(['sourceKey' => $handle])
+                    ->orderBy(['dateUpdated' => SORT_DESC])
+                    ->all(),
+            ];
+        }
+        return $this->renderTemplate('interactive-ai-assistant/training/sources', [
+            'blocks' => $blocks,
+        ]);
+    }
+
+    public function actionTrainSource(): Response
+    {
+        $this->requirePostRequest();
+        $handle = (string)Craft::$app->request->getRequiredBodyParam('handle');
+        $source = Plugin::getInstance()->sources->get($handle);
+        if (!$source) {
+            Craft::$app->session->setError('Unknown training source.');
+            return $this->redirectToPostedUrl();
+        }
+        $queued = 0;
+        foreach ($source->items() as $item) {
+            $id = (int)($item['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $siteId = isset($item['siteId']) ? (int)$item['siteId'] : null;
+            $title = (string)($item['title'] ?? '');
+            Plugin::getInstance()->training->upsertSourceItem($handle, $id, $siteId, $title);
+            Craft::$app->queue->push(new IndexSourceJob([
+                'handle' => $handle,
+                'itemId' => $id,
+                'siteId' => $siteId,
+            ]));
+            $queued++;
+        }
+        Craft::$app->session->setNotice("Queued {$queued} items for training.");
+        return $this->redirectToPostedUrl();
+    }
+
+    public function actionTrainSourceItem(): Response
+    {
+        $this->requirePostRequest();
+        $id = (int)Craft::$app->request->getRequiredBodyParam('id');
+        $rec = TrainingSourceRecord::findOne($id);
+        if ($rec) {
+            Craft::$app->queue->push(new IndexSourceJob([
+                'handle' => (string)$rec->sourceKey,
+                'itemId' => (int)$rec->itemId,
+                'siteId' => (int)$rec->siteId,
+            ]));
+            return $this->asJson(['success' => true]);
+        }
+        return $this->asJson(['success' => false, 'error' => 'Not found']);
+    }
+
+    public function actionDeleteSource(): Response
+    {
+        $this->requirePostRequest();
+        $id = (int)Craft::$app->request->getRequiredBodyParam('id');
+        Plugin::getInstance()->training->removeSource($id);
+        return $this->asJson(['success' => true]);
+    }
+
+    public function actionSourceChunks(int $id): Response
+    {
+        $rec = TrainingSourceRecord::findOne($id);
+        if (!$rec) {
+            throw new \yii\web\NotFoundHttpException();
+        }
+        $chunks = ChunkRecord::find()
+            ->where(['sourceType' => $rec->sourceKey, 'sourceId' => $rec->id])
+            ->orderBy(['position' => SORT_ASC])
+            ->all();
+        $source = Plugin::getInstance()->sources->get((string)$rec->sourceKey);
+        return $this->renderTemplate('interactive-ai-assistant/training/_chunks', [
+            'title' => $rec->title ?: ($rec->sourceKey . ' #' . $rec->itemId),
+            'subtitle' => $source ? $source->label() : (string)$rec->sourceKey,
+            'chunks' => $chunks,
+            'backUrl' => 'admin/interactive-ai-assistant/training/sources',
         ]);
     }
 

@@ -1,0 +1,90 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Training · Plugins' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
+  plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
+} %}
+{% set selectedTab = 'plugins' %}
+
+{% block content %}
+  {% if blocks|length %}
+    {% for block in blocks %}
+      <div class="source-block" style="margin-bottom:32px;">
+        <form method="post" accept-charset="UTF-8">
+          {{ csrfInput() }}
+          {{ actionInput('interactive-ai-assistant/training/train-source') }}
+          {{ hiddenInput('handle', block.handle) }}
+          <h2>{{ block.label }}</h2>
+          <button type="submit" class="btn submit">Train all</button>
+        </form>
+
+        {% if block.rows|length %}
+          <table class="data fullwidth" style="margin-top:12px;">
+            <thead>
+              <tr>
+                <th>Item</th><th>Status</th><th>Chunks</th><th>Last trained</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in block.rows %}
+                <tr>
+                  <td>
+                    <a href="{{ url('interactive-ai-assistant/training/source-chunks/' ~ r.id) }}">
+                      {{ r.title ?: (block.handle ~ ' #' ~ r.itemId) }}
+                    </a>
+                  </td>
+                  <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
+                  <td>{{ r.chunkCount }}</td>
+                  <td>{{ r.lastTrainedAt ?: '—' }}</td>
+                  <td>
+                    <button class="btn small js-train-source" data-id="{{ r.id }}">Re-train</button>
+                    <button class="btn small js-delete-source" data-id="{{ r.id }}">Delete</button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="light" style="margin-top:8px;">Nothing trained yet from this source.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="light">No external training sources are registered.</p>
+    <p class="light">
+      Plugins and modules can add their own sources (e.g. a custom element type
+      from another plugin) by listening to
+      <code>Sources::EVENT_REGISTER_SOURCES</code>. Registered sources appear here
+      with a “Train all” button.
+    </p>
+  {% endif %}
+
+  <script>
+    (function(){
+      function post(action, id) {
+        var data = new FormData();
+        data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        data.append('id', id);
+        return fetch(Craft.getActionUrl(action), {method:'POST', body:data, credentials:'same-origin'})
+          .then(function(r){ return r.json(); });
+      }
+      document.querySelectorAll('.js-train-source').forEach(function(b){
+        b.addEventListener('click', function(){
+          post('interactive-ai-assistant/training/train-source-item', b.dataset.id).then(function(){ location.reload(); });
+        });
+      });
+      document.querySelectorAll('.js-delete-source').forEach(function(b){
+        b.addEventListener('click', function(){
+          if (!confirm('Remove this item from the index?')) return;
+          post('interactive-ai-assistant/training/delete-source', b.dataset.id).then(function(){ location.reload(); });
+        });
+      });
+    })();
+  </script>
+{% endblock %}
