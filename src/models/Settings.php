@@ -42,6 +42,19 @@ class Settings extends Model
     public int $maxContextChunks = 5;
     public float $minSimilarityScore = 0.65;
 
+    // Agent / skills
+    // Master switch for tool-calling ("skills"). When off, the assistant is pure retrieval QA.
+    public bool $agentModeEnabled = false;
+    // Safety cap on how many tool-call rounds one answer may take.
+    public int $maxToolIterations = 3;
+    /**
+     * Per-skill availability: capability name => 'off' | 'on' | 'admins'.
+     * 'admins' exposes the skill only to logged-in CP users (for testing on the live widget).
+     * Missing entry = 'off'.
+     * @var array<string, string>
+     */
+    public array $capabilityStates = [];
+
     // Training
     /** @var string[] section UIDs */
     public array $trainingSections = [];
@@ -92,8 +105,10 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled'], 'boolean'],
-            [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes'], 'integer'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled'], 'boolean'],
+            [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
+            [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
+            [['capabilityStates'], 'safe'],
             [['autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes'], 'integer', 'min' => 0],
             [['filterMinLength'], 'integer', 'min' => 1],
             [['filterMaxLength'], 'integer', 'min' => 10],
@@ -113,6 +128,15 @@ class Settings extends Model
             [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite'], 'safe'],
             [['companyName'], 'required'],
         ];
+    }
+
+    /**
+     * Availability of a skill: 'off' | 'on' | 'admins'. Unknown skills are off.
+     */
+    public function capabilityState(string $name): string
+    {
+        $state = $this->capabilityStates[$name] ?? 'off';
+        return in_array($state, ['off', 'on', 'admins'], true) ? $state : 'off';
     }
 
     public static function normalizeHexColor(mixed $value): string

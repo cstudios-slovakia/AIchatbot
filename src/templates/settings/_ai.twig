@@ -107,3 +107,57 @@
   max: 1,
   size: 6,
 }) }}
+
+<hr>
+<h2>Agent &amp; skills</h2>
+
+{{ forms.lightswitchField({
+  label: 'Enable agent mode (skills)',
+  instructions: 'When on, the assistant can call registered "skills" (tools) to fetch live data or perform actions, in addition to answering from trained content. When off, it is pure retrieval Q&A.',
+  name: 'settings[agentModeEnabled]',
+  on: settings.agentModeEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Max tool iterations',
+  instructions: 'Safety cap on how many tool-call rounds a single answer may take (1–10).',
+  name: 'settings[maxToolIterations]',
+  value: settings.maxToolIterations,
+  type: 'number',
+  size: 4,
+  min: 1,
+  max: 10,
+}) }}
+
+{% if settings.agentModeEnabled %}
+  <h3>Registered skills</h3>
+  {% if capabilities|length %}
+    <p class="light">Choose where each skill is available. <strong>Admins only</strong> exposes it just to logged-in control-panel users — handy for testing on the live site before turning it on for everyone.</p>
+    <table class="data fullwidth">
+      <thead>
+        <tr><th scope="col">Skill</th><th scope="col">Description</th><th scope="col" style="width:180px;">Availability</th></tr>
+      </thead>
+      <tbody>
+        {% for cap in capabilities %}
+          <tr>
+            <td><code>{{ cap.name() }}</code></td>
+            <td class="light">{{ cap.description() }}</td>
+            <td>
+              {{ forms.select({
+                name: 'settings[capabilityStates][' ~ cap.name() ~ ']',
+                value: settings.capabilityState(cap.name()),
+                options: {
+                  off: 'Off',
+                  on: 'Enabled (everyone)',
+                  admins: 'Admins only (testing)',
+                },
+              }) }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="light">No skills are registered yet. Plugins or modules add them via the <code>Capabilities::EVENT_REGISTER_CAPABILITIES</code> event.</p>
+  {% endif %}
+{% endif %}

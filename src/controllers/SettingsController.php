@@ -28,6 +28,7 @@ class SettingsController extends Controller
             'sections' => Craft::$app->entries->getAllSections(),
             'categoryGroups' => Craft::$app->categories->getAllGroups(),
             'globalSets' => Craft::$app->globals->getAllSets(),
+            'capabilities' => Plugin::getInstance()->capabilities->all(),
             'tab' => $tab,
         ]);
     }
@@ -91,6 +92,7 @@ class SettingsController extends Controller
                 'sections' => Craft::$app->entries->getAllSections(),
                 'categoryGroups' => Craft::$app->categories->getAllGroups(),
                 'globalSets' => Craft::$app->globals->getAllSets(),
+            'capabilities' => Plugin::getInstance()->capabilities->all(),
                 'tab' => $req->getBodyParam('tab', 'general'),
             ]);
         }
