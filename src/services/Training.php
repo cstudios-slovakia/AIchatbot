@@ -13,6 +13,7 @@ use cstudiossro\craftcschatbot\records\TrainingEntryRecord;
 use cstudiossro\craftcschatbot\records\TrainingFileRecord;
 use cstudiossro\craftcschatbot\records\TrainingGlobalSetRecord;
 use cstudiossro\craftcschatbot\records\TrainingQaRecord;
+use cstudiossro\craftcschatbot\records\TrainingSourceRecord;
 use cstudiossro\craftcschatbot\records\TrainingUrlRecord;
 use GuzzleHttp\Exception\GuzzleException;
 use RuntimeException;
@@ -286,7 +287,7 @@ class Training extends Component
         $rec->delete();
     }
 
-    private function extractElementText(\craft\base\Element $el, string $prefix = ''): string
+    public function extractElementText(\craft\base\Element $el, string $prefix = ''): string
     {
         $parts = [];
         if ($prefix !== '') {
@@ -300,6 +301,82 @@ class Training extends Component
         }
         $text = implode("\n\n", array_filter(array_map('trim', $parts)));
         return Plugin::getInstance()->embeddings->normalize($text);
+    }
+
+    // ---------- CUSTOM SOURCES (plugin-contributed) ----------
+
+    /**
+     * Create or update the tracking record for one item of a custom source,
+     * caching its title for the control-panel list. Returns the record so the
+     * caller can queue an {@see \cstudiossro\craftcschatbot\jobs\IndexSourceJob}.
+     */
+    public function upsertSourceItem(string $handle, int $itemId, ?int $siteId, string $title = ''): TrainingSourceRecord
+    {
+        $siteId = $siteId ?: (int)Craft::$app->sites->getPrimarySite()->id;
+        $rec = TrainingSourceRecord::findOne(['sourceKey' => $handle, 'itemId' => $itemId, 'siteId' => $siteId])
+            ?? new TrainingSourceRecord();
+        $rec->sourceKey = $handle;
+        $rec->itemId = $itemId;
+        $rec->siteId = $siteId;
+        if ($title !== '') {
+            $rec->title = $title;
+        }
+        if ($rec->status === null) {
+            $rec->status = 'pending';
+        }
+        $rec->save(false);
+        return $rec;
+    }
+
+    /**
+     * Embed one item from a custom training source. The source's handle is used
+     * as the chunk sourceType so its chunks live alongside (but distinct from)
+     * the built-in kinds.
+     */
+    public function trainSource(string $handle, int $itemId, ?int $siteId = null): void
+    {
+        $source = Plugin::getInstance()->sources->get($handle);
+        $siteId = $siteId ?: (int)Craft::$app->sites->getPrimarySite()->id;
+        $rec = TrainingSourceRecord::findOne(['sourceKey' => $handle, 'itemId' => $itemId, 'siteId' => $siteId])
+            ?? new TrainingSourceRecord();
+        $rec->sourceKey = $handle;
+        $rec->itemId = $itemId;
+        $rec->siteId = $siteId;
+
+        if (!$source) {
+            $rec->status = 'error';
+            $rec->errorMessage = "Unknown training source: {$handle}";
+            $rec->save(false);
+            return;
+        }
+
+        $rec->status = 'training';
+        $rec->errorMessage = null;
+        $rec->save(false);
+
+        try {
+            $text = $source->extractText($itemId, $siteId);
+            $count = Plugin::getInstance()->embeddings->reindexSource($handle, (int)$rec->id, $text);
+            $rec->chunkCount = $count;
+            $rec->status = $count > 0 ? 'indexed' : 'empty';
+            $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
+            $rec->save(false);
+        } catch (Throwable $e) {
+            $rec->status = 'error';
+            $rec->errorMessage = $e->getMessage();
+            $rec->save(false);
+            throw $e;
+        }
+    }
+
+    public function removeSource(int $trainingSourceId): void
+    {
+        $rec = TrainingSourceRecord::findOne($trainingSourceId);
+        if (!$rec) {
+            return;
+        }
+        Plugin::getInstance()->embeddings->deleteChunks((string)$rec->sourceKey, (int)$rec->id);
+        $rec->delete();
     }
 
     // ---------- FILES ----------

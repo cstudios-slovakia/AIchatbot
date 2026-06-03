@@ -24,6 +24,7 @@ class Install extends Migration
         $this->dropTableIfExists('{{%chatbot_training_qa}}');
         $this->dropTableIfExists('{{%chatbot_training_categories}}');
         $this->dropTableIfExists('{{%chatbot_training_globals}}');
+        $this->dropTableIfExists('{{%chatbot_training_sources}}');
         $this->dropTableIfExists('{{%chatbot_suggestion_stats}}');
         $this->dropTableIfExists('{{%chatbot_bans}}');
         return true;
@@ -103,6 +104,21 @@ class Install extends Migration
             'id' => $this->primaryKey(),
             'globalSetId' => $this->integer()->notNull(),
             'siteId' => $this->integer()->notNull(),
+            'status' => $this->string(20)->notNull()->defaultValue('pending'),
+            'chunkCount' => $this->integer()->notNull()->defaultValue(0),
+            'errorMessage' => $this->text(),
+            'lastTrainedAt' => $this->dateTime(),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
+
+        $this->createTable('{{%chatbot_training_sources}}', [
+            'id' => $this->primaryKey(),
+            'sourceKey' => $this->string(20)->notNull(),
+            'itemId' => $this->integer()->notNull(),
+            'siteId' => $this->integer()->notNull(),
+            'title' => $this->string(255),
             'status' => $this->string(20)->notNull()->defaultValue('pending'),
             'chunkCount' => $this->integer()->notNull()->defaultValue(0),
             'errorMessage' => $this->text(),
@@ -228,6 +244,10 @@ class Install extends Migration
 
         $this->createIndex(null, '{{%chatbot_training_globals}}', ['globalSetId', 'siteId'], true);
         $this->createIndex(null, '{{%chatbot_training_globals}}', ['status']);
+
+        $this->createIndex(null, '{{%chatbot_training_sources}}', ['sourceKey', 'itemId', 'siteId'], true);
+        $this->createIndex(null, '{{%chatbot_training_sources}}', ['sourceKey']);
+        $this->createIndex(null, '{{%chatbot_training_sources}}', ['status']);
 
         $this->createIndex(null, '{{%chatbot_chunks}}', ['sourceType', 'sourceId']);
 

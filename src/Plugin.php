@@ -20,6 +20,7 @@ use craft\web\View;
 use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
 use cstudiossro\craftcschatbot\jobs\IndexGlobalSetJob;
+use cstudiossro\craftcschatbot\jobs\IndexSourceJob;
 use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\services\Bans;
 use cstudiossro\craftcschatbot\services\Capabilities;
@@ -29,6 +30,7 @@ use cstudiossro\craftcschatbot\services\Embeddings;
 use cstudiossro\craftcschatbot\services\Filter;
 use cstudiossro\craftcschatbot\services\Handoff;
 use cstudiossro\craftcschatbot\services\OpenAi;
+use cstudiossro\craftcschatbot\services\Sources;
 use cstudiossro\craftcschatbot\services\Stats;
 use cstudiossro\craftcschatbot\services\Training;
 use cstudiossro\craftcschatbot\services\VectorSearch;
@@ -52,10 +54,11 @@ use yii\base\Event;
  * @property-read Filter $filter
  * @property-read Contacts $contacts
  * @property-read Capabilities $capabilities
+ * @property-read Sources $sources
  */
 class Plugin extends BasePlugin
 {
-    public string $schemaVersion = '1.1.0';
+    public string $schemaVersion = '1.2.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -74,6 +77,7 @@ class Plugin extends BasePlugin
                 'filter' => Filter::class,
                 'contacts' => Contacts::class,
                 'capabilities' => Capabilities::class,
+                'sources' => Sources::class,
             ],
         ];
     }
@@ -86,6 +90,7 @@ class Plugin extends BasePlugin
         Craft::$app->onInit(function () {
             $this->registerWidgetInjection();
             $this->registerCpNavPolling();
+            $this->registerSourceAutoTrain();
         });
     }
 
@@ -184,7 +189,9 @@ class Plugin extends BasePlugin
                 'interactive-ai-assistant/training/files' => 'interactive-ai-assistant/training/files',
                 'interactive-ai-assistant/training/urls' => 'interactive-ai-assistant/training/urls',
                 'interactive-ai-assistant/training/qa' => 'interactive-ai-assistant/training/qa',
+                'interactive-ai-assistant/training/sources' => 'interactive-ai-assistant/training/sources',
                 'interactive-ai-assistant/training/entry-chunks/<id:\d+>' => 'interactive-ai-assistant/training/entry-chunks',
+                'interactive-ai-assistant/training/source-chunks/<id:\d+>' => 'interactive-ai-assistant/training/source-chunks',
                 'interactive-ai-assistant/training/url-chunks/<id:\d+>' => 'interactive-ai-assistant/training/url-chunks',
                 'interactive-ai-assistant/training/category-chunks/<id:\d+>' => 'interactive-ai-assistant/training/category-chunks',
                 'interactive-ai-assistant/training/global-chunks/<id:\d+>' => 'interactive-ai-assistant/training/global-chunks',
@@ -280,6 +287,37 @@ class Plugin extends BasePlugin
                 'siteId' => (int)$set->siteId,
             ]));
         });
+    }
+
+    /**
+     * Attach auto-train handlers for any registered custom training source that
+     * opts in via elementType(). Deferred to onInit so plugins/modules have had
+     * a chance to register their sources first.
+     */
+    private function registerSourceAutoTrain(): void
+    {
+        foreach ($this->sources->all() as $source) {
+            $elementType = $source->elementType();
+            if (!$elementType || !class_exists($elementType)) {
+                continue;
+            }
+            $handle = $source->handle();
+            Event::on($elementType, \craft\base\Element::EVENT_AFTER_SAVE, function (ModelEvent $event) use ($handle) {
+                if (!$this->getSettings()->autoTrainOnSave) {
+                    return;
+                }
+                /** @var \craft\base\Element $el */
+                $el = $event->sender;
+                if ($el->getIsDraft() || $el->getIsRevision() || $el->propagating || $el->resaving) {
+                    return;
+                }
+                Craft::$app->queue->push(new IndexSourceJob([
+                    'handle' => $handle,
+                    'itemId' => (int)$el->id,
+                    'siteId' => (int)$el->siteId,
+                ]));
+            });
+        }
     }
 
     /**
