@@ -108,6 +108,17 @@ class Chat extends Component
         if ($settings->humanHandoffEnabled) {
             $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";
         }
+        // Skills (tool-calling). Respect per-skill availability: 'admins' skills
+        // are exposed only to logged-in CP users so they can be tested live.
+        $isCpUser = !Craft::$app->getUser()->getIsGuest()
+            && Craft::$app->getUser()->checkPermission('accessCp');
+        $enabledCaps = ($settings->agentModeEnabled && !$plugin->capabilities->isEmpty())
+            ? $plugin->capabilities->enabledFor($isCpUser)
+            : [];
+        if (!empty($enabledCaps)) {
+            $systemPrompt .= "\n\n# Tools\nYou can call the provided tools to fetch live data or perform actions. Use them only when they help answer the question, then reply normally using their results. Do not mention the tools themselves.";
+        }
+
         if ($context !== '') {
             $systemPrompt .= "\n\n# Context\n" . $context;
         } else {
@@ -124,7 +135,8 @@ class Chat extends Component
         }
         $messages[] = ['role' => 'user', 'content' => $question];
 
-        $reply = $plugin->openAi->chat($messages);
+        $tools = !empty($enabledCaps) ? $plugin->capabilities->toolSchemas($enabledCaps) : [];
+        $reply = $this->complete($messages, $tools);
         $responseTime = round(microtime(true) - $start, 3);
 
         // Sentinel token from the model = language-agnostic "offer human" signal. Strip before showing.
@@ -205,6 +217,48 @@ class Chat extends Component
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Produce the assistant reply. With no tools this is a single completion;
+     * with tools it runs a bounded tool-calling loop: the model may request
+     * tool calls, we execute them via the Capabilities registry, feed the
+     * results back, and repeat until it answers or the iteration cap is hit.
+     *
+     * @param array<int, array<string, mixed>> $messages
+     * @param array<int, array<string, mixed>> $tools
+     */
+    private function complete(array $messages, array $tools): string
+    {
+        $plugin = Plugin::getInstance();
+        if (empty($tools)) {
+            return $plugin->openAi->chat($messages);
+        }
+        $caps = $plugin->capabilities;
+        $maxIter = max(1, (int)$plugin->getSettings()->maxToolIterations);
+        for ($i = 0; $i < $maxIter; $i++) {
+            $message = $plugin->openAi->chatRaw($messages, ['tools' => $tools]);
+            $calls = $message['tool_calls'] ?? [];
+            if (empty($calls)) {
+                return (string)($message['content'] ?? '');
+            }
+            // The assistant message carrying tool_calls must precede the results.
+            $messages[] = $message;
+            foreach ($calls as $call) {
+                $fn = (string)($call['function']['name'] ?? '');
+                $argsRaw = $call['function']['arguments'] ?? '{}';
+                $args = json_decode(is_string($argsRaw) ? $argsRaw : '{}', true);
+                $result = $caps->run($fn, is_array($args) ? $args : []);
+                $messages[] = [
+                    'role' => 'tool',
+                    'tool_call_id' => (string)($call['id'] ?? ''),
+                    'content' => json_encode($result),
+                ];
+            }
+        }
+        // Hit the iteration cap with calls still pending — force a final answer.
+        $message = $plugin->openAi->chatRaw($messages);
+        return (string)($message['content'] ?? '');
     }
 
     private function logMessage(ChatSessionRecord $session, string $role, string $content, ?float $confidence, ?float $responseTime): ChatMessageRecord

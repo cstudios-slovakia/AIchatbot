@@ -22,6 +22,7 @@ use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
 use cstudiossro\craftcschatbot\jobs\IndexGlobalSetJob;
 use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\services\Bans;
+use cstudiossro\craftcschatbot\services\Capabilities;
 use cstudiossro\craftcschatbot\services\Chat as ChatService;
 use cstudiossro\craftcschatbot\services\Contacts;
 use cstudiossro\craftcschatbot\services\Embeddings;
@@ -50,6 +51,7 @@ use yii\base\Event;
  * @property-read Bans $bans
  * @property-read Filter $filter
  * @property-read Contacts $contacts
+ * @property-read Capabilities $capabilities
  */
 class Plugin extends BasePlugin
 {
@@ -71,6 +73,7 @@ class Plugin extends BasePlugin
                 'bans' => Bans::class,
                 'filter' => Filter::class,
                 'contacts' => Contacts::class,
+                'capabilities' => Capabilities::class,
             ],
         ];
     }
