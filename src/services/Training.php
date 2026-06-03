@@ -86,32 +86,121 @@ class Training extends Component
         return Plugin::getInstance()->embeddings->normalize($text);
     }
 
-    private function fieldValueToText(mixed $value): string
+    /**
+     * Turn any Craft field value into plain, searchable text.
+     *
+     * Handles the built-in field data types — plain text/number/date,
+     * dropdowns & radio buttons, checkboxes & multi-select, colours,
+     * tables, and relation/Matrix fields (recursing into related elements
+     * and Matrix blocks so their content adds context). $depth bounds the
+     * relation recursion so cyclic relations can't loop forever.
+     */
+    private function fieldValueToText(mixed $value, int $depth = 0): string
     {
+        if ($value === null) {
+            return '';
+        }
         if (is_string($value)) {
             return $value;
         }
-        if (is_numeric($value) || is_bool($value)) {
+        if (is_bool($value)) {
+            // Lightswitch — the on/off flag carries no useful search text.
+            return '';
+        }
+        if (is_numeric($value)) {
             return (string)$value;
         }
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+        // Checkboxes / multi-select — a collection of options.
+        if ($value instanceof \craft\fields\data\MultiOptionFieldData) {
+            $parts = [];
+            foreach ($value as $opt) {
+                $parts[] = $this->optionToText($opt);
+            }
+            return implode("\n", array_filter($parts));
+        }
+        // Dropdown / radio — a single option (prefer label over stored value).
+        if ($value instanceof \craft\fields\data\OptionData) {
+            return $this->optionToText($value);
+        }
+        // Relations (Entries/Assets/Categories/Users/Tags) and Matrix.
+        if ($value instanceof \craft\elements\db\ElementQuery) {
+            if ($depth >= 2) {
+                return '';
+            }
+            $parts = [];
+            foreach ($value->all() as $el) {
+                $parts[] = $this->elementToText($el, $depth + 1);
+            }
+            return implode("\n", array_filter($parts));
+        }
+        // Table rows and other plain arrays.
         if (is_array($value)) {
             $parts = [];
             foreach ($value as $v) {
-                $parts[] = $this->fieldValueToText($v);
+                $parts[] = $this->fieldValueToText($v, $depth);
             }
             return implode("\n", array_filter($parts));
         }
-        if ($value instanceof \craft\elements\db\ElementQuery) {
-            $parts = [];
-            foreach ($value->all() as $el) {
-                $parts[] = (string)$el;
-            }
-            return implode("\n", array_filter($parts));
-        }
+        // Anything else that can stringify itself (ColorData, Money, Twig\Markup, …).
         if (is_object($value) && method_exists($value, '__toString')) {
-            return (string)$value;
+            try {
+                return (string)$value;
+            } catch (\Throwable) {
+                return '';
+            }
         }
         return '';
+    }
+
+    /**
+     * Human-readable text for a single option (dropdown/radio/checkbox item).
+     * Falls back to the stored value when an option has no label.
+     */
+    private function optionToText(mixed $opt): string
+    {
+        if ($opt instanceof \craft\fields\data\OptionData) {
+            $label = trim((string)($opt->label ?? ''));
+            if ($label !== '') {
+                return $label;
+            }
+            return trim((string)($opt->value ?? ''));
+        }
+        return is_scalar($opt) ? trim((string)$opt) : '';
+    }
+
+    /**
+     * Text for a related element or Matrix block: its title plus, one level
+     * deeper, its own custom field values (so Matrix content is captured).
+     */
+    private function elementToText(mixed $el, int $depth): string
+    {
+        if (!is_object($el)) {
+            return is_scalar($el) ? trim((string)$el) : '';
+        }
+        $parts = [];
+        if (!empty($el->title)) {
+            $parts[] = (string)$el->title;
+        }
+        if ($el instanceof \craft\elements\Asset && !empty($el->alt)) {
+            $parts[] = (string)$el->alt;
+        }
+        if ($depth < 2 && method_exists($el, 'getFieldValues')) {
+            try {
+                foreach ($el->getFieldValues() as $v) {
+                    $t = $this->fieldValueToText($v, $depth + 1);
+                    if ($t !== '') {
+                        $parts[] = $t;
+                    }
+                }
+            } catch (\Throwable) {
+                // ignore unreadable field values
+            }
+        }
+        $parts = array_values(array_filter(array_map('trim', $parts), fn($p) => $p !== ''));
+        return implode("\n", array_unique($parts));
     }
 
     // ---------- CATEGORIES ----------
