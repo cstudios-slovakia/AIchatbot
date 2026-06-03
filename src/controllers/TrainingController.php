@@ -10,6 +10,7 @@ use craft\helpers\FileHelper;
 use craft\helpers\StringHelper;
 use craft\web\Controller;
 use craft\web\UploadedFile;
+use cstudiossro\craftcschatbot\helpers\CraftCompat;
 use cstudiossro\craftcschatbot\jobs\CrawlSitemapJob;
 use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
@@ -50,7 +51,7 @@ class TrainingController extends Controller
                 $entryTitles[(int)$e->id] = $e->title;
             }
         }
-        $sections = Craft::$app->entries->getAllSections();
+        $sections = CraftCompat::getAllSections();
         $settings = Plugin::getInstance()->getSettings();
         return $this->renderTemplate('interactive-ai-assistant/training/entries', [
             'rows' => $rows,
@@ -70,7 +71,7 @@ class TrainingController extends Controller
         }
         $sectionIds = [];
         foreach ($sectionUids as $uid) {
-            $s = Craft::$app->entries->getSectionByUid($uid);
+            $s = CraftCompat::getSectionByUid($uid);
             if ($s) {
                 $sectionIds[] = $s->id;
             }
