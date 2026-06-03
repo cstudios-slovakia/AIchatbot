@@ -69,4 +69,12 @@ return [
     'Please enter an email or phone number.' => 'Adjon meg egy e-mail-címet vagy telefonszámot.',
     'Thanks! We’ll be in touch soon.' => 'Köszönjük! Hamarosan jelentkezünk.',
     'Could not save your details. Please check and try again.' => 'Nem sikerült menteni az adatokat. Ellenőrizze, és próbálja újra.',
+
+    // Queue jobs
+    'Crawling URL #{id}' => 'URL feldolgozása #{id}',
+    'Importing sitemap' => 'Webhelytérkép importálása',
+    'Indexing entry #{id}' => 'Bejegyzés indexelése #{id}',
+    'Indexing category #{id}' => 'Kategória indexelése #{id}',
+    'Indexing global set #{id}' => 'Globális készlet indexelése #{id}',
+    'Indexing training file #{id}' => 'Tanítófájl indexelése #{id}',
 ];
