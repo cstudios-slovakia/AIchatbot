@@ -161,7 +161,7 @@ class TrainingController extends Controller
         }
         $groupIds = [];
         foreach ($groupUids as $uid) {
-            $g = Craft::$app->categories->getGroupByUid($uid);
+            $g = CraftCompat::getCategoryGroupByUid($uid);
             if ($g) {
                 $groupIds[] = $g->id;
             }
@@ -251,7 +251,7 @@ class TrainingController extends Controller
         }
         $queued = 0;
         foreach ($setUids as $uid) {
-            $s = Craft::$app->globals->getSetByUid($uid);
+            $s = CraftCompat::getGlobalSetByUid($uid);
             if ($s) {
                 Craft::$app->queue->push(new IndexGlobalSetJob(['globalSetId' => (int)$s->id, 'siteId' => (int)$s->siteId]));
                 $queued++;
