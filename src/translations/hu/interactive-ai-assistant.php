@@ -77,4 +77,13 @@ return [
     'Indexing category #{id}' => 'Kategória indexelése #{id}',
     'Indexing global set #{id}' => 'Globális készlet indexelése #{id}',
     'Indexing training file #{id}' => 'Tanítófájl indexelése #{id}',
+
+    // System messages (shown in the transcript)
+    'User requested to chat with a human.' => 'A felhasználó emberi ügyintézőt kért.',
+    '{name} joined the conversation.' => '{name} csatlakozott a beszélgetéshez.',
+    '{name} ended the conversation.' => '{name} befejezte a beszélgetést.',
+    'Conversation auto-closed after {minutes} minutes of inactivity.' => 'A beszélgetés {minutes} perc inaktivitás után automatikusan lezárult.',
+    'User ended the conversation.' => 'A felhasználó befejezte a beszélgetést.',
+    'Visitor left contact details for follow-up.' => 'A látogató megadta elérhetőségét a későbbi kapcsolatfelvételhez.',
+    'No agent is available right now. Leave your email or phone and a real person will follow up.' => 'Jelenleg nincs elérhető ügyintéző. Adja meg e-mail-címét vagy telefonszámát, és egy munkatárs jelentkezni fog.',
 ];

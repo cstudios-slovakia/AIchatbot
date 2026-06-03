@@ -63,9 +63,10 @@ class Contacts extends Component
         if ($session) {
             $session->contactCapturedAt = Db::prepareDateForDb(new DateTime());
             $session->save(false);
-            Plugin::getInstance()->handoff->logSystem(
+            $handoff = Plugin::getInstance()->handoff;
+            $handoff->logSystem(
                 $session,
-                'Visitor left contact details for follow-up.'
+                $handoff->t($session, 'Visitor left contact details for follow-up.')
             );
         }
         return $rec;
@@ -120,9 +121,10 @@ class Contacts extends Component
 
         $session->contactPromptedAt = Db::prepareDateForDb(new DateTime());
         $session->save(false);
-        Plugin::getInstance()->handoff->logSystem(
+        $handoff = Plugin::getInstance()->handoff;
+        $handoff->logSystem(
             $session,
-            'No agent is available right now. Leave your email or phone and a real person will follow up.'
+            $handoff->t($session, 'No agent is available right now. Leave your email or phone and a real person will follow up.')
         );
         return true;
     }
