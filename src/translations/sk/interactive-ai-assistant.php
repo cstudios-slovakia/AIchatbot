@@ -77,4 +77,13 @@ return [
     'Indexing category #{id}' => 'Indexovanie kategórie #{id}',
     'Indexing global set #{id}' => 'Indexovanie globálnej sady #{id}',
     'Indexing training file #{id}' => 'Indexovanie tréningového súboru #{id}',
+
+    // System messages (shown in the transcript)
+    'User requested to chat with a human.' => 'Používateľ požiadal o rozhovor s človekom.',
+    '{name} joined the conversation.' => '{name} sa pripojil(a) do konverzácie.',
+    '{name} ended the conversation.' => '{name} ukončil(a) konverzáciu.',
+    'Conversation auto-closed after {minutes} minutes of inactivity.' => 'Konverzácia bola automaticky ukončená po {minutes} min. nečinnosti.',
+    'User ended the conversation.' => 'Používateľ ukončil konverzáciu.',
+    'Visitor left contact details for follow-up.' => 'Návštevník zanechal kontaktné údaje na neskoršie kontaktovanie.',
+    'No agent is available right now. Leave your email or phone and a real person will follow up.' => 'Momentálne nie je dostupný žiadny operátor. Zanechajte e-mail alebo telefón a ozve sa vám skutočný človek.',
 ];

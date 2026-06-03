@@ -30,7 +30,7 @@ class Handoff extends Component
         $session->handoffEndedAt = null;
         $session->save(false);
 
-        $this->logSystem($session, 'User requested to chat with a human.');
+        $this->logSystem($session, $this->t($session, 'User requested to chat with a human.'));
         return true;
     }
 
@@ -53,7 +53,7 @@ class Handoff extends Component
 
         $admin = Craft::$app->users->getUserById($adminId);
         $name = $admin ? ($admin->fullName ?: $admin->username) : 'Agent';
-        $this->logSystem($session, sprintf('%s joined the conversation.', $name));
+        $this->logSystem($session, $this->t($session, '{name} joined the conversation.', ['name' => $name]));
         return $session;
     }
 
@@ -139,7 +139,7 @@ class Handoff extends Component
         $session->chatEndedAt = $now;
         $session->lowConfStreak = 0;
         $session->save(false);
-        $this->logSystem($session, sprintf('Conversation auto-closed after %d minutes of inactivity.', $minutes));
+        $this->logSystem($session, $this->t($session, 'Conversation auto-closed after {minutes} minutes of inactivity.', ['minutes' => $minutes]));
         return true;
     }
 
@@ -160,7 +160,7 @@ class Handoff extends Component
         $name = Plugin::getInstance()->getSettings()->showAdminName && $admin
             ? ($admin->fullName ?: $admin->username)
             : 'The agent';
-        $this->logSystem($session, sprintf('%s ended the conversation.', $name));
+        $this->logSystem($session, $this->t($session, '{name} ended the conversation.', ['name' => $name]));
         return true;
     }
 
@@ -351,6 +351,18 @@ class Handoff extends Component
         }
         $text = (string)$row['content'];
         return mb_substr($text, 0, 80);
+    }
+
+    /**
+     * Translate a system-message string into the visitor's site language so
+     * transcripts read correctly on the widget (and in the CP).
+     *
+     * @param array<string, mixed> $params
+     */
+    public function t(ChatSessionRecord $session, string $message, array $params = []): string
+    {
+        $language = \cstudiossro\craftcschatbot\models\Settings::resolveSiteFromUrl($session->pageUrl)?->language;
+        return Craft::t('interactive-ai-assistant', $message, $params, $language);
     }
 
     public function logSystem(ChatSessionRecord $session, string $text): ChatMessageRecord

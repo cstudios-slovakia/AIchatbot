@@ -313,7 +313,7 @@ class Chat extends Component
         $sysMsg = new ChatMessageRecord();
         $sysMsg->sessionId = (int)$session->id;
         $sysMsg->role = 'system';
-        $sysMsg->content = 'User ended the conversation.';
+        $sysMsg->content = Plugin::getInstance()->handoff->t($session, 'User ended the conversation.');
         $sysMsg->save(false);
         return true;
     }
