@@ -396,9 +396,11 @@ class TrainingController extends Controller
             $rec->source = 'manual';
             $rec->status = 'pending';
             $rec->save(false);
+            // Queue the crawl immediately so URLs don't sit at "pending".
+            Craft::$app->queue->push(new IndexUrlJob(['urlRecId' => (int)$rec->id]));
             $added++;
         }
-        Craft::$app->session->setNotice("Added {$added} URLs.");
+        Craft::$app->session->setNotice("Added {$added} URLs; crawling in the background.");
         return $this->redirectToPostedUrl();
     }
 
