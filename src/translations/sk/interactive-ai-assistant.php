@@ -69,4 +69,12 @@ return [
     'Please enter an email or phone number.' => 'Zadajte e-mail alebo telefónne číslo.',
     'Thanks! We’ll be in touch soon.' => 'Ďakujeme! Čoskoro sa vám ozveme.',
     'Could not save your details. Please check and try again.' => 'Kontakt sa nepodarilo uložiť. Skontrolujte údaje a skúste znova.',
+
+    // Queue jobs
+    'Crawling URL #{id}' => 'Prehľadávanie URL #{id}',
+    'Importing sitemap' => 'Import sitemapy',
+    'Indexing entry #{id}' => 'Indexovanie záznamu #{id}',
+    'Indexing category #{id}' => 'Indexovanie kategórie #{id}',
+    'Indexing global set #{id}' => 'Indexovanie globálnej sady #{id}',
+    'Indexing training file #{id}' => 'Indexovanie tréningového súboru #{id}',
 ];
