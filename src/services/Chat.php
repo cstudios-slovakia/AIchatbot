@@ -7,6 +7,7 @@ use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use DateTime;
 use DateTimeZone;
+use cstudiossro\craftcschatbot\events\BuildSystemPromptEvent;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\ChatMessageRecord;
 use cstudiossro\craftcschatbot\records\ChatSessionRecord;
@@ -15,6 +16,13 @@ use yii\base\Component;
 
 class Chat extends Component
 {
+    /**
+     * @event BuildSystemPromptEvent Fired while assembling the system prompt,
+     * so plugins/modules can append their own context blocks.
+     */
+    public const EVENT_BUILD_SYSTEM_PROMPT = 'buildSystemPrompt';
+
+
     public function getOrCreateSession(?string $token, ?string $pageUrl = null): ChatSessionRecord
     {
         $settings = Plugin::getInstance()->getSettings();
@@ -104,6 +112,23 @@ class Chat extends Component
         $site = \cstudiossro\craftcschatbot\models\Settings::resolveSiteFromUrl($session->pageUrl);
         $siteUid = $site->uid ?? null;
         $systemPrompt = $settings->getSystemPromptForSite($siteUid);
+
+        // Let plugins/modules contribute extra context (e.g. the current date on
+        // an events site). Core stays generic — site-specific additions live in
+        // the listeners, not here.
+        $promptEvent = new BuildSystemPromptEvent([
+            'siteUid' => $siteUid,
+            'question' => $question,
+            'session' => $session,
+        ]);
+        $this->trigger(self::EVENT_BUILD_SYSTEM_PROMPT, $promptEvent);
+        foreach ($promptEvent->additions as $addition) {
+            $addition = trim((string)$addition);
+            if ($addition !== '') {
+                $systemPrompt .= "\n\n" . $addition;
+            }
+        }
+
         $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](url)`, using the exact `URL:` value given for the relevant context block below. Never invent, guess, or use placeholder URLs — only link to a page when its real URL is present in the context. The UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph.";
         if ($settings->humanHandoffEnabled) {
             $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";

@@ -40,7 +40,10 @@ class Settings extends Model
     /** @var array<string, string> Craft site UID => override system prompt. */
     public array $systemPrompts = [];
     public int $maxContextChunks = 5;
-    public float $minSimilarityScore = 0.65;
+    // text-embedding-3-small puts genuinely relevant matches around 0.3–0.5,
+    // so 0.65 filtered out almost everything. Keep this low to avoid starving
+    // the model of context.
+    public float $minSimilarityScore = 0.35;
 
     // Agent / skills
     // Master switch for tool-calling ("skills"). When off, the assistant is pure retrieval QA.
