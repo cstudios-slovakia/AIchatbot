@@ -8,6 +8,7 @@ use craft\helpers\StringHelper;
 use DateTime;
 use DateTimeZone;
 use cstudiossro\craftcschatbot\events\BuildSystemPromptEvent;
+use cstudiossro\craftcschatbot\events\TransformReplyEvent;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\ChatMessageRecord;
 use cstudiossro\craftcschatbot\records\ChatSessionRecord;
@@ -21,6 +22,13 @@ class Chat extends Component
      * so plugins/modules can append their own context blocks.
      */
     public const EVENT_BUILD_SYSTEM_PROMPT = 'buildSystemPrompt';
+
+    /**
+     * @event TransformReplyEvent Fired after the model replies but before the
+     * text is logged/returned, so plugins/modules can rewrite it (e.g. resolve
+     * link tokens to real URLs).
+     */
+    public const EVENT_TRANSFORM_REPLY = 'transformReply';
 
 
     public function getOrCreateSession(?string $token, ?string $pageUrl = null): ChatSessionRecord
@@ -169,6 +177,18 @@ class Chat extends Component
         if ($hasHandoffToken) {
             $reply = trim(preg_replace('/\s*\[\[HANDOFF_OFFER\]\]\s*/u', '', $reply) ?? $reply);
         }
+
+        // Let plugins/modules rewrite the reply (e.g. resolve event-link tokens
+        // to real URLs). The model only ever emits short tokens, never long
+        // URLs it might mistype.
+        $transformEvent = new TransformReplyEvent([
+            'reply' => $reply,
+            'question' => $question,
+            'siteUid' => $siteUid,
+            'session' => $session,
+        ]);
+        $this->trigger(self::EVENT_TRANSFORM_REPLY, $transformEvent);
+        $reply = $transformEvent->reply;
 
         $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime);
 
