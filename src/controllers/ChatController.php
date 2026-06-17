@@ -12,7 +12,7 @@ use yii\web\Response;
 
 class ChatController extends Controller
 {
-    protected array|bool|int $allowAnonymous = ['send', 'rate', 'suggestion-click', 'config', 'poll', 'request-human', 'end', 'rate-chat', 'logo', 'submit-contact'];
+    protected array|bool|int $allowAnonymous = ['send', 'rate', 'suggestion-click', 'config', 'poll', 'request-human', 'end', 'rate-chat', 'logo', 'submit-contact', 'submit-form'];
     public $enableCsrfValidation = false;
 
     private function maybeSweep(): void
@@ -150,6 +150,12 @@ class ChatController extends Controller
             'contactNeedOne' => 'Please enter an email or phone number.',
             'contactThanks' => 'Thanks! We’ll be in touch soon.',
             'contactError' => 'Could not save your details. Please check and try again.',
+            'formSubmit' => 'Submit',
+            'formRequired' => 'This field is required.',
+            'formInvalidEmail' => 'Please enter a valid email address.',
+            'formThanks' => 'Thanks! Your form has been submitted.',
+            'formError' => 'Could not submit the form. Please try again.',
+            'formSelectPrompt' => 'Choose…',
         ];
         $out = [];
         foreach ($sources as $key => $source) {
@@ -358,6 +364,38 @@ class ChatController extends Controller
             'success' => true,
             'sessionToken' => $session->sessionToken,
         ]);
+    }
+
+    public function actionSubmitForm(): Response
+    {
+        $this->requirePostRequest();
+        if ($blocked = $this->blockIfBanned()) return $blocked;
+        if (!Plugin::getInstance()->widgetVisibleForCurrentUser()) {
+            return $this->asJson(['success' => false, 'error' => 'Chatbot disabled']);
+        }
+        if (!Plugin::getInstance()->getSettings()->formsEnabled) {
+            return $this->asJson(['success' => false, 'error' => 'Forms are disabled.']);
+        }
+        $req = Craft::$app->request;
+        $formName = (string)$req->getBodyParam('form', '');
+        $fields = (array)$req->getBodyParam('fields', []);
+        $token = (string)$req->getBodyParam('sessionToken', '');
+        $pageUrl = $req->getBodyParam('pageUrl');
+
+        $session = $token !== '' ? ChatSessionRecord::findOne(['sessionToken' => $token]) : null;
+        if (!$session) {
+            $session = Plugin::getInstance()->chat->getOrCreateSession(null, is_string($pageUrl) ? $pageUrl : null);
+        }
+
+        $result = Plugin::getInstance()->forms->submitFromWidget($formName, $fields, $session);
+        if (empty($result['ok'])) {
+            return $this->asJson([
+                'success' => false,
+                'error' => $result['error'] ?? 'Please check the form and try again.',
+                'errors' => $result['errors'] ?? new \stdClass(),
+            ]);
+        }
+        return $this->asJson(['success' => true, 'sessionToken' => $session->sessionToken]);
     }
 
     public function actionLogo(): Response

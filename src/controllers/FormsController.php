@@ -165,10 +165,12 @@ class FormsController extends Controller
             $headers[] = ['key' => trim((string)$row['key']), 'value' => (string)($row['value'] ?? '')];
         }
 
+        $mode = (string)($posted['mode'] ?? 'conversational');
         return [
             'name' => trim((string)($posted['name'] ?? '')),
             'label' => trim((string)($posted['label'] ?? '')),
             'description' => trim((string)($posted['description'] ?? '')),
+            'mode' => in_array($mode, ['conversational', 'inline'], true) ? $mode : 'conversational',
             'fields' => $fields,
             'delivery' => [
                 'webhook' => [

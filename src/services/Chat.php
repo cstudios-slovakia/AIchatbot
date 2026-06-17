@@ -163,9 +163,9 @@ class Chat extends Component
             foreach ($formCaps as $fc) {
                 $formList .= "\n- `" . $fc->name() . "`: " . $fc->description();
             }
-            $systemPrompt .= "\n\n# Forms\nYou can collect and submit these forms by calling the matching tool:" . $formList
-                . "\n\nBehave like an attentive salesperson: when the conversation shows the visitor could benefit from one of these (they express interest, a need, or intent it serves), proactively offer to fill it out for them — do not wait to be asked. Offer at most one form at a time, only when clearly relevant, and never be pushy; if the user declines, drop it gracefully."
-                . "\n\nCollect the fields by asking a question or two at a time. Before submitting, briefly recap the collected details so the user can confirm or correct them. When you call the tool, copy every value EXACTLY as the user gave it — never rephrase, translate, correct spelling, reformat, complete, summarize, or invent any value. If an answer is missing, unclear, or you are unsure, ask the user instead of guessing.";
+            $systemPrompt .= "\n\n# Forms\nYou can offer these forms by calling the matching tool:" . $formList
+                . "\n\nBehave like an attentive salesperson: when the conversation shows the visitor could benefit from one of these (they express interest, a need, or intent it serves), proactively offer it — do not wait to be asked. Offer at most one form at a time, only when clearly relevant, and never be pushy; if the user declines, drop it gracefully."
+                . "\n\nEach tool's description says how it works. For forms you fill yourself, collect the fields by asking a question or two at a time, briefly recap them for confirmation, and copy every value EXACTLY as the user gave it — never rephrase, translate, correct, reformat, complete, summarize, or invent any value; if unsure, ask. For forms that are displayed for the user to complete, just call the tool when relevant and tell the user to fill in the form shown — do not ask for the values yourself.";
         }
 
         if ($context !== '') {
@@ -235,6 +235,10 @@ class Chat extends Component
         $session->messageCount = (int)$session->messageCount + 1;
         $session->save(false);
 
+        // Inline-mode form the model asked to display this turn (schema only,
+        // no delivery config) — the widget renders it for the user to submit.
+        $formToShow = $plugin->forms->consumeFormToShow();
+
         return [
             'reply' => $reply,
             'confidence' => $confidence,
@@ -244,6 +248,7 @@ class Chat extends Component
             'sessionId' => (int)$session->id,
             'shortId' => sprintf('%05d-%s', (int)$session->id, strtoupper(substr((string)$session->sessionToken, 0, 4))),
             'offerHuman' => $offerHuman,
+            'form' => $formToShow,
         ];
     }
 

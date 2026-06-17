@@ -141,6 +141,10 @@
 {% endif %}
 
 {% if settings.agentModeEnabled %}
+  {% set formNames = [] %}
+  {% if settings.formsEnabled %}
+    {% for f in settings.formDefinitions() %}{% set formNames = formNames|merge([f.name]) %}{% endfor %}
+  {% endif %}
   <h3>Registered skills</h3>
   {% if capabilities|length %}
     <p class="light">Choose where each skill is available. <strong>Admins only</strong> exposes it just to logged-in control-panel users — handy for testing on the live site before turning it on for everyone.</p>
@@ -151,7 +155,13 @@
       <tbody>
         {% for cap in capabilities %}
           <tr>
-            <td><code>{{ cap.name() }}</code></td>
+            <td>
+              {% if cap.name() in formNames %}
+                <a href="{{ url('interactive-ai-assistant/forms/edit/' ~ cap.name()) }}" title="Edit this form"><code>{{ cap.name() }}</code></a>
+              {% else %}
+                <code>{{ cap.name() }}</code>
+              {% endif %}
+            </td>
             <td class="light">{{ cap.description() }}</td>
             <td>
               {{ forms.select({

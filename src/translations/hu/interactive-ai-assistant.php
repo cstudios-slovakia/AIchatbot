@@ -70,6 +70,14 @@ return [
     'Thanks! We’ll be in touch soon.' => 'Köszönjük! Hamarosan jelentkezünk.',
     'Could not save your details. Please check and try again.' => 'Nem sikerült menteni az adatokat. Ellenőrizze, és próbálja újra.',
 
+    // Widget — inline forms
+    'Submit' => 'Beküldés',
+    'This field is required.' => 'Ez a mező kötelező.',
+    'Please enter a valid email address.' => 'Adjon meg egy érvényes e-mail-címet.',
+    'Thanks! Your form has been submitted.' => 'Köszönjük! Az űrlapot beküldtük.',
+    'Could not submit the form. Please try again.' => 'Nem sikerült beküldeni az űrlapot. Próbálja újra.',
+    'Choose…' => 'Válasszon…',
+
     // Queue jobs
     'Crawling URL #{id}' => 'URL feldolgozása #{id}',
     'Importing sitemap' => 'Webhelytérkép importálása',

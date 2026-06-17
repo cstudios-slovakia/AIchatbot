@@ -22,18 +22,32 @@ class ConfiguredFormCapability extends BaseCapability
         return (string)($this->form['name'] ?? '');
     }
 
+    public function isInline(): bool
+    {
+        return ($this->form['mode'] ?? 'conversational') === 'inline';
+    }
+
     public function description(): string
     {
         $desc = trim((string)($this->form['description'] ?? ''));
         $label = (string)($this->form['label'] ?? $this->name());
-        $base = $desc !== '' ? $desc : "Collect and submit the \"{$label}\" form.";
-        // Reinforce the no-tampering rule right where the model reads the tool.
+        $base = $desc !== '' ? $desc : "The \"{$label}\" form.";
+        if ($this->isInline()) {
+            // Inline mode: the user fills the rendered form, not the model.
+            return $base . ' Call this to display the form so the user can fill it in and submit it themselves. '
+                . 'Do not ask for or collect the field values yourself — just call the tool when the form is relevant, then briefly tell the user to complete the form shown.';
+        }
+        // Conversational mode: model gathers the values and submits.
         return $base . ' Call this only once you have gathered the required fields from the user. '
             . 'Pass every value exactly as the user gave it — never rephrase, translate, correct, reformat or invent values.';
     }
 
     public function parameters(): array
     {
+        // Inline forms take no arguments — the visitor enters the values.
+        if ($this->isInline()) {
+            return ['type' => 'object', 'properties' => new \stdClass()];
+        }
         $properties = [];
         $required = [];
         foreach ($this->form['fields'] as $field) {
@@ -70,6 +84,9 @@ class ConfiguredFormCapability extends BaseCapability
 
     public function handle(array $args): mixed
     {
-        return Plugin::getInstance()->forms->submit($this->name(), $args);
+        $forms = Plugin::getInstance()->forms;
+        return $this->isInline()
+            ? $forms->requestShowForm($this->name())
+            : $forms->submit($this->name(), $args);
     }
 }

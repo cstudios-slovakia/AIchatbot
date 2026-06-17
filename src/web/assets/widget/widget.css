@@ -484,6 +484,10 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 .cs-chatbot__contact-submit:hover { filter: brightness(1.05); }
 .cs-chatbot__contact-submit:disabled { opacity: .5; cursor: not-allowed; }
 
+/* Inline (user-filled) form */
+.cs-chatbot__form-field { display: flex; flex-direction: column; gap: 4px; }
+.cs-chatbot__form-label { font-size: 12px; font-weight: 600; color: var(--cb-muted); }
+
 .cs-chatbot__title { cursor: pointer; user-select: none; }
 .cs-chatbot__title:hover { color: var(--cb-primary); }
 

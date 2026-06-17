@@ -70,6 +70,14 @@ return [
     'Thanks! We’ll be in touch soon.' => 'Ďakujeme! Čoskoro sa vám ozveme.',
     'Could not save your details. Please check and try again.' => 'Kontakt sa nepodarilo uložiť. Skontrolujte údaje a skúste znova.',
 
+    // Widget — inline forms
+    'Submit' => 'Odoslať',
+    'This field is required.' => 'Toto pole je povinné.',
+    'Please enter a valid email address.' => 'Zadajte platnú e-mailovú adresu.',
+    'Thanks! Your form has been submitted.' => 'Ďakujeme! Formulár bol odoslaný.',
+    'Could not submit the form. Please try again.' => 'Formulár sa nepodarilo odoslať. Skúste to znova.',
+    'Choose…' => 'Vyberte…',
+
     // Queue jobs
     'Crawling URL #{id}' => 'Prehľadávanie URL #{id}',
     'Importing sitemap' => 'Import sitemapy',
