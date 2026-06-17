@@ -77,6 +77,7 @@ return [
     'Indexing category #{id}' => 'Indexovanie kategórie #{id}',
     'Indexing global set #{id}' => 'Indexovanie globálnej sady #{id}',
     'Indexing training file #{id}' => 'Indexovanie tréningového súboru #{id}',
+    'Delivering form submission #{id}' => 'Odosielanie formulára #{id}',
 
     // System messages (shown in the transcript)
     'User requested to chat with a human.' => 'Používateľ požiadal o rozhovor s človekom.',

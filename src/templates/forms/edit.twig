@@ -1,0 +1,143 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% import '_includes/forms' as forms %}
+{% set title = isNew ? 'New form' : ('Edit form: ' ~ form.name) %}
+{% set selectedSubnavItem = 'forms' %}
+
+{% set form = form ?? {} %}
+{% set delivery = form.delivery ?? {} %}
+{% set webhook = delivery.webhook ?? {} %}
+{% set email = delivery.email ?? {} %}
+
+{# editable-table text columns need strings: flatten a select field's options array #}
+{% set fieldRows = [] %}
+{% for f in (form.fields ?? []) %}
+  {% set fieldRows = fieldRows|merge([ f|merge({ options: (f.options is iterable ? f.options|join(', ') : (f.options ?? '')) }) ]) %}
+{% endfor %}
+
+{% block content %}
+  {% if not agentModeEnabled %}
+    <p class="warning">
+      Agent mode is off. Forms are only offered when agent mode is enabled under
+      <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration</a>.
+    </p>
+  {% endif %}
+
+  <form method="post" accept-charset="UTF-8">
+    {{ csrfInput() }}
+    {{ actionInput('interactive-ai-assistant/forms/save') }}
+    <input type="hidden" name="originalName" value="{{ form.name ?? '' }}">
+
+    {{ forms.textField({
+      first: true,
+      label: 'Tool name',
+      instructions: 'Internal identifier the model uses. Letters, numbers, _ or - (max 64). e.g. quote_request',
+      name: 'form[name]',
+      value: form.name ?? '',
+      required: true,
+    }) }}
+
+    {{ forms.textField({
+      label: 'Label',
+      instructions: 'Human-friendly name shown in the control panel and emails.',
+      name: 'form[label]',
+      value: form.label ?? '',
+    }) }}
+
+    {{ forms.textareaField({
+      label: 'When to use this form (shown to the AI)',
+      instructions: 'Describe when the assistant should offer this form, like a salesperson — e.g. “Offer when the visitor asks for pricing or shows buying intent.”',
+      name: 'form[description]',
+      value: form.description ?? '',
+      rows: 3,
+    }) }}
+
+    {{ forms.selectField({
+      label: 'Availability',
+      instructions: 'Same per-skill control as the Agent & skills list. “Admins only” lets you test on the live site first.',
+      name: 'availability',
+      value: availability ?? 'on',
+      options: { off: 'Off', on: 'Enabled (everyone)', admins: 'Admins only (testing)' },
+    }) }}
+
+    <hr>
+    <h2>Fields</h2>
+    {{ forms.editableTableField({
+      label: 'Fields the assistant collects',
+      instructions: 'The model asks for these in conversation and passes the user’s answers verbatim. Mark required fields so it won’t submit without them. “Options” applies to select fields (comma-separated).',
+      name: 'form[fields]',
+      id: 'form-fields',
+      cols: {
+        name: { heading: 'Field name', type: 'text', width: '18%' },
+        label: { heading: 'Label', type: 'text' },
+        type: { heading: 'Type', type: 'select', options: {
+          text: 'Text', textarea: 'Long text', email: 'Email', tel: 'Phone', number: 'Number', select: 'Choice'
+        } },
+        required: { heading: 'Required', type: 'checkbox' },
+        description: { heading: 'Hint for AI', type: 'text' },
+        options: { heading: 'Options (select)', type: 'text' },
+      },
+      rows: fieldRows,
+      addRowLabel: 'Add a field',
+    }) }}
+
+    <hr>
+    <h2>Delivery</h2>
+    <p class="light">Submissions are always stored in the control panel. Optionally also deliver them:</p>
+
+    {{ forms.lightswitchField({
+      label: 'Send to a webhook / CRM',
+      name: 'form[delivery][webhook][enabled]',
+      on: webhook.enabled ?? false,
+    }) }}
+    {{ forms.textField({
+      label: 'Endpoint URL',
+      name: 'form[delivery][webhook][url]',
+      value: webhook.url ?? '',
+      placeholder: 'https://example.com/api/leads',
+    }) }}
+    {{ forms.selectField({
+      label: 'Method',
+      name: 'form[delivery][webhook][method]',
+      value: webhook.method ?? 'POST',
+      options: { POST: 'POST', PUT: 'PUT', PATCH: 'PATCH' },
+    }) }}
+    {{ forms.editableTableField({
+      label: 'Headers',
+      instructions: 'Sent with the request. Values support $ENV_VAR references (e.g. an API token).',
+      name: 'form[delivery][webhook][headers]',
+      id: 'form-headers',
+      cols: {
+        key: { heading: 'Header', type: 'text' },
+        value: { heading: 'Value', type: 'text' },
+      },
+      rows: webhook.headers ?? [],
+      addRowLabel: 'Add a header',
+    }) }}
+
+    <hr>
+    {{ forms.lightswitchField({
+      label: 'Send by email',
+      name: 'form[delivery][email][enabled]',
+      on: email.enabled ?? false,
+    }) }}
+    {{ forms.textField({
+      label: 'Recipient(s)',
+      instructions: 'Comma-separate multiple addresses.',
+      name: 'form[delivery][email][to]',
+      value: email.to ?? '',
+      placeholder: 'sales@example.com',
+    }) }}
+    {{ forms.textField({
+      label: 'Subject',
+      name: 'form[delivery][email][subject]',
+      value: email.subject ?? '',
+      placeholder: 'New form submission',
+    }) }}
+
+    <hr>
+    <div class="buttons">
+      <button type="submit" class="btn submit">Save</button>
+      <a href="{{ url('interactive-ai-assistant/forms') }}" class="btn">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

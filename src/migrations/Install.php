@@ -27,6 +27,8 @@ class Install extends Migration
         $this->dropTableIfExists('{{%chatbot_training_sources}}');
         $this->dropTableIfExists('{{%chatbot_suggestion_stats}}');
         $this->dropTableIfExists('{{%chatbot_bans}}');
+        $this->dropTableIfExists('{{%chatbot_contact_requests}}');
+        $this->dropTableIfExists('{{%chatbot_form_submissions}}');
         return true;
     }
 
@@ -221,6 +223,18 @@ class Install extends Migration
             'dateUpdated' => $this->dateTime()->notNull(),
             'uid' => $this->uid(),
         ]);
+
+        $this->createTable('{{%chatbot_form_submissions}}', [
+            'id' => $this->primaryKey(),
+            'sessionId' => $this->integer(),
+            'formName' => $this->string(64)->notNull(),
+            'payload' => $this->text(),
+            'status' => $this->string(20)->notNull()->defaultValue('pending'), // pending|sent|failed
+            'deliveryLog' => $this->text(),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
     }
 
     private function createIndexes(): void
@@ -253,6 +267,10 @@ class Install extends Migration
 
         $this->createIndex(null, '{{%chatbot_contact_requests}}', ['status']);
         $this->createIndex(null, '{{%chatbot_contact_requests}}', ['sessionId']);
+
+        $this->createIndex(null, '{{%chatbot_form_submissions}}', ['status']);
+        $this->createIndex(null, '{{%chatbot_form_submissions}}', ['formName']);
+        $this->createIndex(null, '{{%chatbot_form_submissions}}', ['sessionId']);
 
         $this->createIndex(null, '{{%chatbot_sessions}}', ['sessionToken'], true);
         $this->createIndex(null, '{{%chatbot_sessions}}', ['dateCreated']);

@@ -129,6 +129,17 @@
   max: 10,
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Enable conversational forms',
+  instructions: 'Lets the assistant collect and submit admin-defined forms (e.g. lead/quote requests) to a webhook/CRM or email. Adds the Forms and Submissions screens. Requires agent mode. Off by default.',
+  name: 'settings[formsEnabled]',
+  on: settings.formsEnabled ?? false,
+}) }}
+
+{% if settings.formsEnabled %}
+  <p class="light" style="margin-top:-8px;">Manage forms under <a href="{{ url('interactive-ai-assistant/forms') }}">Forms</a>; review captures under <a href="{{ url('interactive-ai-assistant/submissions') }}">Submissions</a>.</p>
+{% endif %}
+
 {% if settings.agentModeEnabled %}
   <h3>Registered skills</h3>
   {% if capabilities|length %}

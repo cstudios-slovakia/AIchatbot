@@ -58,6 +58,30 @@ class Settings extends Model
      */
     public array $capabilityStates = [];
 
+    /**
+     * Conversational form definitions. Each form becomes an LLM tool (capability)
+     * the assistant can call to collect fields from the visitor and submit them to
+     * a configured destination. Availability (off/on/admins) is governed by
+     * {@see $capabilityStates} keyed by the form's `name`, like any other skill.
+     *
+     * Each entry:
+     *   name        string  tool name, ^[a-zA-Z0-9_-]{1,64}$
+     *   label       string  CP display label
+     *   description string  shown to the model — when to use this form
+     *   fields      array   [{ name, label, type:text|email|tel|number|textarea|select,
+     *                           required:bool, description, options:string[] (select only) }]
+     *   delivery    array   { webhook: {enabled,url,method,headers:[{key,value}]},
+     *                          email:   {enabled,to,subject} }   (submissions are always stored)
+     * @var array<int, array<string, mixed>>
+     */
+    public array $forms = [];
+
+    /**
+     * Master switch for the conversational-forms feature (form definitions, the
+     * Forms/Submissions CP screens, and exposing forms as skills). Off by default.
+     */
+    public bool $formsEnabled = false;
+
     // Training
     /** @var string[] section UIDs */
     public array $trainingSections = [];
@@ -108,10 +132,12 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled'], 'boolean'],
             [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
             [['capabilityStates'], 'safe'],
+            [['forms'], 'safe'],
+            [['forms'], 'validateForms'],
             [['autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes'], 'integer', 'min' => 0],
             [['filterMinLength'], 'integer', 'min' => 1],
             [['filterMaxLength'], 'integer', 'min' => 10],
@@ -140,6 +166,95 @@ class Settings extends Model
     {
         $state = $this->capabilityStates[$name] ?? 'off';
         return in_array($state, ['off', 'on', 'admins'], true) ? $state : 'off';
+    }
+
+    /**
+     * Valid, registerable form definitions (have a syntactically valid unique
+     * name and at least one named field). Invalid/partial rows are skipped so a
+     * half-built form never reaches the model.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function formDefinitions(): array
+    {
+        $out = [];
+        $seen = [];
+        foreach ($this->forms as $form) {
+            if (!is_array($form)) {
+                continue;
+            }
+            $name = (string)($form['name'] ?? '');
+            if (!preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $name) || isset($seen[$name])) {
+                continue;
+            }
+            $fields = array_values(array_filter(
+                is_array($form['fields'] ?? null) ? $form['fields'] : [],
+                fn($f) => is_array($f) && ($f['name'] ?? '') !== ''
+            ));
+            if (!$fields) {
+                continue;
+            }
+            $form['fields'] = $fields;
+            $seen[$name] = true;
+            $out[] = $form;
+        }
+        return $out;
+    }
+
+    public function getForm(string $name): ?array
+    {
+        foreach ($this->formDefinitions() as $form) {
+            if (($form['name'] ?? null) === $name) {
+                return $form;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Validate form definitions: each needs a valid unique tool name, at least
+     * one named field, and a reachable destination when webhook/email is on.
+     */
+    public function validateForms(string $attribute): void
+    {
+        if (!is_array($this->$attribute)) {
+            $this->addError($attribute, 'Forms must be a list.');
+            return;
+        }
+        $seen = [];
+        foreach ($this->$attribute as $i => $form) {
+            if (!is_array($form)) {
+                continue;
+            }
+            $name = (string)($form['name'] ?? '');
+            $label = $form['label'] ?? $name;
+            if (!preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $name)) {
+                $this->addError($attribute, "Form \"{$label}\": name must be 1–64 chars of letters, numbers, _ or -.");
+            } elseif (isset($seen[$name])) {
+                $this->addError($attribute, "Duplicate form name \"{$name}\".");
+            }
+            $seen[$name] = true;
+
+            $fields = is_array($form['fields'] ?? null) ? $form['fields'] : [];
+            $hasField = false;
+            foreach ($fields as $f) {
+                if (is_array($f) && ($f['name'] ?? '') !== '') {
+                    $hasField = true;
+                    break;
+                }
+            }
+            if (!$hasField) {
+                $this->addError($attribute, "Form \"{$label}\": add at least one field.");
+            }
+
+            $delivery = is_array($form['delivery'] ?? null) ? $form['delivery'] : [];
+            if (!empty($delivery['webhook']['enabled']) && trim((string)($delivery['webhook']['url'] ?? '')) === '') {
+                $this->addError($attribute, "Form \"{$label}\": webhook is on but the URL is empty.");
+            }
+            if (!empty($delivery['email']['enabled']) && trim((string)($delivery['email']['to'] ?? '')) === '') {
+                $this->addError($attribute, "Form \"{$label}\": email delivery is on but the recipient is empty.");
+            }
+        }
     }
 
     public static function normalizeHexColor(mixed $value): string
