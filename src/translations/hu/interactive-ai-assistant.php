@@ -77,6 +77,7 @@ return [
     'Indexing category #{id}' => 'Kategória indexelése #{id}',
     'Indexing global set #{id}' => 'Globális készlet indexelése #{id}',
     'Indexing training file #{id}' => 'Tanítófájl indexelése #{id}',
+    'Delivering form submission #{id}' => 'Űrlap beküldésének továbbítása #{id}',
 
     // System messages (shown in the transcript)
     'User requested to chat with a human.' => 'A felhasználó emberi ügyintézőt kért.',

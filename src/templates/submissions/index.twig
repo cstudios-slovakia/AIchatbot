@@ -1,0 +1,95 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Submissions' %}
+{% set selectedSubnavItem = 'submissions' %}
+
+{% set totalPages = total > 0 ? ((total - 1) // perPage) + 1 : 0 %}
+
+{% block content %}
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+    <form method="get" style="display:flex;gap:8px;align-items:center;">
+      <select name="form" class="" onchange="this.form.submit()">
+        <option value="">All forms</option>
+        {% for f in formOptions %}
+          <option value="{{ f.name }}" {{ formName == f.name ? 'selected' }}>{{ f.label ?: f.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" onchange="this.form.submit()">
+        <option value="">Any status</option>
+        {% for s in ['pending', 'sent', 'failed'] %}
+          <option value="{{ s }}" {{ status == s ? 'selected' }}>{{ s|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <span class="light">{{ total }} submission{{ total == 1 ? '' : 's' }}</span>
+  </div>
+
+  {% if not rows|length %}
+    <p>No submissions{{ formName or status ? ' match this filter' }}.</p>
+  {% else %}
+    <table class="data fullwidth">
+      <thead>
+        <tr><th>When</th><th>Form</th><th>Summary</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr data-sub-id="{{ r.id }}">
+            <td>{{ r.dateCreated ? r.dateCreated|date('Y-m-d H:i') : '' }}</td>
+            <td><code>{{ r.formName }}</code></td>
+            <td class="light">
+              {%- set parts = [] -%}
+              {%- for k, v in r.data -%}
+                {%- set parts = parts|merge([k ~ ': ' ~ (v is iterable ? v|join(' ') : v)]) -%}
+              {%- endfor -%}
+              {{ parts|join(' · ')|slice(0, 120) }}
+            </td>
+            <td>
+              {% set color = { pending: '#9a6700', sent: '#1a7f37', failed: '#cf222e' } %}
+              <span style="color:{{ color[r.status] ?? '#57606a' }};font-weight:600;">{{ r.status|capitalize }}</span>
+            </td>
+            <td style="text-align:right;white-space:nowrap;">
+              <a href="{{ url('interactive-ai-assistant/submissions/view/' ~ r.id) }}" class="btn small">View</a>
+              {% if r.status != 'sent' %}
+                <button type="button" class="btn small retry-btn" data-id="{{ r.id }}">Retry</button>
+              {% endif %}
+              <button type="button" class="btn small delete-sub-btn" data-id="{{ r.id }}">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if totalPages > 1 %}
+      <div class="pagination" style="margin-top:14px;display:flex;gap:6px;">
+        {% for p in 1..totalPages %}
+          <a class="btn small {{ p == page ? 'active' }}"
+             href="{{ url('interactive-ai-assistant/submissions', { form: formName, status: status, page: p }) }}">{{ p }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {% js %}
+    function csSubAction(url, id, onOk) {
+      var fd = new FormData();
+      fd.append('id', id);
+      fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
+      return fetch(url, { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+        .then(function (r) { return r.json(); }).then(onOk);
+    }
+    document.querySelectorAll('.retry-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        csSubAction('{{ actionUrl('interactive-ai-assistant/submissions/retry')|e('js') }}', b.dataset.id, function (r) {
+          if (r.success) { window.Craft.cp.displayNotice('Re-queued for delivery.'); }
+        });
+      });
+    });
+    document.querySelectorAll('.delete-sub-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Delete this submission?')) return;
+        csSubAction('{{ actionUrl('interactive-ai-assistant/submissions/delete')|e('js') }}', b.dataset.id, function (r) {
+          if (r.success) { var row = document.querySelector('tr[data-sub-id="' + b.dataset.id + '"]'); if (row) row.remove(); }
+        });
+      });
+    });
+  {% endjs %}
+{% endblock %}

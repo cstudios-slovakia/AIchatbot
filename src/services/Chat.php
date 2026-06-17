@@ -152,6 +152,22 @@ class Chat extends Component
             $systemPrompt .= "\n\n# Tools\nYou can call the provided tools to fetch live data or perform actions. Use them only when they help answer the question, then reply normally using their results. Do not mention the tools themselves.";
         }
 
+        // Conversational forms: nudge the model to offer relevant forms proactively
+        // (like a salesperson) and, critically, to never alter the visitor's answers.
+        $formCaps = array_filter(
+            $enabledCaps,
+            fn($c) => $c instanceof \cstudiossro\craftcschatbot\capabilities\ConfiguredFormCapability
+        );
+        if ($settings->formsEnabled && !empty($formCaps)) {
+            $formList = '';
+            foreach ($formCaps as $fc) {
+                $formList .= "\n- `" . $fc->name() . "`: " . $fc->description();
+            }
+            $systemPrompt .= "\n\n# Forms\nYou can collect and submit these forms by calling the matching tool:" . $formList
+                . "\n\nBehave like an attentive salesperson: when the conversation shows the visitor could benefit from one of these (they express interest, a need, or intent it serves), proactively offer to fill it out for them — do not wait to be asked. Offer at most one form at a time, only when clearly relevant, and never be pushy; if the user declines, drop it gracefully."
+                . "\n\nCollect the fields by asking a question or two at a time. Before submitting, briefly recap the collected details so the user can confirm or correct them. When you call the tool, copy every value EXACTLY as the user gave it — never rephrase, translate, correct spelling, reformat, complete, summarize, or invent any value. If an answer is missing, unclear, or you are unsure, ask the user instead of guessing.";
+        }
+
         if ($context !== '') {
             $systemPrompt .= "\n\n# Context\n" . $context;
         } else {
@@ -169,6 +185,9 @@ class Chat extends Component
         $messages[] = ['role' => 'user', 'content' => $question];
 
         $tools = !empty($enabledCaps) ? $plugin->capabilities->toolSchemas($enabledCaps) : [];
+        // Give form capabilities the session they were collected in, so a
+        // submission made during the tool loop links back to this chat.
+        $plugin->forms->setCurrentSession($session);
         $reply = $this->complete($messages, $tools);
         $responseTime = round(microtime(true) - $start, 3);
 

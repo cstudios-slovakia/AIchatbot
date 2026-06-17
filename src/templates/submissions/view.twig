@@ -1,0 +1,38 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Submission #' ~ submission.id %}
+{% set selectedSubnavItem = 'submissions' %}
+
+{% set labels = {} %}
+{% for field in (form.fields ?? []) %}
+  {% set labels = labels|merge({ (field.name): (field.label ?: field.name) }) %}
+{% endfor %}
+
+{% block content %}
+  <p>
+    <a href="{{ url('interactive-ai-assistant/submissions') }}">← All submissions</a>
+  </p>
+
+  <div class="meta" style="margin-bottom:18px;">
+    <div><strong>Form:</strong> <code>{{ submission.formName }}</code> {{ form.label ? '(' ~ form.label ~ ')' }}</div>
+    <div><strong>Status:</strong> {{ submission.status|capitalize }}</div>
+    <div><strong>Received:</strong> {{ submission.dateCreated|date('Y-m-d H:i:s') }}</div>
+    {% if submission.sessionId %}<div><strong>Session:</strong> #{{ submission.sessionId }}</div>{% endif %}
+  </div>
+
+  <h2>Answers</h2>
+  <table class="data fullwidth">
+    <tbody>
+      {% for key, value in data %}
+        <tr>
+          <th scope="row" style="width:30%;">{{ labels[key] ?? key }}</th>
+          <td>{{ value is iterable ? value|join(', ') : value }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if submission.deliveryLog %}
+    <h2>Delivery log</h2>
+    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:6px;">{{ submission.deliveryLog }}</pre>
+  {% endif %}
+{% endblock %}

@@ -21,6 +21,8 @@ use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
 use cstudiossro\craftcschatbot\jobs\IndexGlobalSetJob;
 use cstudiossro\craftcschatbot\jobs\IndexSourceJob;
+use cstudiossro\craftcschatbot\capabilities\ConfiguredFormCapability;
+use cstudiossro\craftcschatbot\events\RegisterCapabilitiesEvent;
 use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\services\Bans;
 use cstudiossro\craftcschatbot\services\Capabilities;
@@ -28,6 +30,7 @@ use cstudiossro\craftcschatbot\services\Chat as ChatService;
 use cstudiossro\craftcschatbot\services\Contacts;
 use cstudiossro\craftcschatbot\services\Embeddings;
 use cstudiossro\craftcschatbot\services\Filter;
+use cstudiossro\craftcschatbot\services\Forms;
 use cstudiossro\craftcschatbot\services\Handoff;
 use cstudiossro\craftcschatbot\services\OpenAi;
 use cstudiossro\craftcschatbot\services\Sources;
@@ -54,11 +57,12 @@ use yii\base\Event;
  * @property-read Filter $filter
  * @property-read Contacts $contacts
  * @property-read Capabilities $capabilities
+ * @property-read Forms $forms
  * @property-read Sources $sources
  */
 class Plugin extends BasePlugin
 {
-    public string $schemaVersion = '1.2.0';
+    public string $schemaVersion = '1.3.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -77,6 +81,7 @@ class Plugin extends BasePlugin
                 'filter' => Filter::class,
                 'contacts' => Contacts::class,
                 'capabilities' => Capabilities::class,
+                'forms' => Forms::class,
                 'sources' => Sources::class,
             ],
         ];
@@ -122,6 +127,12 @@ class Plugin extends BasePlugin
             'dashboard' => ['label' => 'Dashboard', 'url' => 'interactive-ai-assistant'],
             'live-chat' => ['label' => 'Live Chat', 'url' => 'interactive-ai-assistant/live-chat'],
             'missed-chats' => ['label' => 'Missed Chats', 'url' => 'interactive-ai-assistant/missed-chats'],
+        ];
+        if ($this->getSettings()->formsEnabled) {
+            $item['subnav']['forms'] = ['label' => 'Forms', 'url' => 'interactive-ai-assistant/forms'];
+            $item['subnav']['submissions'] = ['label' => 'Submissions', 'url' => 'interactive-ai-assistant/submissions'];
+        }
+        $item['subnav'] += [
             'training' => ['label' => 'Training', 'url' => 'interactive-ai-assistant/training/entries'],
             'logs' => ['label' => 'Chat Logs', 'url' => 'interactive-ai-assistant/logs'],
             'bans' => ['label' => 'Bans', 'url' => 'interactive-ai-assistant/bans'],
@@ -158,6 +169,24 @@ class Plugin extends BasePlugin
         $this->registerPermissions();
         $this->registerAutoTrain();
         $this->registerGc();
+        $this->registerFormCapabilities();
+    }
+
+    /**
+     * Turn each admin-defined form into an assistant capability so it flows
+     * through the existing tool-calling loop and the per-skill availability UI.
+     */
+    private function registerFormCapabilities(): void
+    {
+        Event::on(Capabilities::class, Capabilities::EVENT_REGISTER_CAPABILITIES, function (RegisterCapabilitiesEvent $event) {
+            $settings = $this->getSettings();
+            if (!$settings->formsEnabled) {
+                return;
+            }
+            foreach ($settings->formDefinitions() as $form) {
+                $event->capabilities[] = new ConfiguredFormCapability($form);
+            }
+        });
     }
 
     private function registerGc(): void
@@ -209,6 +238,17 @@ class Plugin extends BasePlugin
                 'interactive-ai-assistant/missed-chats/delete' => 'interactive-ai-assistant/contacts/delete',
                 'interactive-ai-assistant/missed-chats/restore' => 'interactive-ai-assistant/contacts/restore',
                 'interactive-ai-assistant/missed-chats/destroy' => 'interactive-ai-assistant/contacts/destroy',
+
+                'interactive-ai-assistant/forms' => 'interactive-ai-assistant/forms/index',
+                'interactive-ai-assistant/forms/new' => 'interactive-ai-assistant/forms/edit',
+                'interactive-ai-assistant/forms/edit/<name:[a-zA-Z0-9_-]+>' => 'interactive-ai-assistant/forms/edit',
+                'interactive-ai-assistant/forms/save' => 'interactive-ai-assistant/forms/save',
+                'interactive-ai-assistant/forms/delete' => 'interactive-ai-assistant/forms/delete',
+
+                'interactive-ai-assistant/submissions' => 'interactive-ai-assistant/form-submissions/index',
+                'interactive-ai-assistant/submissions/retry' => 'interactive-ai-assistant/form-submissions/retry',
+                'interactive-ai-assistant/submissions/delete' => 'interactive-ai-assistant/form-submissions/delete',
+                'interactive-ai-assistant/submissions/view/<id:\d+>' => 'interactive-ai-assistant/form-submissions/view',
 
                 'interactive-ai-assistant/bans' => 'interactive-ai-assistant/bans/index',
                 'interactive-ai-assistant/bans/create' => 'interactive-ai-assistant/bans/create',

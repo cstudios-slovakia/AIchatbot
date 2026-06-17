@@ -1,0 +1,75 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Forms' %}
+{% set selectedSubnavItem = 'forms' %}
+
+{% block content %}
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
+    <p class="light" style="margin:0;">
+      Forms the assistant can fill out in conversation and submit to a webhook/CRM or email.
+      Each form is exposed to the model as a skill — turn it on under
+      <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration → Agent &amp; skills</a>.
+    </p>
+    <a href="{{ url('interactive-ai-assistant/forms/new') }}" class="btn submit add icon">New form</a>
+  </div>
+
+  {% if not agentModeEnabled %}
+    <p class="warning" style="margin-top:14px;">
+      Agent mode is off, so forms will not be offered. Enable it under
+      <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration</a>.
+    </p>
+  {% endif %}
+
+  <hr>
+
+  {% if not forms|length %}
+    <p>No forms yet. <a href="{{ url('interactive-ai-assistant/forms/new') }}">Create one</a>.</p>
+  {% else %}
+    <table class="data fullwidth">
+      <thead>
+        <tr>
+          <th>Name</th><th>Label</th><th>Fields</th><th>Delivery</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for form in forms %}
+          {% set d = form.delivery ?? {} %}
+          <tr data-form-name="{{ form.name }}">
+            <td><code>{{ form.name }}</code></td>
+            <td>{{ form.label ?: '—' }}</td>
+            <td>{{ form.fields|length }}</td>
+            <td class="light">
+              {%- set channels = [] -%}
+              {%- if d.webhook.enabled ?? false -%}{% set channels = channels|merge(['webhook']) %}{%- endif -%}
+              {%- if d.email.enabled ?? false -%}{% set channels = channels|merge(['email']) %}{%- endif -%}
+              {%- set channels = channels|merge(['stored']) -%}
+              {{ channels|join(', ') }}
+            </td>
+            <td style="text-align:right;">
+              <a href="{{ url('interactive-ai-assistant/forms/edit/' ~ form.name) }}" class="btn small">Edit</a>
+              <button type="button" class="btn small delete-form-btn" data-name="{{ form.name }}">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% js %}
+    document.querySelectorAll('.delete-form-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Delete this form? Existing submissions are kept.')) return;
+        var fd = new FormData();
+        fd.append('name', b.dataset.name);
+        fd.append(window.Craft.csrfTokenName, window.Craft.csrfTokenValue);
+        fetch('{{ actionUrl('interactive-ai-assistant/forms/delete')|e('js') }}', { method:'POST', body: fd, credentials:'same-origin', headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (r.success) {
+              var row = document.querySelector('tr[data-form-name="' + b.dataset.name + '"]');
+              if (row) row.remove();
+            }
+          });
+      });
+    });
+  {% endjs %}
+{% endblock %}
