@@ -485,7 +485,7 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 .cs-chatbot__contact-submit:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Inline (user-filled) form card */
-.cs-chatbot__form {
+.cs-chatbot__leadform {
   align-self: stretch;
   width: 100%;
   box-sizing: border-box;
@@ -528,7 +528,7 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 .cs-chatbot__form-req { color: #ef4444; font-weight: 700; margin-left: 3px; }
 
 /* Inputs always span the full card width */
-.cs-chatbot__form .cs-chatbot__contact-input {
+.cs-chatbot__leadform .cs-chatbot__contact-input {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -543,8 +543,8 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
   color: var(--cb-fg);
   transition: border-color .12s ease, box-shadow .12s ease;
 }
-.cs-chatbot__form textarea.cs-chatbot__contact-input { min-height: 60px; resize: vertical; }
-.cs-chatbot__form select.cs-chatbot__contact-input {
+.cs-chatbot__leadform textarea.cs-chatbot__contact-input { min-height: 60px; resize: vertical; }
+.cs-chatbot__leadform select.cs-chatbot__contact-input {
   -webkit-appearance: none; -moz-appearance: none; appearance: none;
   padding-right: 32px;
   cursor: pointer;
@@ -553,7 +553,7 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
   background-position: right 10px center;
   background-size: 16px;
 }
-.cs-chatbot__form .cs-chatbot__contact-input:focus {
+.cs-chatbot__leadform .cs-chatbot__contact-input:focus {
   border-color: var(--cb-primary);
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--cb-primary) 22%, transparent);
