@@ -398,6 +398,7 @@ class Plugin extends BasePlugin
                 'poll' => UrlHelper::actionUrl('interactive-ai-assistant/chat/poll'),
                 'requestHuman' => UrlHelper::actionUrl('interactive-ai-assistant/chat/request-human'),
                 'submitContact' => UrlHelper::actionUrl('interactive-ai-assistant/chat/submit-contact'),
+                'submitForm' => UrlHelper::actionUrl('interactive-ai-assistant/chat/submit-form'),
                 'end' => UrlHelper::actionUrl('interactive-ai-assistant/chat/end'),
                 'rateChat' => UrlHelper::actionUrl('interactive-ai-assistant/chat/rate-chat'),
                 'og' => UrlHelper::actionUrl('interactive-ai-assistant/og/fetch'),

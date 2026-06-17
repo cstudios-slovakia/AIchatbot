@@ -26,9 +26,71 @@ class Forms extends Component
      */
     private ?ChatSessionRecord $currentSession = null;
 
+    /** Name of a form the model asked to display this turn (inline mode). */
+    private ?string $formToShow = null;
+
     public function setCurrentSession(?ChatSessionRecord $session): void
     {
         $this->currentSession = $session;
+        $this->formToShow = null; // reset per turn
+    }
+
+    /**
+     * Inline-mode handler: the model calls the tool to *display* the form rather
+     * than fill it. We flag which form so the Chat service can attach its schema
+     * to the reply for the widget to render.
+     *
+     * @return array<string, mixed>
+     */
+    public function requestShowForm(string $formName): array
+    {
+        if (!Plugin::getInstance()->getSettings()->getForm($formName)) {
+            return ['ok' => false, 'error' => "Unknown form: {$formName}"];
+        }
+        $this->formToShow = $formName;
+        return ['ok' => true, 'displayed' => true, 'message' => 'The form is now shown to the user to fill in and submit themselves.'];
+    }
+
+    /**
+     * The public schema (no delivery config) of the form the model asked to
+     * display this turn, if any. Clears the flag.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function consumeFormToShow(): ?array
+    {
+        if ($this->formToShow === null) {
+            return null;
+        }
+        $form = Plugin::getInstance()->getSettings()->getForm($this->formToShow);
+        $this->formToShow = null;
+        return $form ? $this->publicSchema($form) : null;
+    }
+
+    /**
+     * Strip a form definition down to what the widget needs to render it — never
+     * expose the delivery endpoint, headers or auth to the browser.
+     *
+     * @param array<string, mixed> $form
+     * @return array<string, mixed>
+     */
+    private function publicSchema(array $form): array
+    {
+        $fields = [];
+        foreach ($form['fields'] as $field) {
+            $fields[] = [
+                'name' => (string)($field['name'] ?? ''),
+                'label' => (string)($field['label'] ?? ''),
+                'type' => (string)($field['type'] ?? 'text'),
+                'required' => !empty($field['required']),
+                'options' => is_array($field['options'] ?? null) ? array_values(array_map('strval', $field['options'])) : [],
+            ];
+        }
+        return [
+            'name' => (string)($form['name'] ?? ''),
+            'label' => (string)($form['label'] ?? ''),
+            'fields' => $fields,
+        ];
     }
 
     /**
@@ -56,6 +118,56 @@ class Forms extends Component
             ];
         }
 
+        $rec = $this->persist($formName, $values);
+        return ['ok' => true, 'message' => 'Form submitted.', 'submissionId' => (int)$rec->id];
+    }
+
+    /**
+     * Submit values the visitor entered into a rendered (inline-mode) form.
+     * Validates against the form definition and returns field-level errors for
+     * the widget to display, or stores + enqueues delivery on success.
+     *
+     * @param array<string, mixed> $values
+     * @return array<string, mixed>
+     */
+    public function submitFromWidget(string $formName, array $values, ?ChatSessionRecord $session): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        if (!$settings->formsEnabled) {
+            return ['ok' => false, 'error' => 'Forms are disabled.'];
+        }
+        $form = $settings->getForm($formName);
+        if (!$form) {
+            return ['ok' => false, 'error' => 'Unknown form.'];
+        }
+        if ($settings->capabilityState($formName) === 'off') {
+            return ['ok' => false, 'error' => 'This form is not available.'];
+        }
+
+        [$clean, $missing, $invalid] = $this->collect($form, $values);
+        if ($missing || $invalid) {
+            $errors = [];
+            foreach ($missing as $f) {
+                $errors[$f] = 'required';
+            }
+            foreach ($invalid as $f) {
+                $errors[$f] = 'invalid';
+            }
+            return ['ok' => false, 'errors' => $errors];
+        }
+
+        $this->setCurrentSession($session);
+        $rec = $this->persist($formName, $clean);
+        return ['ok' => true, 'submissionId' => (int)$rec->id];
+    }
+
+    /**
+     * Store a validated submission and queue its delivery.
+     *
+     * @param array<string, mixed> $values
+     */
+    private function persist(string $formName, array $values): FormSubmissionRecord
+    {
         $rec = new FormSubmissionRecord();
         $rec->sessionId = $this->currentSession?->id ? (int)$this->currentSession->id : null;
         $rec->formName = $formName;
@@ -64,8 +176,7 @@ class Forms extends Component
         $rec->save(false);
 
         Craft::$app->queue->push(new SendFormJob(['submissionId' => (int)$rec->id]));
-
-        return ['ok' => true, 'message' => 'Form submitted.', 'submissionId' => (int)$rec->id];
+        return $rec;
     }
 
     /**

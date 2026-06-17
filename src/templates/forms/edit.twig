@@ -11,7 +11,8 @@
 {# editable-table text columns need strings: flatten a select field's options array #}
 {% set fieldRows = [] %}
 {% for f in (form.fields ?? []) %}
-  {% set fieldRows = fieldRows|merge([ f|merge({ options: (f.options is iterable ? f.options|join(', ') : (f.options ?? '')) }) ]) %}
+  {% set opts = (f.options is defined and f.options is iterable) ? f.options|join(', ') : (f.options|default('')) %}
+  {% set fieldRows = fieldRows|merge([ f|merge({ options: opts }) ]) %}
 {% endfor %}
 
 {% block content %}
@@ -49,6 +50,14 @@
       name: 'form[description]',
       value: form.description ?? '',
       rows: 3,
+    }) }}
+
+    {{ forms.selectField({
+      label: 'Collection mode',
+      instructions: 'Conversational — the assistant asks for each field in chat and submits for the user. Inline form — the assistant displays the form for the user to fill in and submit themselves.',
+      name: 'form[mode]',
+      value: form.mode ?? 'conversational',
+      options: { conversational: 'Conversational (AI asks the questions)', inline: 'Inline form (user fills it in)' },
     }) }}
 
     {{ forms.selectField({
