@@ -144,7 +144,7 @@ class FormsController extends Controller
             $field = [
                 'name' => trim((string)$row['name']),
                 'label' => trim((string)($row['label'] ?? '')),
-                'type' => in_array($type, ['text', 'email', 'tel', 'number', 'textarea', 'select'], true) ? $type : 'text',
+                'type' => in_array($type, ['text', 'email', 'tel', 'number', 'textarea', 'select', 'hidden'], true) ? $type : 'text',
                 'required' => !empty($row['required']),
                 'description' => trim((string)($row['description'] ?? '')),
             ];
@@ -153,6 +153,10 @@ class FormsController extends Controller
                     'trim',
                     explode(',', (string)($row['options'] ?? ''))
                 ), fn($v) => $v !== ''));
+            }
+            if ($field['type'] === 'hidden') {
+                // Predefined value, never asked from the user.
+                $field['value'] = (string)($row['value'] ?? '');
             }
             $fields[] = $field;
         }
