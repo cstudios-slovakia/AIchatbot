@@ -489,6 +489,7 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
   align-self: stretch;
   width: 100%;
   box-sizing: border-box;
+  margin: 8px 0;
   padding: 0;
   gap: 0;
   background: var(--cb-bg);
@@ -501,15 +502,15 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
   font-size: 13px;
   font-weight: 650;
   color: var(--cb-fg);
-  padding: 11px 14px;
+  padding: 13px 16px;
   background: var(--cb-bubble-bot);
   border-bottom: 1px solid var(--cb-border);
 }
 .cs-chatbot__form-body {
   display: flex;
   flex-direction: column;
-  gap: 13px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
   box-sizing: border-box;
   width: 100%;
 }
