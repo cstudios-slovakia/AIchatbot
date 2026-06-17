@@ -78,6 +78,10 @@ class Forms extends Component
     {
         $fields = [];
         foreach ($form['fields'] as $field) {
+            // Predefined fields are sent automatically, not shown to the visitor.
+            if ((string)($field['type'] ?? '') === 'hidden') {
+                continue;
+            }
             $fields[] = [
                 'name' => (string)($field['name'] ?? ''),
                 'label' => (string)($field['label'] ?? ''),
@@ -193,6 +197,12 @@ class Forms extends Component
         foreach ($form['fields'] as $field) {
             $name = (string)($field['name'] ?? '');
             if ($name === '') {
+                continue;
+            }
+            // Predefined field: always include its constant value, never read
+            // from the (model- or user-supplied) args.
+            if ((string)($field['type'] ?? '') === 'hidden') {
+                $values[$name] = (string)($field['value'] ?? '');
                 continue;
             }
             $required = !empty($field['required']);

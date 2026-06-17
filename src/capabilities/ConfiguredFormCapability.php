@@ -56,6 +56,11 @@ class ConfiguredFormCapability extends BaseCapability
                 continue;
             }
             $type = (string)($field['type'] ?? 'text');
+            // Predefined fields carry a constant value and are never asked of the
+            // user, so they're not part of the model-facing schema.
+            if ($type === 'hidden') {
+                continue;
+            }
             $schema = ['type' => $type === 'number' ? 'number' : 'string'];
 
             $describe = trim((string)($field['description'] ?? ''));

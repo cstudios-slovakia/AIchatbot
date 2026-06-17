@@ -8,12 +8,46 @@
 {% set webhook = delivery.webhook ?? {} %}
 {% set email = delivery.email ?? {} %}
 
-{# editable-table text columns need strings: flatten a select field's options array #}
-{% set fieldRows = [] %}
-{% for f in (form.fields ?? []) %}
-  {% set opts = (f.options is defined and f.options is iterable) ? f.options|join(', ') : (f.options|default('')) %}
-  {% set fieldRows = fieldRows|merge([ f|merge({ options: opts }) ]) %}
-{% endfor %}
+{% set fieldTypes = {
+  text: 'Text', textarea: 'Long text', email: 'Email', tel: 'Phone',
+  number: 'Number', select: 'Choice', hidden: 'Predefined (not asked)'
+} %}
+
+{# One row of the fields editor. Pass i='__I__' to produce a JS template row. #}
+{% macro fieldRow(i, f, fieldTypes) %}
+  {% set f = f ?? {} %}
+  <tr class="cs-field-row">
+    <td><input type="text" class="text fullwidth" name="form[fields][{{ i }}][name]" value="{{ f.name ?? '' }}" placeholder="email"></td>
+    <td><input type="text" class="text fullwidth" name="form[fields][{{ i }}][label]" value="{{ f.label ?? '' }}" placeholder="Email"></td>
+    <td>
+      <div class="select"><select class="cs-field-type" name="form[fields][{{ i }}][type]">
+        {% for val, lbl in fieldTypes %}
+          <option value="{{ val }}" {{ (f.type ?? 'text') == val ? 'selected' }}>{{ lbl }}</option>
+        {% endfor %}
+      </select></div>
+    </td>
+    <td style="text-align:center;"><input type="checkbox" name="form[fields][{{ i }}][required]" value="1" {{ (f.required ?? false) ? 'checked' }}></td>
+    <td><input type="text" class="text fullwidth" name="form[fields][{{ i }}][description]" value="{{ f.description ?? '' }}" placeholder="Hint for the AI"></td>
+    <td>
+      <input type="text" class="text fullwidth cs-field-options" name="form[fields][{{ i }}][options]"
+             placeholder="a, b, c (choices)"
+             value="{{ (f.options is defined and f.options is iterable) ? f.options|join(', ') : (f.options|default('')) }}">
+      <input type="text" class="text fullwidth cs-field-value" name="form[fields][{{ i }}][value]"
+             placeholder="Predefined value"
+             value="{{ f.value ?? '' }}" style="margin-top:4px;">
+    </td>
+    <td style="text-align:right;"><button type="button" class="btn small cs-row-remove">Remove</button></td>
+  </tr>
+{% endmacro %}
+
+{% macro headerRow(i, h) %}
+  {% set h = h ?? {} %}
+  <tr class="cs-header-row">
+    <td><input type="text" class="text fullwidth" name="form[delivery][webhook][headers][{{ i }}][key]" value="{{ h.key ?? '' }}" placeholder="Authorization"></td>
+    <td><input type="text" class="text fullwidth" name="form[delivery][webhook][headers][{{ i }}][value]" value="{{ h.value ?? '' }}" placeholder="Bearer $MY_API_TOKEN"></td>
+    <td style="text-align:right;"><button type="button" class="btn small cs-row-remove">Remove</button></td>
+  </tr>
+{% endmacro %}
 
 {% block content %}
   {% if not agentModeEnabled %}
@@ -23,7 +57,7 @@
     </p>
   {% endif %}
 
-  <form method="post" accept-charset="UTF-8">
+  <form method="post" accept-charset="UTF-8" id="cs-form-editor">
     {{ csrfInput() }}
     {{ actionInput('interactive-ai-assistant/forms/save') }}
     <input type="hidden" name="originalName" value="{{ form.name ?? '' }}">
@@ -70,27 +104,27 @@
 
     <hr>
     <h2>Fields</h2>
-    {{ forms.editableTableField({
-      label: 'Fields the assistant collects',
-      instructions: 'The model asks for these in conversation and passes the user’s answers verbatim. Mark required fields so it won’t submit without them. “Options” applies to select fields (comma-separated).',
-      name: 'form[fields]',
-      id: 'form-fields',
-      cols: {
-        name: { heading: 'Field name', type: 'text', width: '18%' },
-        label: { heading: 'Label', type: 'text' },
-        type: { heading: 'Type', type: 'select', options: {
-          text: 'Text', textarea: 'Long text', email: 'Email', tel: 'Phone', number: 'Number', select: 'Choice'
-        } },
-        required: { heading: 'Required', type: 'checkbox' },
-        description: { heading: 'Hint for AI', type: 'text' },
-        options: { heading: 'Options (select)', type: 'text' },
-      },
-      rows: fieldRows,
-      addRowLabel: 'Add a field',
-      allowAdd: true,
-      allowDelete: true,
-      allowReorder: true,
-    }) }}
+    <p class="instructions">The model asks for these in conversation (or the user fills them inline) and the answers are passed verbatim. Mark required fields so it won’t submit without them. <strong>Choice</strong> fields use the comma-separated options; <strong>Predefined</strong> fields are not asked — their value is always sent as-is.</p>
+    <table class="data fullwidth" id="cs-fields-table">
+      <thead>
+        <tr>
+          <th scope="col">Field name</th>
+          <th scope="col">Label</th>
+          <th scope="col" style="width:150px;">Type</th>
+          <th scope="col" style="width:70px;">Required</th>
+          <th scope="col">Hint for AI</th>
+          <th scope="col">Options / Predefined value</th>
+          <th scope="col" style="width:80px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in (form.fields ?? []) %}
+          {{ _self.fieldRow(loop.index0, f, fieldTypes) }}
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" class="btn add icon" id="cs-add-field" style="margin-top:8px;">Add a field</button>
+    <template id="cs-field-tpl">{{ _self.fieldRow('__I__', {}, fieldTypes) }}</template>
 
     <hr>
     <h2>Delivery</h2>
@@ -113,21 +147,21 @@
       value: webhook.method ?? 'POST',
       options: { POST: 'POST', PUT: 'PUT', PATCH: 'PATCH' },
     }) }}
-    {{ forms.editableTableField({
-      label: 'Headers',
-      instructions: 'Sent with the request. Values support $ENV_VAR references (e.g. an API token).',
-      name: 'form[delivery][webhook][headers]',
-      id: 'form-headers',
-      cols: {
-        key: { heading: 'Header', type: 'text' },
-        value: { heading: 'Value', type: 'text' },
-      },
-      rows: webhook.headers ?? [],
-      addRowLabel: 'Add a header',
-      allowAdd: true,
-      allowDelete: true,
-      allowReorder: true,
-    }) }}
+
+    <div class="field">
+      <div class="heading"><label>Headers</label></div>
+      <div class="instructions"><p>Sent with the request. Values support $ENV_VAR references (e.g. an API token).</p></div>
+      <table class="data fullwidth" id="cs-headers-table">
+        <thead><tr><th scope="col">Header</th><th scope="col">Value</th><th scope="col" style="width:80px;"></th></tr></thead>
+        <tbody>
+          {% for h in (webhook.headers ?? []) %}
+            {{ _self.headerRow(loop.index0, h) }}
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="button" class="btn add icon" id="cs-add-header" style="margin-top:8px;">Add a header</button>
+      <template id="cs-header-tpl">{{ _self.headerRow('__I__', {}) }}</template>
+    </div>
 
     <hr>
     {{ forms.lightswitchField({
@@ -155,4 +189,74 @@
       <a href="{{ url('interactive-ai-assistant/forms') }}" class="btn">Cancel</a>
     </div>
   </form>
+
+  {% js %}
+    (function () {
+      // Toggle the Options vs Predefined-value input based on the field type.
+      function syncRow(row) {
+        var type = (row.querySelector('.cs-field-type') || {}).value;
+        var opts = row.querySelector('.cs-field-options');
+        var val = row.querySelector('.cs-field-value');
+        if (opts) opts.style.display = (type === 'select') ? '' : 'none';
+        if (val) val.style.display = (type === 'hidden') ? '' : 'none';
+      }
+      function syncAll(scope) {
+        (scope || document).querySelectorAll('.cs-field-row').forEach(syncRow);
+      }
+
+      function nextIndex(tbody) {
+        // Use a monotonically increasing counter stored on the table.
+        var n = parseInt(tbody.getAttribute('data-next') || '0', 10);
+        if (!n) n = tbody.querySelectorAll('tr').length;
+        tbody.setAttribute('data-next', n + 1);
+        return n;
+      }
+
+      function wireAdd(btnId, tableId, tplId) {
+        var btn = document.getElementById(btnId);
+        var table = document.getElementById(tableId);
+        if (!btn || !table) return;
+        var tbody = table.querySelector('tbody');
+        var tpl = document.getElementById(tplId).innerHTML;
+        btn.addEventListener('click', function () {
+          var i = nextIndex(tbody);
+          var html = tpl.replace(/__I__/g, i);
+          var tmp = document.createElement('tbody');
+          tmp.innerHTML = html.trim();
+          var row = tmp.firstElementChild;
+          tbody.appendChild(row);
+          syncRow(row);
+        });
+      }
+
+      // Delegated remove + type-change.
+      document.addEventListener('click', function (e) {
+        var rm = e.target.closest ? e.target.closest('.cs-row-remove') : null;
+        if (rm) { var tr = rm.closest('tr'); if (tr) tr.remove(); }
+      });
+      document.addEventListener('change', function (e) {
+        if (e.target.classList && e.target.classList.contains('cs-field-type')) {
+          var tr = e.target.closest('tr');
+          if (tr) syncRow(tr);
+        }
+      });
+
+      wireAdd('cs-add-field', 'cs-fields-table', 'cs-field-tpl');
+      wireAdd('cs-add-header', 'cs-headers-table', 'cs-header-tpl');
+      syncAll(document);
+
+      // Cmd/Ctrl+S saves, like clicking Save.
+      var theForm = document.getElementById('cs-form-editor');
+      document.addEventListener('keydown', function (e) {
+        var mod = e.metaKey || e.ctrlKey;
+        if (mod && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          if (theForm) {
+            if (typeof theForm.requestSubmit === 'function') theForm.requestSubmit();
+            else theForm.submit();
+          }
+        }
+      });
+    })();
+  {% endjs %}
 {% endblock %}
