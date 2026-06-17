@@ -487,6 +487,7 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 /* Inline (user-filled) form card */
 .cs-chatbot__leadform {
   align-self: stretch;
+  flex: 0 0 auto;
   width: 100%;
   box-sizing: border-box;
   margin: 8px 0;
