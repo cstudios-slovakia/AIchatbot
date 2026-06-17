@@ -33,9 +33,10 @@
       <tbody>
         {% for form in forms %}
           {% set d = form.delivery ?? {} %}
+          {% set editUrl = url('interactive-ai-assistant/forms/edit/' ~ form.name) %}
           <tr data-form-name="{{ form.name }}">
-            <td><code>{{ form.name }}</code></td>
-            <td>{{ form.label ?: '—' }}</td>
+            <td><a href="{{ editUrl }}"><code>{{ form.name }}</code></a></td>
+            <td><a href="{{ editUrl }}">{{ form.label ?: '—' }}</a></td>
             <td>{{ form.fields|length }}</td>
             <td class="light">
               {%- set channels = [] -%}
