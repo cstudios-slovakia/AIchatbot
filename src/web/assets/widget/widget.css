@@ -484,9 +484,87 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 .cs-chatbot__contact-submit:hover { filter: brightness(1.05); }
 .cs-chatbot__contact-submit:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Inline (user-filled) form */
-.cs-chatbot__form-field { display: flex; flex-direction: column; gap: 4px; }
-.cs-chatbot__form-label { font-size: 12px; font-weight: 600; color: var(--cb-muted); }
+/* Inline (user-filled) form card */
+.cs-chatbot__form {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  gap: 0;
+  background: var(--cb-bg);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .07);
+}
+.cs-chatbot__form-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--cb-fg);
+  padding: 11px 14px;
+  background: var(--cb-bubble-bot);
+  border-bottom: 1px solid var(--cb-border);
+}
+.cs-chatbot__form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 14px;
+  box-sizing: border-box;
+  width: 100%;
+}
+.cs-chatbot__form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+.cs-chatbot__form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cb-muted);
+}
+.cs-chatbot__form-req { color: #ef4444; font-weight: 700; margin-left: 3px; }
+
+/* Inputs always span the full card width */
+.cs-chatbot__form .cs-chatbot__contact-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.35;
+  font-family: inherit;
+  border: 1px solid var(--cb-border);
+  border-radius: 9px;
+  background: var(--cb-bg);
+  color: var(--cb-fg);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.cs-chatbot__form textarea.cs-chatbot__contact-input { min-height: 60px; resize: vertical; }
+.cs-chatbot__form select.cs-chatbot__contact-input {
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+}
+.cs-chatbot__form .cs-chatbot__contact-input:focus {
+  border-color: var(--cb-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cb-primary) 22%, transparent);
+}
+.cs-chatbot__form-submit {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9px;
+  margin-top: 2px;
+}
 
 .cs-chatbot__title { cursor: pointer; user-select: none; }
 .cs-chatbot__title:hover { color: var(--cb-primary); }
