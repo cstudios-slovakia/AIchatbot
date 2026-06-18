@@ -56,6 +56,8 @@ class Handoff extends Component
             '{shortId}' => $shortId,
             '{pageUrl}' => (string)($session->pageUrl ?: '—'),
             '{cpUrl}' => \craft\helpers\UrlHelper::cpUrl('interactive-ai-assistant/live-chat'),
+            // Deep link that opens this exact conversation in Live Chat.
+            '{cpUrlDirect}' => \craft\helpers\UrlHelper::cpUrl('interactive-ai-assistant/live-chat', ['id' => (int)$session->id]),
         ];
         $subject = trim((string)$settings->handoffNotifySubject) ?: 'New live chat request — {shortId}';
         $body = (string)$settings->handoffNotifyBody !== '' ? (string)$settings->handoffNotifyBody : 'A visitor is waiting to chat with a human.';

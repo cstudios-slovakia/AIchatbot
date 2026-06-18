@@ -40,7 +40,7 @@
 
 {{ forms.textField({
   label: 'Notification subject',
-  instructions: 'Placeholders: {shortId}, {pageUrl}, {cpUrl}.',
+  instructions: 'Placeholders: {shortId}, {pageUrl}, {cpUrl}, {cpUrlDirect}.',
   name: 'settings[handoffNotifySubject]',
   value: settings.handoffNotifySubject ?? '',
   placeholder: 'New live chat request — {shortId}',
@@ -48,7 +48,7 @@
 
 {{ forms.textareaField({
   label: 'Notification body',
-  instructions: 'Plain-text email body. Placeholders: {shortId} (conversation id), {pageUrl} (page the visitor was on), {cpUrl} (link to Live Chat).',
+  instructions: 'Plain-text email body. Placeholders: {shortId} (conversation id), {pageUrl} (page the visitor was on), {cpUrl} (Live Chat list), {cpUrlDirect} (opens this exact conversation).',
   name: 'settings[handoffNotifyBody]',
   value: settings.handoffNotifyBody ?? '',
   rows: 7,
