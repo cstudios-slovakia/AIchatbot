@@ -195,6 +195,7 @@ class FormsController extends Controller
                     'emailField' => trim((string)($posted['delivery']['contactform']['emailField'] ?? '')),
                     'nameField' => trim((string)($posted['delivery']['contactform']['nameField'] ?? '')),
                     'subject' => trim((string)($posted['delivery']['contactform']['subject'] ?? '')),
+                    'formName' => trim((string)($posted['delivery']['contactform']['formName'] ?? '')),
                 ],
             ],
         ];
