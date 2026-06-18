@@ -7,6 +7,7 @@
 {% set delivery = form.delivery ?? {} %}
 {% set webhook = delivery.webhook ?? {} %}
 {% set email = delivery.email ?? {} %}
+{% set cf = delivery.contactform ?? {} %}
 
 {% set fieldTypes = {
   text: 'Text', textarea: 'Long text', email: 'Email', tel: 'Phone',
@@ -181,6 +182,38 @@
       name: 'form[delivery][email][subject]',
       value: email.subject ?? '',
       placeholder: 'New form submission',
+    }) }}
+
+    <hr>
+    {{ forms.lightswitchField({
+      label: 'Send via the Contact Form plugin',
+      instructions: 'Hands the submission to the Contact Form plugin in-process (the same path as its contact-form/send action), so any CRM integration hooked onto it runs. No CSRF needed — it’s server-side. Map the fields below.',
+      name: 'form[delivery][contactform][enabled]',
+      on: cf.enabled ?? false,
+    }) }}
+    {% if not contactFormInstalled %}
+      <p class="warning">The Contact Form plugin isn’t installed/enabled — this delivery will fail until it is.</p>
+    {% endif %}
+    {% set fieldOpts = { '': '— select a field —' } %}
+    {% for f in (form.fields ?? []) %}{% set fieldOpts = fieldOpts|merge({ (f.name): (f.label ?: f.name) }) %}{% endfor %}
+    {{ forms.selectField({
+      label: 'Email field',
+      instructions: 'Which form field holds the visitor’s email — Contact Form requires it. (Add and save your fields first if the list is empty.)',
+      name: 'form[delivery][contactform][emailField]',
+      value: cf.emailField ?? '',
+      options: fieldOpts,
+    }) }}
+    {{ forms.selectField({
+      label: 'Name field (optional)',
+      name: 'form[delivery][contactform][nameField]',
+      value: cf.nameField ?? '',
+      options: fieldOpts,
+    }) }}
+    {{ forms.textField({
+      label: 'Subject',
+      name: 'form[delivery][contactform][subject]',
+      value: cf.subject ?? '',
+      placeholder: 'New chatbot enquiry',
     }) }}
 
     <hr>

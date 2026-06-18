@@ -254,6 +254,9 @@ class Settings extends Model
             if (!empty($delivery['email']['enabled']) && trim((string)($delivery['email']['to'] ?? '')) === '') {
                 $this->addError($attribute, "Form \"{$label}\": email delivery is on but the recipient is empty.");
             }
+            if (!empty($delivery['contactform']['enabled']) && trim((string)($delivery['contactform']['emailField'] ?? '')) === '') {
+                $this->addError($attribute, "Form \"{$label}\": Contact Form delivery is on but no email field is selected.");
+            }
         }
     }
 

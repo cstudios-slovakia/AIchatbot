@@ -274,6 +274,15 @@ class Forms extends Component
                 $log[] = 'email: ' . $e->getMessage();
             }
         }
+        if (!empty($delivery['contactform']['enabled'])) {
+            try {
+                $this->deliverContactForm($delivery['contactform'], $form, $rec, $payload);
+                $log[] = 'contact-form: ok';
+            } catch (\Throwable $e) {
+                $failed = true;
+                $log[] = 'contact-form: ' . $e->getMessage();
+            }
+        }
 
         $this->mark(
             $rec,
@@ -352,6 +361,69 @@ class Forms extends Component
             ->setTextBody(implode("\n", $lines));
         if (!$message->send()) {
             throw new \RuntimeException('mailer refused the message');
+        }
+    }
+
+    /**
+     * Hand the submission to the Contact Form plugin's mailer in-process. This
+     * fires its EVENT_BEFORE_SEND / EVENT_AFTER_SEND, so any CRM integration
+     * hooked onto contact-form runs — the same path as its `contact-form/send`
+     * action, minus the HTTP layer (no CSRF needed since it's server-side).
+     *
+     * @param array<string, mixed> $cfg
+     * @param array<string, mixed> $form
+     * @param array<string, mixed> $payload
+     */
+    private function deliverContactForm(array $cfg, array $form, FormSubmissionRecord $rec, array $payload): void
+    {
+        if (
+            !Craft::$app->plugins->isPluginEnabled('contact-form')
+            || !class_exists(\craft\contactform\models\Submission::class)
+        ) {
+            throw new \RuntimeException('the contact-form plugin is not installed/enabled');
+        }
+
+        $emailField = (string)($cfg['emailField'] ?? '');
+        $nameField = (string)($cfg['nameField'] ?? '');
+
+        $fromEmail = $emailField !== '' ? (string)($payload[$emailField] ?? '') : '';
+        if ($fromEmail === '') {
+            // Fall back to the first value that looks like an email.
+            foreach ($payload as $v) {
+                if (is_string($v) && filter_var($v, FILTER_VALIDATE_EMAIL)) {
+                    $fromEmail = $v;
+                    break;
+                }
+            }
+        }
+        $fromName = $nameField !== '' ? (string)($payload[$nameField] ?? '') : null;
+
+        // Remaining fields become the message body (label => value), which is
+        // what contact-form / the CRM integration reads.
+        $labels = [];
+        foreach ($form['fields'] as $field) {
+            $labels[(string)($field['name'] ?? '')] = (string)($field['label'] ?? $field['name'] ?? '');
+        }
+        $message = [];
+        foreach ($payload as $key => $value) {
+            if ($key === $emailField || $key === $nameField) {
+                continue;
+            }
+            $message[$labels[$key] ?? $key] = is_array($value) ? implode(', ', $value) : (string)$value;
+        }
+        if (!$message) {
+            $message['body'] = 'Submitted via the chatbot.';
+        }
+
+        $submission = new \craft\contactform\models\Submission();
+        $submission->fromEmail = $fromEmail;
+        $submission->fromName = $fromName;
+        $submission->subject = trim((string)($cfg['subject'] ?? '')) ?: (string)($form['label'] ?? $rec->formName);
+        $submission->message = $message;
+
+        if (!\craft\contactform\Plugin::getInstance()->getMailer()->send($submission)) {
+            $errs = $submission->getFirstErrors();
+            throw new \RuntimeException('contact-form rejected the submission' . ($errs ? ': ' . implode('; ', $errs) : ''));
         }
     }
 
