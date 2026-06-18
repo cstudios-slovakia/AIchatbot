@@ -1,0 +1,8 @@
+{# Simple cross-page tab bar. Expects `tabs` = [{ label, url, active }]. #}
+{% if tabs|length > 1 %}
+  <div class="btngroup" style="margin-bottom:18px;">
+    {% for t in tabs %}
+      <a class="btn{{ t.active ? ' active' }}" href="{{ t.url }}">{{ t.label }}</a>
+    {% endfor %}
+  </div>
+{% endif %}

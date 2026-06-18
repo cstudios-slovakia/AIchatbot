@@ -1,9 +1,13 @@
 {% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Chat Logs' %}
-{% set selectedSubnavItem = 'logs' %}
+{% set selectedSubnavItem = 'logs-bans' %}
 {% import 'interactive-ai-assistant/logs/_macros' as m %}
 
 {% block content %}
+  {% include 'interactive-ai-assistant/_tabs' with { tabs: [
+    { label: 'Chat Logs', url: url('interactive-ai-assistant/logs'), active: true },
+    { label: 'Bans', url: url('interactive-ai-assistant/bans'), active: false },
+  ] } %}
   <form method="get" class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:36px;align-items:center;">
     <div class="texticon search icon clearable">
       <span class="texticon-icon search icon" aria-hidden="true"></span>
