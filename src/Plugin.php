@@ -249,14 +249,12 @@ class Plugin extends BasePlugin
                 'interactive-ai-assistant/forms/save' => 'interactive-ai-assistant/forms/save',
                 'interactive-ai-assistant/forms/delete' => 'interactive-ai-assistant/forms/delete',
 
-                'interactive-ai-assistant/submissions' => 'interactive-ai-assistant/form-submissions/index',
-                'interactive-ai-assistant/submissions/retry' => 'interactive-ai-assistant/form-submissions/retry',
-                'interactive-ai-assistant/submissions/delete' => 'interactive-ai-assistant/form-submissions/delete',
-                'interactive-ai-assistant/submissions/view/<id:\d+>' => 'interactive-ai-assistant/form-submissions/view',
+                // Nested under the merged group's path so the sidebar group stays
+                // highlighted on the second tab (Craft matches subnav by url prefix).
+                'interactive-ai-assistant/missed-chats/submissions' => 'interactive-ai-assistant/form-submissions/index',
+                'interactive-ai-assistant/missed-chats/submissions/view/<id:\d+>' => 'interactive-ai-assistant/form-submissions/view',
 
-                'interactive-ai-assistant/bans' => 'interactive-ai-assistant/bans/index',
-                'interactive-ai-assistant/bans/create' => 'interactive-ai-assistant/bans/create',
-                'interactive-ai-assistant/bans/delete' => 'interactive-ai-assistant/bans/delete',
+                'interactive-ai-assistant/logs/bans' => 'interactive-ai-assistant/bans/index',
 
                 'interactive-ai-assistant/settings' => 'interactive-ai-assistant/settings/edit',
             ];

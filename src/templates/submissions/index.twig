@@ -3,7 +3,7 @@
 {% set selectedSubnavItem = 'leads' %}
 {% set tabs = {
   missed: { label: 'Missed Chats', url: url('interactive-ai-assistant/missed-chats') },
-  submissions: { label: 'Form Submissions', url: url('interactive-ai-assistant/submissions') },
+  submissions: { label: 'Form Submissions', url: url('interactive-ai-assistant/missed-chats/submissions') },
 } %}
 {% set selectedTab = 'submissions' %}
 
@@ -52,7 +52,7 @@
               <span style="color:{{ color[r.status] ?? '#57606a' }};font-weight:600;">{{ r.status|capitalize }}</span>
             </td>
             <td style="text-align:right;white-space:nowrap;">
-              <a href="{{ url('interactive-ai-assistant/submissions/view/' ~ r.id) }}" class="btn small">View</a>
+              <a href="{{ url('interactive-ai-assistant/missed-chats/submissions/view/' ~ r.id) }}" class="btn small">View</a>
               {% if r.status != 'sent' %}
                 <button type="button" class="btn small retry-btn" data-id="{{ r.id }}">Retry</button>
               {% endif %}
@@ -67,7 +67,7 @@
       <div class="pagination" style="margin-top:14px;display:flex;gap:6px;">
         {% for p in 1..totalPages %}
           <a class="btn small {{ p == page ? 'active' }}"
-             href="{{ url('interactive-ai-assistant/submissions', { form: formName, status: status, page: p }) }}">{{ p }}</a>
+             href="{{ url('interactive-ai-assistant/missed-chats/submissions', { form: formName, status: status, page: p }) }}">{{ p }}</a>
         {% endfor %}
       </div>
     {% endif %}
