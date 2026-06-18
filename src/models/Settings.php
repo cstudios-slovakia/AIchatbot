@@ -108,6 +108,10 @@ class Settings extends Model
     public string $humanHandoffMode = 'always';
     // Auto-close inactive handoff sessions after N minutes. 0 = disabled.
     public int $autoCloseInactiveMinutes = 15;
+    // Email a notification when a visitor requests a human (waiting for live chat).
+    public bool $handoffNotifyEnabled = false;
+    // Recipient(s) for that notification (comma-separated; supports $ENV_VAR).
+    public string $handoffNotifyEmail = '';
     // Contact capture: offer to collect email/phone when the bot can't help or no agent shows up.
     public bool $contactCaptureEnabled = true;
     // Minutes a handoff can sit unclaimed before the widget auto-asks for contact details. 0 = never.
@@ -132,7 +136,8 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled'], 'boolean'],
+            [['handoffNotifyEmail'], 'string'],
             [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
             [['capabilityStates'], 'safe'],
