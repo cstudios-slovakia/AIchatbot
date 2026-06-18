@@ -112,9 +112,9 @@ class Settings extends Model
     public bool $handoffNotifyEnabled = false;
     // Recipient(s) for that notification (comma-separated; supports $ENV_VAR).
     public string $handoffNotifyEmail = '';
-    // Editable notification template. Placeholders: {shortId}, {pageUrl}, {cpUrl}.
+    // Editable notification template. Placeholders: {shortId}, {pageUrl}, {cpUrl}, {cpUrlDirect}.
     public string $handoffNotifySubject = 'New live chat request — {shortId}';
-    public string $handoffNotifyBody = "A visitor is waiting to chat with a human.\n\nConversation: {shortId}\nPage: {pageUrl}\n\nOpen Live Chat: {cpUrl}";
+    public string $handoffNotifyBody = "A visitor is waiting to chat with a human.\n\nConversation: {shortId}\nPage: {pageUrl}\n\nOpen this conversation: {cpUrlDirect}";
     // Contact capture: offer to collect email/phone when the bot can't help or no agent shows up.
     public bool $contactCaptureEnabled = true;
     // Minutes a handoff can sit unclaimed before the widget auto-asks for contact details. 0 = never.
