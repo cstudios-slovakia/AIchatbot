@@ -112,6 +112,9 @@ class Settings extends Model
     public bool $handoffNotifyEnabled = false;
     // Recipient(s) for that notification (comma-separated; supports $ENV_VAR).
     public string $handoffNotifyEmail = '';
+    // Editable notification template. Placeholders: {shortId}, {pageUrl}, {cpUrl}.
+    public string $handoffNotifySubject = 'New live chat request — {shortId}';
+    public string $handoffNotifyBody = "A visitor is waiting to chat with a human.\n\nConversation: {shortId}\nPage: {pageUrl}\n\nOpen Live Chat: {cpUrl}";
     // Contact capture: offer to collect email/phone when the bot can't help or no agent shows up.
     public bool $contactCaptureEnabled = true;
     // Minutes a handoff can sit unclaimed before the widget auto-asks for contact details. 0 = never.
@@ -137,7 +140,7 @@ class Settings extends Model
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
             [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled'], 'boolean'],
-            [['handoffNotifyEmail'], 'string'],
+            [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
             [['capabilityStates'], 'safe'],
