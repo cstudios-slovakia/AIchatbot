@@ -123,12 +123,15 @@ class Plugin extends BasePlugin
 
         // Badges are rendered client-side by cpnav.js to avoid a flash of the
         // native single badge before the 3-color custom badges replace it.
+        $settings = $this->getSettings();
         $item['subnav'] = [
             'dashboard' => ['label' => 'Dashboard', 'url' => 'interactive-ai-assistant'],
-            'live-chat' => ['label' => 'Live Chat', 'url' => 'interactive-ai-assistant/live-chat'],
-            'missed-chats' => ['label' => 'Missed Chats', 'url' => 'interactive-ai-assistant/missed-chats'],
         ];
-        if ($this->getSettings()->formsEnabled) {
+        if ($settings->humanHandoffEnabled) {
+            $item['subnav']['live-chat'] = ['label' => 'Live Chat', 'url' => 'interactive-ai-assistant/live-chat'];
+        }
+        $item['subnav']['missed-chats'] = ['label' => 'Missed Chats', 'url' => 'interactive-ai-assistant/missed-chats'];
+        if ($settings->formsEnabled) {
             $item['subnav']['forms'] = ['label' => 'Forms', 'url' => 'interactive-ai-assistant/forms'];
             $item['subnav']['submissions'] = ['label' => 'Submissions', 'url' => 'interactive-ai-assistant/submissions'];
         }
