@@ -31,7 +31,48 @@ class Handoff extends Component
         $session->save(false);
 
         $this->logSystem($session, $this->t($session, 'User requested to chat with a human.'));
+        $this->notifyWaiting($session);
         return true;
+    }
+
+    /**
+     * Email the configured recipients that a visitor is waiting for a human.
+     * Best-effort: failures are logged, never bubbled to the visitor.
+     */
+    private function notifyWaiting(ChatSessionRecord $session): void
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        if (!$settings->handoffNotifyEnabled) {
+            return;
+        }
+        $to = \craft\helpers\App::parseEnv($settings->handoffNotifyEmail);
+        $recipients = array_values(array_filter(array_map('trim', explode(',', (string)$to)), fn($v) => $v !== ''));
+        if (!$recipients) {
+            return;
+        }
+
+        $shortId = sprintf('%05d-%s', (int)$session->id, strtoupper(substr((string)$session->sessionToken, 0, 4)));
+        $cpUrl = \craft\helpers\UrlHelper::cpUrl('interactive-ai-assistant/live-chat');
+        $lines = [
+            'A visitor is waiting to chat with a human.',
+            '',
+            'Conversation: ' . $shortId,
+        ];
+        if ($session->pageUrl) {
+            $lines[] = 'Page: ' . $session->pageUrl;
+        }
+        $lines[] = '';
+        $lines[] = 'Open Live Chat: ' . $cpUrl;
+
+        try {
+            Craft::$app->mailer->compose()
+                ->setTo($recipients)
+                ->setSubject('New live chat request — ' . $shortId)
+                ->setTextBody(implode("\n", $lines))
+                ->send();
+        } catch (\Throwable $e) {
+            Craft::error('Handoff notification failed: ' . $e->getMessage(), __METHOD__);
+        }
     }
 
     public function claim(int $sessionId, int $adminId): ?ChatSessionRecord

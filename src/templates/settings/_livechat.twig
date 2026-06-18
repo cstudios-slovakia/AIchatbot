@@ -23,6 +23,21 @@
   size: 6,
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Email me when someone is waiting',
+  instructions: 'Sends an email notification whenever a visitor requests a human, so an agent can jump in.',
+  name: 'settings[handoffNotifyEnabled]',
+  on: settings.handoffNotifyEnabled ?? false,
+}) }}
+
+{{ forms.textField({
+  label: 'Notify these addresses',
+  instructions: 'Comma-separate multiple addresses. Supports $ENV_VAR. Required for the notification above.',
+  name: 'settings[handoffNotifyEmail]',
+  value: settings.handoffNotifyEmail ?? '',
+  placeholder: 'support@example.com',
+}) }}
+
 {{ forms.selectField({
   label: 'When can users request a human?',
   instructions: '"Always available" shows a persistent "Talk to a human" button. "Only when the AI suggests it" hides the button — the offer appears inline below the bot reply when confidence is low or the bot defers to support.',
