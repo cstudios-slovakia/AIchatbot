@@ -130,15 +130,16 @@ class Plugin extends BasePlugin
         if ($settings->humanHandoffEnabled) {
             $item['subnav']['live-chat'] = ['label' => 'Live Chat', 'url' => 'interactive-ai-assistant/live-chat'];
         }
-        $item['subnav']['missed-chats'] = ['label' => 'Missed Chats', 'url' => 'interactive-ai-assistant/missed-chats'];
+        // Captured leads: missed chats + (optionally) form submissions, paired
+        // via in-page tabs under one nav entry.
+        $item['subnav']['leads'] = ['label' => 'Leads', 'url' => 'interactive-ai-assistant/missed-chats'];
         if ($settings->formsEnabled) {
             $item['subnav']['forms'] = ['label' => 'Forms', 'url' => 'interactive-ai-assistant/forms'];
-            $item['subnav']['submissions'] = ['label' => 'Submissions', 'url' => 'interactive-ai-assistant/submissions'];
         }
         $item['subnav'] += [
             'training' => ['label' => 'Training', 'url' => 'interactive-ai-assistant/training/entries'],
-            'logs' => ['label' => 'Chat Logs', 'url' => 'interactive-ai-assistant/logs'],
-            'bans' => ['label' => 'Bans', 'url' => 'interactive-ai-assistant/bans'],
+            // Chat logs + bans grouped under one entry (in-page tabs).
+            'logs-bans' => ['label' => 'Logs & Bans', 'url' => 'interactive-ai-assistant/logs'],
             'settings' => ['label' => 'Settings', 'url' => 'interactive-ai-assistant/settings'],
         ];
         return $item;

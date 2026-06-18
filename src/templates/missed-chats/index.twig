@@ -1,6 +1,7 @@
 {% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Missed Chats' %}
-{% set selectedSubnavItem = 'missed-chats' %}
+{% set selectedSubnavItem = 'leads' %}
+{% set _formsEnabled = craft.app.plugins.getPlugin('interactive-ai-assistant').settings.formsEnabled %}
 
 {% set sourceLabels = {
   ai_unanswered: 'Bot couldn’t help',
@@ -9,6 +10,12 @@
 } %}
 
 {% block content %}
+  {% if _formsEnabled %}
+    {% include 'interactive-ai-assistant/_tabs' with { tabs: [
+      { label: 'Missed Chats', url: url('interactive-ai-assistant/missed-chats'), active: true },
+      { label: 'Form Submissions', url: url('interactive-ai-assistant/submissions'), active: false },
+    ] } %}
+  {% endif %}
   <form method="get" class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:24px;align-items:center;">
     <div class="select">
       <select name="status" onchange="this.form.submit()">

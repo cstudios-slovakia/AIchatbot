@@ -1,8 +1,12 @@
 {% extends 'interactive-ai-assistant/_layout' %}
 {% set title = 'Bans' %}
-{% set selectedSubnavItem = 'bans' %}
+{% set selectedSubnavItem = 'logs-bans' %}
 
 {% block content %}
+  {% include 'interactive-ai-assistant/_tabs' with { tabs: [
+    { label: 'Chat Logs', url: url('interactive-ai-assistant/logs'), active: false },
+    { label: 'Bans', url: url('interactive-ai-assistant/bans'), active: true },
+  ] } %}
   <div style="display:flex; gap:32px; align-items:flex-start;">
     <div style="flex:2;">
       <h2 style="margin-top:0;">Active bans</h2>
