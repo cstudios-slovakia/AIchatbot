@@ -405,14 +405,13 @@ class Forms extends Component
             $labels[(string)($field['name'] ?? '')] = (string)($field['label'] ?? $field['name'] ?? '');
         }
         $message = [];
+        // Identify the originating form for the CRM via message[formName].
+        $message['formName'] = trim((string)($cfg['formName'] ?? '')) ?: (string)($form['label'] ?? $rec->formName);
         foreach ($payload as $key => $value) {
             if ($key === $emailField || $key === $nameField) {
                 continue;
             }
             $message[$labels[$key] ?? $key] = is_array($value) ? implode(', ', $value) : (string)$value;
-        }
-        if (!$message) {
-            $message['body'] = 'Submitted via the chatbot.';
         }
 
         $submission = new \craft\contactform\models\Submission();

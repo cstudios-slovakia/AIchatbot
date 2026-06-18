@@ -215,6 +215,13 @@
       value: cf.subject ?? '',
       placeholder: 'New chatbot enquiry',
     }) }}
+    {{ forms.textField({
+      label: 'Form identifier (sent as message[formName])',
+      instructions: 'Sent to Contact Form as message[formName] so the CRM can tell which form this is. Leave blank to use the form’s label. Add this key to the Contact Form plugin’s “Allowed message fields” setting if you’ve restricted it.',
+      name: 'form[delivery][contactform][formName]',
+      value: cf.formName ?? '',
+      placeholder: form.label ?? form.name ?? '',
+    }) }}
 
     <hr>
     <div class="buttons">
