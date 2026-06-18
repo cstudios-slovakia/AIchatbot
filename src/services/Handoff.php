@@ -52,23 +52,21 @@ class Handoff extends Component
         }
 
         $shortId = sprintf('%05d-%s', (int)$session->id, strtoupper(substr((string)$session->sessionToken, 0, 4)));
-        $cpUrl = \craft\helpers\UrlHelper::cpUrl('interactive-ai-assistant/live-chat');
-        $lines = [
-            'A visitor is waiting to chat with a human.',
-            '',
-            'Conversation: ' . $shortId,
+        $replacements = [
+            '{shortId}' => $shortId,
+            '{pageUrl}' => (string)($session->pageUrl ?: '—'),
+            '{cpUrl}' => \craft\helpers\UrlHelper::cpUrl('interactive-ai-assistant/live-chat'),
         ];
-        if ($session->pageUrl) {
-            $lines[] = 'Page: ' . $session->pageUrl;
-        }
-        $lines[] = '';
-        $lines[] = 'Open Live Chat: ' . $cpUrl;
+        $subject = trim((string)$settings->handoffNotifySubject) ?: 'New live chat request — {shortId}';
+        $body = (string)$settings->handoffNotifyBody !== '' ? (string)$settings->handoffNotifyBody : 'A visitor is waiting to chat with a human.';
+        $subject = strtr($subject, $replacements);
+        $body = strtr($body, $replacements);
 
         try {
             Craft::$app->mailer->compose()
                 ->setTo($recipients)
-                ->setSubject('New live chat request — ' . $shortId)
-                ->setTextBody(implode("\n", $lines))
+                ->setSubject($subject)
+                ->setTextBody($body)
                 ->send();
         } catch (\Throwable $e) {
             Craft::error('Handoff notification failed: ' . $e->getMessage(), __METHOD__);

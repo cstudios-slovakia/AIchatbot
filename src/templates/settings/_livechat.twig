@@ -38,6 +38,22 @@
   placeholder: 'support@example.com',
 }) }}
 
+{{ forms.textField({
+  label: 'Notification subject',
+  instructions: 'Placeholders: {shortId}, {pageUrl}, {cpUrl}.',
+  name: 'settings[handoffNotifySubject]',
+  value: settings.handoffNotifySubject ?? '',
+  placeholder: 'New live chat request — {shortId}',
+}) }}
+
+{{ forms.textareaField({
+  label: 'Notification body',
+  instructions: 'Plain-text email body. Placeholders: {shortId} (conversation id), {pageUrl} (page the visitor was on), {cpUrl} (link to Live Chat).',
+  name: 'settings[handoffNotifyBody]',
+  value: settings.handoffNotifyBody ?? '',
+  rows: 7,
+}) }}
+
 {{ forms.selectField({
   label: 'When can users request a human?',
   instructions: '"Always available" shows a persistent "Talk to a human" button. "Only when the AI suggests it" hides the button — the offer appears inline below the bot reply when confidence is low or the bot defers to support.',
