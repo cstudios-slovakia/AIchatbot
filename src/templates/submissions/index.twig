@@ -78,7 +78,7 @@
     }
     document.querySelectorAll('.retry-btn').forEach(function (b) {
       b.addEventListener('click', function () {
-        csSubAction('{{ actionUrl('interactive-ai-assistant/submissions/retry')|e('js') }}', b.dataset.id, function (r) {
+        csSubAction('{{ actionUrl('interactive-ai-assistant/form-submissions/retry')|e('js') }}', b.dataset.id, function (r) {
           if (r.success) { window.Craft.cp.displayNotice('Re-queued for delivery.'); }
         });
       });
@@ -86,7 +86,7 @@
     document.querySelectorAll('.delete-sub-btn').forEach(function (b) {
       b.addEventListener('click', function () {
         if (!confirm('Delete this submission?')) return;
-        csSubAction('{{ actionUrl('interactive-ai-assistant/submissions/delete')|e('js') }}', b.dataset.id, function (r) {
+        csSubAction('{{ actionUrl('interactive-ai-assistant/form-submissions/delete')|e('js') }}', b.dataset.id, function (r) {
           if (r.success) { var row = document.querySelector('tr[data-sub-id="' + b.dataset.id + '"]'); if (row) row.remove(); }
         });
       });
