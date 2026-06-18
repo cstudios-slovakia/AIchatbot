@@ -3,7 +3,7 @@
 {% set selectedSubnavItem = 'leads' %}
 {% set _formsEnabled = craft.app.plugins.getPlugin('interactive-ai-assistant').settings.formsEnabled %}
 {% set tabs = { missed: { label: 'Missed Chats', url: url('interactive-ai-assistant/missed-chats') } } %}
-{% if _formsEnabled %}{% set tabs = tabs|merge({ submissions: { label: 'Form Submissions', url: url('interactive-ai-assistant/submissions') } }) %}{% endif %}
+{% if _formsEnabled %}{% set tabs = tabs|merge({ submissions: { label: 'Form Submissions', url: url('interactive-ai-assistant/missed-chats/submissions') } }) %}{% endif %}
 {% set selectedTab = 'missed' %}
 
 {% set sourceLabels = {
