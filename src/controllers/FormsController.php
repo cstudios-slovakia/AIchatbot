@@ -51,6 +51,7 @@ class FormsController extends Controller
             'isNew' => $form === null,
             'agentModeEnabled' => $settings->agentModeEnabled,
             'availability' => $form ? $settings->capabilityState((string)$form['name']) : 'on',
+            'contactFormInstalled' => Craft::$app->plugins->isPluginEnabled('contact-form'),
         ]);
     }
 
@@ -99,6 +100,7 @@ class FormsController extends Controller
                 'isNew' => false,
                 'agentModeEnabled' => $settings->agentModeEnabled,
                 'availability' => $availability,
+                'contactFormInstalled' => Craft::$app->plugins->isPluginEnabled('contact-form'),
             ]);
         }
 
@@ -187,6 +189,12 @@ class FormsController extends Controller
                     'enabled' => !empty($posted['delivery']['email']['enabled']),
                     'to' => trim((string)($posted['delivery']['email']['to'] ?? '')),
                     'subject' => trim((string)($posted['delivery']['email']['subject'] ?? '')),
+                ],
+                'contactform' => [
+                    'enabled' => !empty($posted['delivery']['contactform']['enabled']),
+                    'emailField' => trim((string)($posted['delivery']['contactform']['emailField'] ?? '')),
+                    'nameField' => trim((string)($posted['delivery']['contactform']['nameField'] ?? '')),
+                    'subject' => trim((string)($posted['delivery']['contactform']['subject'] ?? '')),
                 ],
             ],
         ];

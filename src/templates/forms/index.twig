@@ -42,6 +42,7 @@
               {%- set channels = [] -%}
               {%- if d.webhook.enabled ?? false -%}{% set channels = channels|merge(['webhook']) %}{%- endif -%}
               {%- if d.email.enabled ?? false -%}{% set channels = channels|merge(['email']) %}{%- endif -%}
+              {%- if d.contactform.enabled ?? false -%}{% set channels = channels|merge(['contact-form']) %}{%- endif -%}
               {%- set channels = channels|merge(['stored']) -%}
               {{ channels|join(', ') }}
             </td>
