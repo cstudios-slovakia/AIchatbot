@@ -199,6 +199,17 @@ class Chat extends Component
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
         ];
+        // The widget shows an initial greeting before the user types, but that
+        // message lives only client-side — it's never logged to history. On the
+        // first user turn (empty history) the model has no idea it already
+        // greeted, so it greets again. Seed it as the opening assistant turn so
+        // the model continues the conversation instead of re-greeting.
+        if (empty($history)) {
+            $greeting = trim($settings->getInitialMessageForSite($siteUid));
+            if ($greeting !== '') {
+                $messages[] = ['role' => 'assistant', 'content' => $greeting];
+            }
+        }
         foreach ($history as $h) {
             $messages[] = ['role' => $h['role'] === 'bot' ? 'assistant' : 'user', 'content' => $h['content']];
         }
