@@ -7,6 +7,12 @@ use craft\elements\Category;
 use craft\elements\Entry;
 use craft\elements\GlobalSet;
 use craft\helpers\Db;
+use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
+use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
+use cstudiossro\craftcschatbot\jobs\IndexFileJob;
+use cstudiossro\craftcschatbot\jobs\IndexGlobalSetJob;
+use cstudiossro\craftcschatbot\jobs\IndexSourceJob;
+use cstudiossro\craftcschatbot\jobs\IndexUrlJob;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\TrainingCategoryRecord;
 use cstudiossro\craftcschatbot\records\TrainingEntryRecord;
@@ -42,7 +48,11 @@ class Training extends Component
 
         try {
             $text = $this->extractEntryText($entry);
-            $count = Plugin::getInstance()->embeddings->reindexSource('entry', (int)$rec->id, $text);
+            $count = Plugin::getInstance()->embeddings->reindexSource('entry', (int)$rec->id, $text, [
+                'siteId' => (int)$entry->siteId,
+                'language' => $entry->getSite()->language ?? null,
+                'title' => (string)$entry->title,
+            ]);
             $rec->chunkCount = $count;
             $rec->status = $count > 0 ? 'indexed' : 'empty';
             $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
@@ -223,7 +233,11 @@ class Training extends Component
 
         try {
             $text = $this->extractElementText($cat);
-            $count = Plugin::getInstance()->embeddings->reindexSource('category', (int)$rec->id, $text);
+            $count = Plugin::getInstance()->embeddings->reindexSource('category', (int)$rec->id, $text, [
+                'siteId' => (int)$cat->siteId,
+                'language' => $cat->getSite()->language ?? null,
+                'title' => (string)$cat->title,
+            ]);
             $rec->chunkCount = $count;
             $rec->status = $count > 0 ? 'indexed' : 'empty';
             $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
@@ -264,7 +278,11 @@ class Training extends Component
 
         try {
             $text = $this->extractElementText($set, prefix: (string)($set->name ?? ''));
-            $count = Plugin::getInstance()->embeddings->reindexSource('global', (int)$rec->id, $text);
+            $count = Plugin::getInstance()->embeddings->reindexSource('global', (int)$rec->id, $text, [
+                'siteId' => (int)$set->siteId,
+                'language' => $set->getSite()->language ?? null,
+                'title' => (string)($set->name ?? ''),
+            ]);
             $rec->chunkCount = $count;
             $rec->status = $count > 0 ? 'indexed' : 'empty';
             $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
@@ -356,7 +374,11 @@ class Training extends Component
 
         try {
             $text = $source->extractText($itemId, $siteId);
-            $count = Plugin::getInstance()->embeddings->reindexSource($handle, (int)$rec->id, $text);
+            $count = Plugin::getInstance()->embeddings->reindexSource($handle, (int)$rec->id, $text, [
+                'siteId' => (int)$siteId,
+                'language' => $this->siteLanguage($siteId),
+                'title' => method_exists($source, 'label') ? (string)$source->label() : '',
+            ]);
             $rec->chunkCount = $count;
             $rec->status = $count > 0 ? 'indexed' : 'empty';
             $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
@@ -395,7 +417,9 @@ class Training extends Component
                 throw new RuntimeException('File missing: ' . $absolutePath);
             }
             $raw = file_get_contents($absolutePath) ?: '';
-            $count = Plugin::getInstance()->embeddings->reindexSource('file', (int)$rec->id, $raw);
+            $count = Plugin::getInstance()->embeddings->reindexSource('file', (int)$rec->id, $raw, [
+                'title' => (string)($rec->originalName ?: pathinfo((string)$rec->filename, PATHINFO_FILENAME)),
+            ]);
             $rec->chunkCount = $count;
             $rec->status = $count > 0 ? 'indexed' : 'empty';
             $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
@@ -435,8 +459,13 @@ class Training extends Component
         $rec->save(false);
         try {
             $html = $this->fetch($rec->url);
+            $pageTitle = preg_match('#<title\b[^>]*>(.*?)</title>#is', $html, $tm)
+                ? trim(html_entity_decode(strip_tags($tm[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'))
+                : (string)$rec->url;
             $text = $this->htmlToText($html);
-            $count = Plugin::getInstance()->embeddings->reindexSource('url', (int)$rec->id, $text);
+            $count = Plugin::getInstance()->embeddings->reindexSource('url', (int)$rec->id, $text, [
+                'title' => $pageTitle,
+            ]);
             $rec->chunkCount = $count;
             $rec->status = $count > 0 ? 'indexed' : 'empty';
             $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
@@ -519,6 +548,14 @@ class Training extends Component
         return array_values(array_unique($urls));
     }
 
+    private function siteLanguage(?int $siteId): ?string
+    {
+        if (!$siteId) {
+            return null;
+        }
+        return Craft::$app->sites->getSiteById($siteId)?->language;
+    }
+
     private function fetch(string $url): string
     {
         $client = Craft::createGuzzleClient([
@@ -539,11 +576,7 @@ class Training extends Component
 
     private function htmlToText(string $html): string
     {
-        // strip script/style first
-        $html = preg_replace('#<script\b[^>]*>.*?</script>#is', ' ', $html) ?? $html;
-        $html = preg_replace('#<style\b[^>]*>.*?</style>#is', ' ', $html) ?? $html;
-        $html = preg_replace('#<nav\b[^>]*>.*?</nav>#is', ' ', $html) ?? $html;
-        $html = preg_replace('#<footer\b[^>]*>.*?</footer>#is', ' ', $html) ?? $html;
+        // normalize() handles boilerplate stripping, structure preservation and denoising.
         return Plugin::getInstance()->embeddings->normalize($html);
     }
 
@@ -560,7 +593,9 @@ class Training extends Component
             return;
         }
         $text = "Q: {$rec->question}\nA: {$rec->answer}";
-        $count = Plugin::getInstance()->embeddings->reindexSource('qa', (int)$rec->id, $text);
+        $count = Plugin::getInstance()->embeddings->reindexSource('qa', (int)$rec->id, $text, [
+            'title' => mb_substr((string)$rec->question, 0, 200),
+        ]);
         $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
         $rec->save(false);
     }
@@ -573,5 +608,58 @@ class Training extends Component
         }
         Plugin::getInstance()->embeddings->deleteChunks('qa', (int)$rec->id);
         $rec->delete();
+    }
+
+    // ---------- RETRAIN ALL ----------
+
+    /**
+     * Re-queue every already-trained source so all content is re-chunked and
+     * re-embedded under the current chunker/embedding settings. Required after
+     * changing chunk size, contextual prefix, embedding model or dimensions.
+     * Job-backed sources are queued (processed by the worker); Q&A pairs run
+     * inline as they have no dedicated job.
+     *
+     * @return int number of sources queued/reindexed
+     */
+    public function reindexAll(): int
+    {
+        $queue = Craft::$app->queue;
+        $n = 0;
+
+        foreach (TrainingEntryRecord::find()->all() as $rec) {
+            $queue->push(new IndexEntryJob(['entryId' => (int)$rec->entryId, 'siteId' => (int)$rec->siteId]));
+            $n++;
+        }
+        foreach (TrainingCategoryRecord::find()->all() as $rec) {
+            $queue->push(new IndexCategoryJob(['categoryId' => (int)$rec->categoryId, 'siteId' => (int)$rec->siteId]));
+            $n++;
+        }
+        foreach (TrainingGlobalSetRecord::find()->all() as $rec) {
+            $queue->push(new IndexGlobalSetJob(['globalSetId' => (int)$rec->globalSetId, 'siteId' => (int)$rec->siteId]));
+            $n++;
+        }
+        foreach (TrainingFileRecord::find()->all() as $rec) {
+            $path = Plugin::getInstance()->getUploadPath() . DIRECTORY_SEPARATOR . $rec->filename;
+            $queue->push(new IndexFileJob(['fileRecId' => (int)$rec->id, 'absolutePath' => $path]));
+            $n++;
+        }
+        foreach (TrainingUrlRecord::find()->all() as $rec) {
+            $queue->push(new IndexUrlJob(['urlRecId' => (int)$rec->id]));
+            $n++;
+        }
+        foreach (TrainingSourceRecord::find()->all() as $rec) {
+            $queue->push(new IndexSourceJob([
+                'handle' => (string)$rec->sourceKey,
+                'itemId' => (int)$rec->itemId,
+                'siteId' => (int)$rec->siteId,
+            ]));
+            $n++;
+        }
+        foreach (TrainingQaRecord::find()->where(['active' => true])->all() as $rec) {
+            $this->trainQa((int)$rec->id);
+            $n++;
+        }
+
+        return $n;
     }
 }

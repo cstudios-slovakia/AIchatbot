@@ -44,13 +44,20 @@ class OpenAi extends Component
         if (empty($inputs)) {
             return [];
         }
-        $model = $model ?: Plugin::getInstance()->getSettings()->embeddingModel;
+        $settings = Plugin::getInstance()->getSettings();
+        $model = $model ?: $settings->embeddingModel;
+        $json = [
+            'model' => $model,
+            'input' => array_values($inputs),
+        ];
+        // Only the text-embedding-3-* models support custom output dimensions.
+        $dims = (int)$settings->embeddingDimensions;
+        if ($dims > 0 && str_starts_with($model, 'text-embedding-3')) {
+            $json['dimensions'] = $dims;
+        }
         try {
             $res = $this->client()->post('embeddings', [
-                'json' => [
-                    'model' => $model,
-                    'input' => array_values($inputs),
-                ],
+                'json' => $json,
             ]);
         } catch (GuzzleException $e) {
             throw new RuntimeException('OpenAI embedding request failed: ' . $e->getMessage(), 0, $e);

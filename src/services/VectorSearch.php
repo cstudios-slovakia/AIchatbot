@@ -22,6 +22,8 @@ class VectorSearch extends Component
      * @param string|null $queryText raw query text, enabling the lexical half
      * @param bool $includeVectors also return each row's decoded embedding under
      *        `_vector` (needed for MMR reranking); strip before exposing rows.
+     * @param int|null $siteId when set (and site filtering enabled), restrict to
+     *        chunks of that site plus site-agnostic chunks (url/file/qa, siteId null).
      * @return array<int, array{id:int, sourceType:string, sourceId:int, content:string, score:float, _vector?:float[]}>
      */
     public function topK(
@@ -30,15 +32,20 @@ class VectorSearch extends Component
         float $minScore = 0.0,
         ?string $queryText = null,
         bool $includeVectors = false,
+        ?int $siteId = null,
     ): array {
         if (empty($query)) {
             return [];
         }
-        $rows = (new \craft\db\Query())
+        $rowsQuery = (new \craft\db\Query())
             ->select(['id', 'sourceType', 'sourceId', 'content', 'embedding'])
             ->from('{{%chatbot_chunks}}')
-            ->where(['not', ['embedding' => null]])
-            ->all(Craft::$app->db);
+            ->where(['not', ['embedding' => null]]);
+        if ($siteId !== null && Plugin::getInstance()->getSettings()->siteFilterEnabled) {
+            // Match the requested site, plus site-agnostic chunks (siteId IS NULL).
+            $rowsQuery->andWhere(['or', ['siteId' => $siteId], ['siteId' => null]]);
+        }
+        $rows = $rowsQuery->all(Craft::$app->db);
 
         $qNorm = $this->norm($query);
         if ($qNorm === 0.0) {

@@ -178,6 +178,68 @@
   size: 6,
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Per-site retrieval filter',
+  instructions: 'Restrict retrieval to the current site’s content (plus site-agnostic URL/file/Q&A chunks), so a query on one site/language does not pull another’s. Takes effect after a retrain populates chunk metadata.',
+  name: 'settings[siteFilterEnabled]',
+  on: settings.siteFilterEnabled,
+}) }}
+
+<hr>
+<h2>Indexing &amp; chunking</h2>
+<p class="light">How content is split and embedded at training time. <strong>Changing any setting below requires a full retrain</strong> to take effect on existing content — run <code>php craft interactive-ai-assistant/rag/retrain-all</code> or use the button below.</p>
+
+{{ forms.textField({
+  label: 'Chunk size',
+  instructions: 'Target chunk length in characters (~4 chars per token). Smaller = more precise retrieval. Default 1200 (~300 tokens).',
+  name: 'settings[chunkSize]',
+  value: settings.chunkSize,
+  type: 'number',
+  size: 6,
+  min: 300,
+  max: 4000,
+}) }}
+
+{{ forms.textField({
+  label: 'Chunk overlap',
+  instructions: 'Characters carried between adjacent chunks for context continuity. Default 150.',
+  name: 'settings[chunkOverlap]',
+  value: settings.chunkOverlap,
+  type: 'number',
+  size: 6,
+  min: 0,
+  max: 1000,
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Contextual chunk prefix',
+  instructions: 'Prepend a “Document title › Section” breadcrumb to each chunk before embedding (and keep it in stored content), so retrieval and the model know where each chunk came from.',
+  name: 'settings[contextualPrefixEnabled]',
+  on: settings.contextualPrefixEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Embedding dimensions',
+  instructions: 'Output dimensions for text-embedding-3-* models. 0 = model default (1536 for 3-small, 3072 for 3-large). Capping 3-large to 1536 gives near-large quality at small-model storage.',
+  name: 'settings[embeddingDimensions]',
+  value: settings.embeddingDimensions,
+  type: 'number',
+  size: 6,
+  min: 0,
+  max: 3072,
+}) }}
+
+<div class="field">
+  <div class="heading"><label>Retrain all content</label></div>
+  <div class="instructions"><p>Re-chunk and re-embed every trained source under the current settings above. Queues background jobs (Q&amp;A runs inline). Run after changing indexing settings or upgrading the plugin.</p></div>
+  <form method="post" accept-charset="UTF-8" onsubmit="return confirm('Re-embed all trained content now? This uses OpenAI embedding credits.');">
+    {{ csrfInput() }}
+    {{ actionInput('interactive-ai-assistant/training/reindex-all') }}
+    {{ redirectInput('interactive-ai-assistant/settings') }}
+    <button type="submit" class="btn submit">Retrain all now</button>
+  </form>
+</div>
+
 <hr>
 <h2>Agent &amp; skills</h2>
 
