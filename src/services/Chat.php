@@ -132,8 +132,12 @@ class Chat extends Component
         }
 
         $contextBlocks = [];
+        $allowedUrls = [];
         foreach ($usableHits as $i => $h) {
             $url = $this->resolveSourceUrl($h['sourceType'], (int)$h['sourceId']);
+            if ($url) {
+                $allowedUrls[$this->normalizeUrl($url)] = true;
+            }
             $head = $url
                 ? sprintf("[%d] (%s) URL: %s", $i + 1, $h['sourceType'], $url)
                 : sprintf("[%d] (%s)", $i + 1, $h['sourceType']);
@@ -228,6 +232,14 @@ class Chat extends Component
             $reply = trim(preg_replace('/\s*\[\[HANDOFF_OFFER\]\]\s*/u', '', $reply) ?? $reply);
         }
 
+        // Guard against hallucinated links. The model is told to only link URLs
+        // present in the context, but it sometimes invents on-site pages that 404.
+        // Unlink any on-site URL that wasn't in the retrieved context (keep the
+        // visible text). Runs BEFORE the transform event so token→URL resolutions
+        // (which the model never sees as URLs) stay trusted. Off-site URLs and
+        // exact context URLs are left intact.
+        $reply = $this->stripHallucinatedLinks($reply, $allowedUrls);
+
         // Let plugins/modules rewrite the reply (e.g. resolve event-link tokens
         // to real URLs). The model only ever emits short tokens, never long
         // URLs it might mistype.
@@ -285,6 +297,100 @@ class Chat extends Component
             'offerHuman' => $offerHuman,
             'form' => $formToShow,
         ];
+    }
+
+    /**
+     * Canonical key for comparing URLs: lowercase host, no trailing slash,
+     * fragment/default-port dropped. Query kept (distinct pages may share a path).
+     */
+    private function normalizeUrl(string $url): string
+    {
+        $url = trim($url);
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['host'])) {
+            return rtrim($url, '/');
+        }
+        $scheme = strtolower($parts['scheme'] ?? 'https');
+        $host = strtolower($parts['host']);
+        $path = rtrim($parts['path'] ?? '', '/');
+        $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+        return $scheme . '://' . $host . $path . $query;
+    }
+
+    /**
+     * Lowercased hostnames of every Craft site — used to tell on-site links
+     * (guarded) from external ones (left alone).
+     *
+     * @return array<string, true>
+     */
+    private function siteHosts(): array
+    {
+        $hosts = [];
+        foreach (Craft::$app->sites->getAllSites() as $st) {
+            $host = parse_url((string)$st->getBaseUrl(), PHP_URL_HOST);
+            if ($host) {
+                $hosts[strtolower($host)] = true;
+            }
+        }
+        return $hosts;
+    }
+
+    /**
+     * Unlink on-site markdown links whose URL isn't in the retrieved context,
+     * keeping the visible text. Off-site links and exact context URLs pass through.
+     *
+     * @param array<string, true> $allowedUrls normalized context URLs
+     */
+    private function stripHallucinatedLinks(string $reply, array $allowedUrls): string
+    {
+        if (!str_contains($reply, 'http')) {
+            return $reply;
+        }
+        $hosts = $this->siteHosts();
+        if (empty($hosts)) {
+            return $reply;
+        }
+        $onSiteAllowed = function (string $url) use ($allowedUrls, $hosts): ?bool {
+            $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+            // null = off-site (not ours to police). true/false = on-site verdict.
+            if ($host === '' || !isset($hosts[$host])) {
+                return null;
+            }
+            return isset($allowedUrls[$this->normalizeUrl($url)]);
+        };
+
+        // Markdown links: drop the link but keep the visible words.
+        $reply = preg_replace_callback(
+            '/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/u',
+            function (array $m) use ($onSiteAllowed): string {
+                $verdict = $onSiteAllowed($m[2]);
+                if ($verdict === null || $verdict === true) {
+                    return $m[0];
+                }
+                Craft::info("Stripped hallucinated link: {$m[2]}", 'cs-chatbot');
+                return $m[1];
+            },
+            $reply
+        ) ?? $reply;
+
+        // Bare URLs (no markdown syntax — the widget would autolink these). Skip
+        // any preceded by "](" so we don't touch the markdown links kept above.
+        $reply = preg_replace_callback(
+            '/(?<!\]\()(?<![\w@])(https?:\/\/[^\s<>()\[\]]+)/u',
+            function (array $m) use ($onSiteAllowed): string {
+                $url = rtrim($m[1], '.,;:!?');
+                $trail = substr($m[1], strlen($url));
+                $verdict = $onSiteAllowed($url);
+                if ($verdict === null || $verdict === true) {
+                    return $m[1];
+                }
+                Craft::info("Stripped hallucinated bare URL: {$url}", 'cs-chatbot');
+                return $trail;
+            },
+            $reply
+        ) ?? $reply;
+
+        return $reply;
     }
 
     /**
