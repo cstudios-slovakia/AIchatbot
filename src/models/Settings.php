@@ -45,6 +45,26 @@ class Settings extends Model
     // the model of context.
     public float $minSimilarityScore = 0.35;
 
+    // Retrieval (RAG) tuning. Each flag gates a retrieval improvement and can be
+    // switched off to fall back to the original cosine-only behaviour.
+    // Rewrite each follow-up into a standalone query (resolve pronouns/ellipsis)
+    // before embedding, so retrieval understands "and the price?".
+    public bool $queryRewriteEnabled = true;
+    // Skip retrieval entirely for greetings/thanks/smalltalk that need no context.
+    public bool $retrievalGuardEnabled = true;
+    // Fuse lexical (BM25) and vector (cosine) rankings via Reciprocal Rank Fusion,
+    // so exact terms/names/numbers aren't lost by embeddings alone.
+    public bool $hybridEnabled = true;
+    // RRF constant k in Σ 1/(k+rank). Higher = flatter fusion.
+    public int $rrfK = 60;
+    // How many candidates to retrieve before reranking down to maxContextChunks.
+    public int $retrievalCandidatePool = 30;
+    // How the candidate pool is reduced to the final context: 'off' keeps fused
+    // order, 'mmr' diversifies in PHP (free), 'llm' scores with a cheap model call.
+    public string $rerankMode = 'llm'; // off|mmr|llm
+    // MMR trade-off between relevance (1.0) and diversity (0.0). Used when rerankMode=mmr.
+    public float $mmrLambda = 0.7;
+
     // Agent / skills
     // Master switch for tool-calling ("skills"). When off, the assistant is pure retrieval QA.
     public bool $agentModeEnabled = false;
@@ -139,7 +159,7 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
@@ -154,6 +174,11 @@ class Settings extends Model
             [['maxContextChunks'], 'integer', 'min' => 1, 'max' => 20],
             [['logRetentionDays'], 'integer', 'min' => 0],
             [['minSimilarityScore'], 'number', 'min' => 0, 'max' => 1],
+            [['rrfK'], 'integer', 'min' => 1],
+            [['retrievalCandidatePool'], 'integer', 'min' => 5, 'max' => 100],
+            [['rerankMode'], 'in', 'range' => ['off', 'mmr', 'llm']],
+            [['rerankMode'], 'string'],
+            [['mmrLambda'], 'number', 'min' => 0, 'max' => 1],
             [['defaultTheme'], 'in', 'range' => ['light', 'dark']],
             [['operationMode'], 'in', 'range' => ['chat', 'agent']],
             [['widgetPosition'], 'string'],
