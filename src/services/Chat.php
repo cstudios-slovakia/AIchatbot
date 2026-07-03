@@ -98,14 +98,32 @@ class Chat extends Component
 
         $start = microtime(true);
 
-        // embed question
-        $qVecArr = $plugin->openAi->embed([$question]);
-        $qVec = $qVecArr[0] ?? [];
+        // Conversation so far (excludes the user message we just logged). Reused
+        // for both building the retrieval query and generation further down.
+        $history = $this->recentHistory($session->id, 6);
 
-        $hits = $plugin->vectorSearch->topK($qVec, $settings->maxContextChunks, 0.0);
+        // Turn the (possibly elliptical) latest message into a standalone
+        // retrieval query and decide whether this turn needs retrieval at all.
+        [$retrievalQuery, $needsRetrieval] = $this->buildRetrievalQuery($history, $question);
+        $guarded = !$needsRetrieval;
 
-        $usableHits = array_filter($hits, fn($h) => $h['score'] >= $settings->minSimilarityScore);
-        $confidence = !empty($hits) ? (float)$hits[0]['score'] : 0.0;
+        $hits = [];
+        $usableHits = [];
+        $confidence = 0.0;
+        if (!$guarded) {
+            // embed the standalone query, not the raw follow-up
+            $qVecArr = $plugin->openAi->embed([$retrievalQuery]);
+            $qVec = $qVecArr[0] ?? [];
+
+            // Retrieve a wider candidate pool, then rerank down to the context size.
+            $pool = max((int)$settings->retrievalCandidatePool, (int)$settings->maxContextChunks);
+            $needVectors = $settings->rerankMode === 'mmr';
+            $candidates = $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors);
+            $hits = $this->rerank($candidates, $retrievalQuery);
+
+            $usableHits = array_filter($hits, fn($h) => $h['score'] >= $settings->minSimilarityScore);
+            $confidence = !empty($hits) ? (float)$hits[0]['score'] : 0.0;
+        }
 
         $contextBlocks = [];
         foreach ($usableHits as $i => $h) {
@@ -174,8 +192,6 @@ class Chat extends Component
             $systemPrompt .= "\n\n# Context\n(none)";
         }
 
-        $history = $this->recentHistory($session->id, 6);
-
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
         ];
@@ -211,15 +227,19 @@ class Chat extends Component
 
         $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime);
 
-        // low-confidence streak tracking → offer help (human handoff and/or contact capture)
+        // low-confidence streak tracking → offer help (human handoff and/or contact capture).
+        // Guarded chit-chat turns (no retrieval) carry no confidence signal, so they
+        // neither add to nor reset the streak.
         $offerHuman = false;
-        if ($confidence < $settings->minSimilarityScore) {
-            $session->lowConfStreak = (int)$session->lowConfStreak + 1;
-            if ($session->lowConfStreak >= 2) {
-                $offerHuman = true;
+        if (!$guarded) {
+            if ($confidence < $settings->minSimilarityScore) {
+                $session->lowConfStreak = (int)$session->lowConfStreak + 1;
+                if ($session->lowConfStreak >= 2) {
+                    $offerHuman = true;
+                }
+            } else {
+                $session->lowConfStreak = 0;
             }
-        } else {
-            $session->lowConfStreak = 0;
         }
         if ($hasHandoffToken) {
             $offerHuman = true;
@@ -362,6 +382,238 @@ class Chat extends Component
         // skip the most recent (the user msg we just inserted)
         array_shift($rows);
         return array_reverse($rows);
+    }
+
+    /**
+     * Turn the latest user message into a standalone retrieval query using prior
+     * turns (resolving pronouns/ellipsis), and decide whether this turn needs a
+     * knowledge-base lookup at all.
+     *
+     * The rewrite only affects the retrieval embedding — generation still sees
+     * the user's original message. On the first turn, or on any failure, this
+     * falls back to the raw question with retrieval on, so search never silently
+     * breaks.
+     *
+     * @param array<int, array{role:string, content:string}> $history
+     * @return array{0:string, 1:bool} [standaloneQuery, needsRetrieval]
+     */
+    private function buildRetrievalQuery(array $history, string $question): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+
+        // Cheap heuristic guard for pure smalltalk (works without any LLM call).
+        $smalltalk = $settings->retrievalGuardEnabled && $this->looksLikeSmalltalk($question);
+
+        // First turn or rewrite disabled: nothing to resolve against.
+        if (empty($history) || !$settings->queryRewriteEnabled) {
+            return [$question, !$smalltalk];
+        }
+
+        try {
+            $convo = '';
+            foreach ($history as $h) {
+                $role = ($h['role'] ?? '') === 'bot' ? 'Assistant' : 'User';
+                $convo .= $role . ': ' . trim((string)($h['content'] ?? '')) . "\n";
+            }
+            $sys = "You rewrite a chat user's latest message into a standalone search query "
+                . "for a knowledge base. Resolve pronouns and ellipsis using the conversation. "
+                . "Keep it concise and in the user's language. Also decide whether answering needs "
+                . "a knowledge-base lookup at all — greetings, thanks and pure chit-chat do not. "
+                . 'Respond with ONLY compact JSON: {"query": string, "needs_retrieval": boolean}.';
+            $usr = "Conversation so far:\n" . trim($convo) . "\n\nLatest user message: " . $question;
+            $msg = Plugin::getInstance()->openAi->chatRaw(
+                [
+                    ['role' => 'system', 'content' => $sys],
+                    ['role' => 'user', 'content' => $usr],
+                ],
+                ['model' => 'gpt-4o-mini', 'temperature' => 0.0]
+            );
+            $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
+            if (is_array($data)) {
+                $q = trim((string)($data['query'] ?? ''));
+                $q = $q !== '' ? $q : $question;
+                $needs = !array_key_exists('needs_retrieval', $data) || (bool)$data['needs_retrieval'];
+                if ($settings->retrievalGuardEnabled) {
+                    return [$q, $needs];
+                }
+                return [$q, true];
+            }
+        } catch (\Throwable) {
+            // fall through to the safe default
+        }
+        return [$question, !$smalltalk];
+    }
+
+    /**
+     * True when the message is nothing but greeting/thanks/acknowledgement tokens
+     * (≤4 words, every word a known smalltalk term). Deliberately conservative —
+     * it must never suppress a real question.
+     */
+    private function looksLikeSmalltalk(string $text): bool
+    {
+        $t = trim(mb_strtolower($text, 'UTF-8'));
+        if ($t === '') {
+            return true;
+        }
+        $t = trim((string)preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $t));
+        $words = array_values(array_filter(preg_split('/\s+/u', $t) ?: [], fn($w) => $w !== ''));
+        if (count($words) === 0 || count($words) > 4) {
+            return false;
+        }
+        // English + the locales this plugin already ships translations for (sk, hu).
+        static $smalltalk = [
+            'hi', 'hello', 'hey', 'yo', 'hiya', 'heya', 'greetings',
+            'thanks', 'thank', 'thankyou', 'thx', 'ty', 'cheers',
+            'ok', 'okay', 'k', 'cool', 'great', 'nice', 'perfect', 'awesome',
+            'bye', 'goodbye', 'cya',
+            'ahoj', 'cau', 'čau', 'dakujem', 'ďakujem', 'vdaka', 'vďaka', 'dovi', 'dovidenia',
+            'szia', 'helló', 'hello', 'koszonom', 'köszönöm', 'köszi', 'szervusz', 'viszlat', 'viszlát',
+        ];
+        foreach ($words as $w) {
+            if (!in_array($w, $smalltalk, true)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Strip a leading/trailing ```json fence some models wrap JSON in.
+     */
+    private function stripJsonFence(string $s): string
+    {
+        $s = trim($s);
+        if (str_starts_with($s, '```')) {
+            $s = (string)preg_replace('/^```[a-zA-Z]*\s*/', '', $s);
+            $s = (string)preg_replace('/\s*```$/', '', $s);
+        }
+        return trim($s);
+    }
+
+    /**
+     * Reduce a retrieved candidate pool to the final context set of
+     * maxContextChunks. Modes: 'off' keeps the fused order, 'mmr' diversifies in
+     * PHP, 'llm' scores with a cheap model call. Selection/order changes only —
+     * each returned row keeps its raw-cosine `score` (the retrieval contract).
+     *
+     * @param array<int, array<string, mixed>> $candidates
+     * @return array<int, array<string, mixed>>
+     */
+    private function rerank(array $candidates, string $queryText): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $limit = max(1, (int)$settings->maxContextChunks);
+
+        if (count($candidates) <= $limit || $settings->rerankMode === 'off') {
+            $picked = array_slice($candidates, 0, $limit);
+        } elseif ($settings->rerankMode === 'mmr') {
+            $picked = $this->rerankMmr($candidates, $limit, (float)$settings->mmrLambda);
+        } else {
+            $picked = $this->rerankLlm($candidates, $queryText, $limit);
+        }
+
+        // Drop the internal embedding before rows reach the context loop.
+        return array_map(function (array $row): array {
+            unset($row['_vector']);
+            return $row;
+        }, $picked);
+    }
+
+    /**
+     * LLM reranker: ask a cheap model to order the candidates by relevance and
+     * take the top $limit. Falls back to fused order on any failure.
+     *
+     * @param array<int, array<string, mixed>> $candidates
+     * @return array<int, array<string, mixed>>
+     */
+    private function rerankLlm(array $candidates, string $queryText, int $limit): array
+    {
+        try {
+            $list = '';
+            foreach ($candidates as $i => $c) {
+                $snippet = trim((string)preg_replace('/\s+/', ' ', (string)($c['content'] ?? '')));
+                $list .= "[{$i}] " . mb_substr($snippet, 0, 500) . "\n";
+            }
+            $sys = 'You rank knowledge-base passages by how well they help answer the user query. '
+                . 'Return ONLY compact JSON: {"order": [indices]} listing the ' . $limit
+                . ' most relevant passage indices, most relevant first. Use only indices shown.';
+            $usr = "Query: {$queryText}\n\nPassages:\n" . $list;
+            $msg = Plugin::getInstance()->openAi->chatRaw(
+                [
+                    ['role' => 'system', 'content' => $sys],
+                    ['role' => 'user', 'content' => $usr],
+                ],
+                ['model' => 'gpt-4o-mini', 'temperature' => 0.0]
+            );
+            $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
+            $order = is_array($data['order'] ?? null) ? $data['order'] : null;
+            if ($order) {
+                $picked = [];
+                $seen = [];
+                foreach ($order as $idx) {
+                    $idx = (int)$idx;
+                    if (isset($candidates[$idx]) && !isset($seen[$idx])) {
+                        $picked[] = $candidates[$idx];
+                        $seen[$idx] = true;
+                    }
+                    if (count($picked) >= $limit) {
+                        break;
+                    }
+                }
+                if (!empty($picked)) {
+                    return $picked;
+                }
+            }
+        } catch (\Throwable) {
+            // fall through to fused order
+        }
+        return array_slice($candidates, 0, $limit);
+    }
+
+    /**
+     * Maximal Marginal Relevance: greedily pick chunks that are relevant to the
+     * query (raw cosine `score`) while penalizing redundancy against those
+     * already picked. Needs each candidate's `_vector`.
+     *
+     * @param array<int, array<string, mixed>> $candidates
+     * @return array<int, array<string, mixed>>
+     */
+    private function rerankMmr(array $candidates, int $limit, float $lambda): array
+    {
+        $vectorSearch = Plugin::getInstance()->vectorSearch;
+        $selected = [];
+        $remaining = $candidates;
+        while (!empty($remaining) && count($selected) < $limit) {
+            $bestKey = null;
+            $bestMmr = -INF;
+            foreach ($remaining as $key => $cand) {
+                $relevance = (float)($cand['score'] ?? 0.0);
+                $redundancy = 0.0;
+                $vec = $cand['_vector'] ?? null;
+                if (is_array($vec) && !empty($selected)) {
+                    foreach ($selected as $sel) {
+                        $sv = $sel['_vector'] ?? null;
+                        if (is_array($sv)) {
+                            $sim = $vectorSearch->similarity($vec, $sv);
+                            if ($sim > $redundancy) {
+                                $redundancy = $sim;
+                            }
+                        }
+                    }
+                }
+                $mmr = $lambda * $relevance - (1 - $lambda) * $redundancy;
+                if ($mmr > $bestMmr) {
+                    $bestMmr = $mmr;
+                    $bestKey = $key;
+                }
+            }
+            if ($bestKey === null) {
+                break;
+            }
+            $selected[] = $remaining[$bestKey];
+            unset($remaining[$bestKey]);
+        }
+        return $selected;
     }
 
     public function rateMessage(int $messageId, int $rating): bool
