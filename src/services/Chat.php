@@ -102,6 +102,12 @@ class Chat extends Component
         // for both building the retrieval query and generation further down.
         $history = $this->recentHistory($session->id, 6);
 
+        // Resolve the site up front so retrieval can filter to it (a Slovak-site
+        // query shouldn't pull English chunks). Reused for the system prompt below.
+        $site = \cstudiossro\craftcschatbot\models\Settings::resolveSiteFromUrl($session->pageUrl);
+        $siteUid = $site->uid ?? null;
+        $siteId = isset($site->id) ? (int)$site->id : null;
+
         // Turn the (possibly elliptical) latest message into a standalone
         // retrieval query and decide whether this turn needs retrieval at all.
         [$retrievalQuery, $needsRetrieval] = $this->buildRetrievalQuery($history, $question);
@@ -118,7 +124,7 @@ class Chat extends Component
             // Retrieve a wider candidate pool, then rerank down to the context size.
             $pool = max((int)$settings->retrievalCandidatePool, (int)$settings->maxContextChunks);
             $needVectors = $settings->rerankMode === 'mmr';
-            $candidates = $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors);
+            $candidates = $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors, $siteId);
             $hits = $this->rerank($candidates, $retrievalQuery);
 
             $usableHits = array_filter($hits, fn($h) => $h['score'] >= $settings->minSimilarityScore);
@@ -135,8 +141,6 @@ class Chat extends Component
         }
         $context = implode("\n\n---\n\n", $contextBlocks);
 
-        $site = \cstudiossro\craftcschatbot\models\Settings::resolveSiteFromUrl($session->pageUrl);
-        $siteUid = $site->uid ?? null;
         $systemPrompt = $settings->getSystemPromptForSite($siteUid);
 
         // Let plugins/modules contribute extra context (e.g. the current date on

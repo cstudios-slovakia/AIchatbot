@@ -438,6 +438,18 @@ class TrainingController extends Controller
         return $this->asJson(['success' => true]);
     }
 
+    /**
+     * Re-chunk and re-embed every trained source under current indexing settings.
+     * Use after changing chunk size, contextual prefix, or embedding model/dimensions.
+     */
+    public function actionReindexAll(): Response
+    {
+        $this->requirePostRequest();
+        $count = Plugin::getInstance()->training->reindexAll();
+        Craft::$app->session->setNotice($count . ' source(s) queued for re-indexing.');
+        return $this->redirectToPostedUrl();
+    }
+
     public function actionDeleteUrl(): Response
     {
         $this->requirePostRequest();

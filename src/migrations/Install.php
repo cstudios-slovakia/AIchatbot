@@ -134,7 +134,10 @@ class Install extends Migration
             'id' => $this->primaryKey(),
             'sourceType' => $this->string(20)->notNull(), // entry|file|url|qa
             'sourceId' => $this->integer()->notNull(),
+            'siteId' => $this->integer()->null(),
+            'language' => $this->string(20)->null(),
             'position' => $this->integer()->notNull()->defaultValue(0),
+            'section' => $this->string(500)->null(),
             'content' => $this->mediumText()->notNull(),
             'embedding' => $this->longText(),
             'tokens' => $this->integer()->notNull()->defaultValue(0),
@@ -264,6 +267,7 @@ class Install extends Migration
         $this->createIndex(null, '{{%chatbot_training_sources}}', ['status']);
 
         $this->createIndex(null, '{{%chatbot_chunks}}', ['sourceType', 'sourceId']);
+        $this->createIndex(null, '{{%chatbot_chunks}}', ['siteId']);
 
         $this->createIndex(null, '{{%chatbot_contact_requests}}', ['status']);
         $this->createIndex(null, '{{%chatbot_contact_requests}}', ['sessionId']);
