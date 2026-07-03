@@ -64,6 +64,25 @@ class Settings extends Model
     public string $rerankMode = 'llm'; // off|mmr|llm
     // MMR trade-off between relevance (1.0) and diversity (0.0). Used when rerankMode=mmr.
     public float $mmrLambda = 0.7;
+    // Restrict retrieval to the current site's chunks (plus site-agnostic
+    // url/file/qa chunks). Stops cross-site/cross-language bleed. Requires a
+    // retrain to populate chunk siteId; a no-op until then.
+    public bool $siteFilterEnabled = true;
+
+    // Indexing / chunking (used at training time). Changing any of these needs a
+    // full retrain to take effect on existing content.
+    // Target chunk size in characters (~4 chars/token). Smaller = more precise.
+    public int $chunkSize = 1200;
+    // Character overlap carried between adjacent chunks for context continuity.
+    public int $chunkOverlap = 150;
+    // Prepend a "Document title > Section" breadcrumb to each chunk before
+    // embedding (and keep it in stored content) so retrieval and generation know
+    // where each chunk came from. Cheap contextual-retrieval win.
+    public bool $contextualPrefixEnabled = true;
+    // Output dimensions for text-embedding-3-* (0 = model default: 1536 for
+    // 3-small, 3072 for 3-large). Cap 3-large to 1536 for near-large quality at
+    // small-model storage. Changing this needs a full retrain.
+    public int $embeddingDimensions = 0;
 
     // Agent / skills
     // Master switch for tool-calling ("skills"). When off, the assistant is pure retrieval QA.
@@ -159,7 +178,7 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
@@ -179,6 +198,10 @@ class Settings extends Model
             [['rerankMode'], 'in', 'range' => ['off', 'mmr', 'llm']],
             [['rerankMode'], 'string'],
             [['mmrLambda'], 'number', 'min' => 0, 'max' => 1],
+            [['chunkSize', 'chunkOverlap', 'embeddingDimensions'], 'integer'],
+            [['chunkSize'], 'integer', 'min' => 300, 'max' => 4000],
+            [['chunkOverlap'], 'integer', 'min' => 0, 'max' => 1000],
+            [['embeddingDimensions'], 'integer', 'min' => 0, 'max' => 3072],
             [['defaultTheme'], 'in', 'range' => ['light', 'dark']],
             [['operationMode'], 'in', 'range' => ['chat', 'agent']],
             [['widgetPosition'], 'string'],
