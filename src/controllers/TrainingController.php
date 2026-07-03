@@ -446,8 +446,7 @@ class TrainingController extends Controller
     {
         $this->requirePostRequest();
         $count = Plugin::getInstance()->training->reindexAll();
-        Craft::$app->session->setNotice($count . ' source(s) queued for re-indexing.');
-        return $this->redirectToPostedUrl();
+        return $this->asJson(['success' => true, 'queued' => $count]);
     }
 
     public function actionDeleteUrl(): Response
