@@ -232,13 +232,37 @@
 <div class="field">
   <div class="heading"><label>Retrain all content</label></div>
   <div class="instructions"><p>Re-chunk and re-embed every trained source under the current settings above. Queues background jobs (Q&amp;A runs inline). Run after changing indexing settings or upgrading the plugin.</p></div>
-  <form method="post" accept-charset="UTF-8" onsubmit="return confirm('Re-embed all trained content now? This uses OpenAI embedding credits.');">
-    {{ csrfInput() }}
-    {{ actionInput('interactive-ai-assistant/training/reindex-all') }}
-    {{ redirectInput('interactive-ai-assistant/settings') }}
-    <button type="submit" class="btn submit">Retrain all now</button>
-  </form>
+  {# NOTE: must NOT be a nested <form> or carry an actionInput — this template is
+     rendered inside the plugin-settings form, and a leaked actionInput would
+     hijack the Save button. Use a plain button that POSTs via JS instead. #}
+  <button type="button" class="btn" id="cs-retrain-all">Retrain all now</button>
+  <span id="cs-retrain-all-status" class="light" style="margin-left:8px;"></span>
 </div>
+
+{% js %}
+document.getElementById('cs-retrain-all')?.addEventListener('click', function (ev) {
+  ev.preventDefault();
+  if (!confirm('Re-embed all trained content now? This uses OpenAI embedding credits.')) {
+    return;
+  }
+  var btn = ev.currentTarget;
+  var status = document.getElementById('cs-retrain-all-status');
+  btn.disabled = true;
+  status.textContent = 'Queuing…';
+  Craft.sendActionRequest('POST', 'interactive-ai-assistant/training/reindex-all')
+    .then(function (res) {
+      var n = (res && res.data && res.data.queued != null) ? res.data.queued : '';
+      status.textContent = (n !== '' ? n + ' ' : '') + 'source(s) queued. Run the queue to process.';
+    })
+    .catch(function (e) {
+      var msg = (e && e.response && e.response.data && e.response.data.error) ? e.response.data.error : 'Failed to queue.';
+      status.textContent = msg;
+    })
+    .finally(function () {
+      btn.disabled = false;
+    });
+});
+{% endjs %}
 
 <hr>
 <h2>Agent &amp; skills</h2>
