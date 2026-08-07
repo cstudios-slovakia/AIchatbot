@@ -108,10 +108,14 @@ class RagController extends Controller
         $training = Plugin::getInstance()->training;
         $health = $training->indexHealth();
 
-        $this->stdout(sprintf(
-            "%d chunk(s) indexed.\n\n",
-            $health['totals']['chunks'],
-        ));
+        $this->stdout(sprintf("%d chunk(s) indexed.\n", $health['totals']['chunks']));
+        if ($health['totals']['legacyVectors'] > 0) {
+            $this->stdout(sprintf(
+                "%d still store their embedding in the old JSON format — retrain to convert.\n",
+                $health['totals']['legacyVectors'],
+            ));
+        }
+        $this->stdout("\n");
 
         $describe = function (array $items, string $heading, callable $line): void {
             if (!$items) {

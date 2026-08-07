@@ -147,6 +147,9 @@ class Install extends Migration
             'position' => $this->integer()->notNull()->defaultValue(0),
             'section' => $this->string(500)->null(),
             'content' => $this->mediumText()->notNull(),
+            // Packed little-endian float32; 'embedding' held JSON before and is
+            // still read so chunks indexed by older versions keep working.
+            'embeddingBlob' => $this->binary()->null(),
             'embedding' => $this->longText(),
             'tokens' => $this->integer()->notNull()->defaultValue(0),
             'dateCreated' => $this->dateTime()->notNull(),

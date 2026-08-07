@@ -1035,6 +1035,13 @@ class Training extends Component
             'totals' => [
                 'sources' => count($stale) + count($failed) + count($blank) + count($orphaned),
                 'chunks' => (int)(new \craft\db\Query())->from('{{%chatbot_chunks}}')->count(),
+                // Chunks still holding a JSON embedding from before the packed
+                // format. They work, they just cost five times the memory.
+                'legacyVectors' => (int)(new \craft\db\Query())
+                    ->from('{{%chatbot_chunks}}')
+                    ->where(['embeddingBlob' => null])
+                    ->andWhere(['not', ['embedding' => null]])
+                    ->count(),
             ],
         ];
     }

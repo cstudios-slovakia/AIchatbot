@@ -713,9 +713,10 @@ class Chat extends Component
             }
             $sys = "You rewrite a chat user's latest message into a standalone search query "
                 . "for a knowledge base. Resolve pronouns and ellipsis using the conversation, and "
-                . "change nothing else: keep the user's own words, spelling and language exactly as "
-                . "written, including missing accents, and never translate or paraphrase them. If "
-                . "there is nothing to resolve, return the message unchanged. Also decide whether answering needs "
+                . "put inflected words into their dictionary form so they match how the content is "
+                . "written. Stay strictly in the user's own language — never translate, and never "
+                . "swap their vocabulary for synonyms. Restore missing accents where the language "
+                . "requires them. Also decide whether answering needs "
                 . "a knowledge-base lookup at all — greetings, thanks, pure chit-chat and requests "
                 . "that have nothing to do with a website's own content (writing code, general "
                 . "trivia, homework) do not. Finally, set out_of_scope when the message asks for "

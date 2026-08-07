@@ -3,6 +3,7 @@
 namespace cstudiossro\craftcschatbot\services;
 
 use Craft;
+use cstudiossro\craftcschatbot\helpers\Vector;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\ChunkRecord;
 use yii\base\Component;
@@ -105,7 +106,7 @@ class Embeddings extends Component
                 $rec->position = $row['position'];
                 $rec->section = $row['section'];
                 $rec->content = $content;
-                $rec->embedding = isset($vectors[$i]) ? json_encode($vectors[$i]) : null;
+                $rec->embeddingBlob = isset($vectors[$i]) ? Vector::pack($vectors[$i]) : null;
                 $rec->tokens = (int)ceil(mb_strlen($content) / 4);
                 $rec->save(false);
             }
