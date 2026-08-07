@@ -42,6 +42,21 @@ class Training extends Component
         $rec->entryId = $entry->id;
         $rec->siteId = $entry->siteId;
         $rec->sectionId = (int)$entry->sectionId;
+        // Only live entries belong in the index. Disabled and expired ones are
+        // content the site has deliberately taken down — answering from them
+        // tells visitors about products that are gone and links them to pages
+        // that 404. Drop whatever was indexed before rather than leaving it.
+        $entryStatus = (string)$entry->getStatus();
+        if ($entryStatus !== Entry::STATUS_LIVE) {
+            Plugin::getInstance()->embeddings->deleteChunks('entry', (int)$rec->id);
+            $rec->chunkCount = 0;
+            $rec->status = 'skipped';
+            $rec->errorMessage = "Not indexed: entry is {$entryStatus}.";
+            $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
+            $rec->save(false);
+            return;
+        }
+
         $rec->status = 'training';
         $rec->errorMessage = null;
         $rec->save(false);
@@ -800,6 +815,184 @@ class Training extends Component
         }
         Plugin::getInstance()->embeddings->deleteChunks('qa', (int)$rec->id);
         $rec->delete();
+    }
+
+    // ---------- INDEX HEALTH ----------
+
+    /**
+     * What is wrong with the index right now.
+     *
+     * An assistant answers confidently from whatever it was trained on, so the
+     * failure modes that matter are the silent ones: a page edited after it was
+     * indexed, a section nobody ever trained, a source that errored months ago,
+     * a source that indexed to nothing because its text could not be extracted.
+     * None of those announce themselves in a chat transcript.
+     *
+     * @return array{
+     *   stale: array<int, array{id:int, elementId:int, siteId:int, kind:string}>,
+     *   failed: array<int, array{id:int, kind:string, message:string}>,
+     *   blank: array<int, array{id:int, kind:string}>,
+     *   orphaned: array<int, array{id:int, kind:string}>,
+     *   untrainedBySection: array<string, int>,
+     *   totals: array{sources:int, chunks:int}
+     * }
+     */
+    public function indexHealth(): array
+    {
+        $stale = [];
+        $failed = [];
+        $blank = [];
+        $orphaned = [];
+
+        $elementKinds = [
+            'entry' => [TrainingEntryRecord::class, 'entryId'],
+            'category' => [TrainingCategoryRecord::class, 'categoryId'],
+            'global' => [TrainingGlobalSetRecord::class, 'globalSetId'],
+        ];
+        foreach ($elementKinds as $kind => [$recordClass, $idAttribute]) {
+            /** @var class-string<\craft\db\ActiveRecord> $recordClass */
+            $rows = (new \craft\db\Query())
+                ->select([
+                    'id' => 't.id',
+                    'elementId' => "t.{$idAttribute}",
+                    'siteId' => 't.siteId',
+                    'status' => 't.status',
+                    'chunkCount' => 't.chunkCount',
+                    'errorMessage' => 't.errorMessage',
+                    'lastTrainedAt' => 't.lastTrainedAt',
+                    'elementUpdated' => 'e.dateUpdated',
+                    'elementDeleted' => 'e.dateDeleted',
+                ])
+                ->from(['t' => $recordClass::tableName()])
+                ->leftJoin(['e' => \craft\db\Table::ELEMENTS], "e.id = t.{$idAttribute}")
+                ->all();
+
+            foreach ($rows as $row) {
+                $entry = ['id' => (int)$row['id'], 'kind' => $kind];
+                if ($row['elementUpdated'] === null || $row['elementDeleted'] !== null) {
+                    $orphaned[] = $entry;
+                    continue;
+                }
+                if ($row['status'] === 'error') {
+                    $failed[] = $entry + ['message' => (string)($row['errorMessage'] ?? 'unknown error')];
+                    continue;
+                }
+                if ((int)$row['chunkCount'] === 0 && $row['status'] !== 'skipped') {
+                    $blank[] = $entry;
+                    continue;
+                }
+                if ($row['lastTrainedAt'] === null || $row['elementUpdated'] > $row['lastTrainedAt']) {
+                    $stale[] = $entry + [
+                        'elementId' => (int)$row['elementId'],
+                        'siteId' => (int)$row['siteId'],
+                    ];
+                }
+            }
+        }
+
+        // Sources that have no element behind them: only their own status counts.
+        $standaloneKinds = [
+            'file' => TrainingFileRecord::class,
+            'url' => TrainingUrlRecord::class,
+            'source' => TrainingSourceRecord::class,
+        ];
+        foreach ($standaloneKinds as $kind => $recordClass) {
+            /** @var class-string<\craft\db\ActiveRecord> $recordClass */
+            foreach ($recordClass::find()->all() as $rec) {
+                if ($rec->status === 'error') {
+                    $failed[] = ['id' => (int)$rec->id, 'kind' => $kind, 'message' => (string)($rec->errorMessage ?? '')];
+                } elseif ((int)($rec->chunkCount ?? 0) === 0) {
+                    $blank[] = ['id' => (int)$rec->id, 'kind' => $kind];
+                }
+            }
+        }
+
+        return [
+            'stale' => $stale,
+            'failed' => $failed,
+            'blank' => $blank,
+            'orphaned' => $orphaned,
+            'untrainedBySection' => $this->untrainedBySection(),
+            'totals' => [
+                'sources' => count($stale) + count($failed) + count($blank) + count($orphaned),
+                'chunks' => (int)(new \craft\db\Query())->from('{{%chatbot_chunks}}')->count(),
+            ],
+        ];
+    }
+
+    /**
+     * Live entries in each section selected for training that have never been
+     * indexed, keyed by section name. A section can be ticked in the settings
+     * and still contain nothing the assistant knows about.
+     *
+     * @return array<string, int>
+     */
+    private function untrainedBySection(): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $trained = (new \craft\db\Query())
+            ->select(['entryId', 'siteId'])
+            ->from('{{%chatbot_training_entries}}')
+            ->all();
+        $known = [];
+        foreach ($trained as $row) {
+            $known[$row['entryId'] . ':' . $row['siteId']] = true;
+        }
+
+        $out = [];
+        foreach ($settings->trainingSections as $uid) {
+            $section = \cstudiossro\craftcschatbot\helpers\CraftCompat::getSectionByUid((string)$uid);
+            if (!$section) {
+                continue;
+            }
+            $missing = 0;
+            foreach (Craft::$app->sites->getAllSites() as $site) {
+                $entries = Entry::find()
+                    ->sectionId($section->id)
+                    ->siteId($site->id)
+                    ->status(Entry::STATUS_LIVE)
+                    ->ids();
+                foreach ($entries as $entryId) {
+                    if (!isset($known[$entryId . ':' . $site->id])) {
+                        $missing++;
+                    }
+                }
+            }
+            if ($missing > 0) {
+                $out[$section->name] = $missing;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Re-queue every source whose content changed after it was last indexed.
+     *
+     * @return int number queued
+     */
+    public function retrainStale(): int
+    {
+        $health = $this->indexHealth();
+        $queue = Craft::$app->queue;
+        $jobs = [
+            'entry' => IndexEntryJob::class,
+            'category' => IndexCategoryJob::class,
+            'global' => IndexGlobalSetJob::class,
+        ];
+        $keys = ['entry' => 'entryId', 'category' => 'categoryId', 'global' => 'globalSetId'];
+        $n = 0;
+        foreach ($health['stale'] as $item) {
+            $jobClass = $jobs[$item['kind']] ?? null;
+            if (!$jobClass) {
+                continue;
+            }
+            $queue->push(new $jobClass([
+                $keys[$item['kind']] => $item['elementId'],
+                'siteId' => $item['siteId'],
+            ]));
+            $n++;
+        }
+        return $n;
     }
 
     // ---------- RETRAIN ALL ----------

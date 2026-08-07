@@ -51,6 +51,9 @@ class RagController extends Controller
      */
     public ?string $only = null;
 
+    /** Re-queue the sources whose content changed since they were indexed. */
+    public bool $fix = false;
+
     public function options($actionID): array
     {
         $options = parent::options($actionID);
@@ -60,6 +63,9 @@ class RagController extends Controller
         }
         if ($actionID === 'retrain-all') {
             $options[] = 'only';
+        }
+        if ($actionID === 'doctor') {
+            $options[] = 'fix';
         }
         return $options;
     }
@@ -86,6 +92,65 @@ class RagController extends Controller
             !empty($result['offerHuman']) ? 'yes' : 'no',
             (string)($result['sessionToken'] ?? '?'),
         ));
+        return ExitCode::OK;
+    }
+
+    /**
+     * Report what is wrong with the index: content edited since it was indexed,
+     * sources that failed or indexed to nothing, records whose element is gone,
+     * and sections selected for training that still have entries nobody indexed.
+     *
+     * Usage: php craft interactive-ai-assistant/rag/doctor
+     *        php craft interactive-ai-assistant/rag/doctor --fix
+     */
+    public function actionDoctor(): int
+    {
+        $training = Plugin::getInstance()->training;
+        $health = $training->indexHealth();
+
+        $this->stdout(sprintf(
+            "%d chunk(s) indexed.\n\n",
+            $health['totals']['chunks'],
+        ));
+
+        $describe = function (array $items, string $heading, callable $line): void {
+            if (!$items) {
+                return;
+            }
+            $this->stdout($heading . ' (' . count($items) . ")\n");
+            foreach (array_slice($items, 0, 20) as $item) {
+                $this->stdout('  ' . $line($item) . "\n");
+            }
+            if (count($items) > 20) {
+                $this->stdout('  … and ' . (count($items) - 20) . " more\n");
+            }
+            $this->stdout("\n");
+        };
+
+        $describe($health['stale'], 'Changed since last indexed', fn($i) => "{$i['kind']} #{$i['id']}");
+        $describe($health['failed'], 'Failed to index', fn($i) => "{$i['kind']} #{$i['id']}: {$i['message']}");
+        $describe($health['blank'], 'Indexed to nothing (no text extracted)', fn($i) => "{$i['kind']} #{$i['id']}");
+        $describe($health['orphaned'], 'Element no longer exists', fn($i) => "{$i['kind']} #{$i['id']}");
+
+        if ($health['untrainedBySection']) {
+            $this->stdout("Selected for training but never indexed\n");
+            foreach ($health['untrainedBySection'] as $section => $count) {
+                $this->stdout("  {$section}: {$count} live entr" . ($count === 1 ? 'y' : 'ies') . "\n");
+            }
+            $this->stdout("\n");
+        }
+
+        if ($health['totals']['sources'] === 0 && !$health['untrainedBySection']) {
+            $this->stdout("Index is healthy.\n");
+            return ExitCode::OK;
+        }
+
+        if ($this->fix) {
+            $queued = $training->retrainStale();
+            $this->stdout("Queued {$queued} changed source(s) for re-indexing. Run: php craft queue/run\n");
+        } elseif ($health['stale']) {
+            $this->stdout("Re-index the changed ones with --fix.\n");
+        }
         return ExitCode::OK;
     }
 

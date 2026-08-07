@@ -4,6 +4,59 @@
 
 {% block content %}
   <div id="chatbot-dashboard">
+    {% set staleCount = health.stale|length %}
+    {% set failedCount = health.failed|length %}
+    {% set blankCount = health.blank|length %}
+    {% set untrainedTotal = health.untrainedBySection|reduce((carry, n) => carry + n, 0) %}
+    {% if staleCount or failedCount or blankCount or untrainedTotal %}
+      <div class="readable" style="padding:14px;border:1px solid #f0b429;border-left-width:4px;border-radius:6px;background:#fffaf0;margin-bottom:24px;">
+        <h2 style="margin-top:0;">Training needs attention</h2>
+        <ul style="margin:0 0 10px;padding-left:18px;">
+          {% if staleCount %}
+            <li><strong>{{ staleCount }}</strong> source{{ staleCount == 1 ? '' : 's' }} changed since {{ staleCount == 1 ? 'it was' : 'they were' }} last indexed — the assistant is still answering from the old text.</li>
+          {% endif %}
+          {% if untrainedTotal %}
+            <li><strong>{{ untrainedTotal }}</strong> live entr{{ untrainedTotal == 1 ? 'y is' : 'ies are' }} in a section selected for training but {{ untrainedTotal == 1 ? 'has' : 'have' }} never been indexed:
+              {% for section, count in health.untrainedBySection %}{{ section }} ({{ count }}){{ not loop.last ? ', ' }}{% endfor %}.</li>
+          {% endif %}
+          {% if failedCount %}
+            <li><strong>{{ failedCount }}</strong> source{{ failedCount == 1 ? '' : 's' }} failed to index.</li>
+          {% endif %}
+          {% if blankCount %}
+            <li><strong>{{ blankCount }}</strong> source{{ blankCount == 1 ? '' : 's' }} indexed to nothing — no text could be extracted from {{ blankCount == 1 ? 'it' : 'them' }}.</li>
+          {% endif %}
+        </ul>
+        <a class="btn" href="{{ url('interactive-ai-assistant/training/entries') }}">Review training</a>
+        {% if staleCount %}
+          <button type="button" class="btn submit" id="chatbot-retrain-stale">Re-index changed content</button>
+        {% endif %}
+      </div>
+      {% if staleCount %}
+        <script>
+          (function () {
+            var button = document.getElementById('chatbot-retrain-stale');
+            button.addEventListener('click', function () {
+              button.disabled = true;
+              var data = new FormData();
+              data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+              fetch(Craft.getActionUrl('interactive-ai-assistant/dashboard/retrain-stale'), {
+                method: 'POST', body: data, credentials: 'same-origin',
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                  Craft.cp.displayNotice(Craft.t('interactive-ai-assistant', 'Queued {n} source(s) for re-indexing.', { n: r.queued }));
+                  button.disabled = false;
+                })
+                .catch(function () {
+                  Craft.cp.displayError(Craft.t('interactive-ai-assistant', 'Could not queue re-indexing.'));
+                  button.disabled = false;
+                });
+            });
+          })();
+        </script>
+      {% endif %}
+    {% endif %}
+
     <form method="get" class="flex flex-nowrap" style="gap:8px;margin-bottom:16px;">
       <input type="date" name="from" value="{{ from }}" class="text">
       <input type="date" name="to" value="{{ to }}" class="text">

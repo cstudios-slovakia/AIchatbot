@@ -28,10 +28,22 @@ class DashboardController extends Controller
             'stats' => $stats,
             'suggestions' => $suggestions,
             'training' => $training,
+            'health' => Plugin::getInstance()->training->indexHealth(),
             'missedChatsNew' => Plugin::getInstance()->contacts->newCount(),
             'from' => $fromDt->format('Y-m-d'),
             'to' => $toDt->format('Y-m-d'),
         ]);
+    }
+
+    /**
+     * Re-queue every source whose content changed after it was last indexed.
+     */
+    public function actionRetrainStale(): Response
+    {
+        $this->requirePostRequest();
+        $this->requirePermission('accessPlugin-interactive-ai-assistant');
+        $queued = Plugin::getInstance()->training->retrainStale();
+        return $this->asJson(['success' => true, 'queued' => $queued]);
     }
 
     public function actionStats(): Response
