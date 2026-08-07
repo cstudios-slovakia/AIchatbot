@@ -124,14 +124,25 @@ class Capabilities extends Component
      * Run a capability by name. Always returns a JSON-encodable array so the
      * result (or error) can be handed straight back to the model.
      *
+     * Availability is checked here as well as when the tool schemas are built.
+     * A model can name a tool it was never offered — through a stale schema in
+     * the message history, or simply by inventing one — and a skill that is
+     * switched off, or restricted to staff, must not run just because something
+     * asked for it by name.
+     *
      * @param array<string, mixed> $args
      * @return array<string, mixed>
      */
-    public function run(string $name, array $args): array
+    public function run(string $name, array $args, bool $isAdmin = false): array
     {
         $capability = $this->get($name);
         if (!$capability) {
             return ['ok' => false, 'error' => "Unknown capability: {$name}"];
+        }
+        $state = \cstudiossro\craftcschatbot\Plugin::getInstance()->getSettings()->capabilityState($name);
+        if ($state === 'off' || ($state === 'admins' && !$isAdmin)) {
+            Craft::warning("Refused capability {$name}: not available here.", __METHOD__);
+            return ['ok' => false, 'error' => "The {$name} tool is not available."];
         }
         try {
             return ['ok' => true, 'result' => $capability->handle($args)];

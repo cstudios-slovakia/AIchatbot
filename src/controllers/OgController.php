@@ -56,8 +56,11 @@ class OgController extends Controller
     {
         $path = trim((string)parse_url($url, PHP_URL_PATH), '/');
         $uri = $path === '' ? '__home__' : $path;
-        $entry = Entry::find()->uri($uri)->siteId($site->id)->one();
-        if (!$entry) {
+        // Any element with a URI, not only entries: categories and the product
+        // types other plugins add are linked just as often, and resolving by URI
+        // means a card works for all of them without knowing their class.
+        $entry = Craft::$app->elements->getElementByUri($uri, $site->id);
+        if (!$entry instanceof \craft\base\Element) {
             return null;
         }
 
@@ -79,7 +82,7 @@ class OgController extends Controller
         ];
     }
 
-    private static function firstStringFieldValue(Entry $entry, array $handles): ?string
+    private static function firstStringFieldValue(\craft\base\Element $entry, array $handles): ?string
     {
         foreach ($handles as $handle) {
             try {
@@ -99,7 +102,7 @@ class OgController extends Controller
      * Supports SEOmatic (field type SeoSettings, typically handle "seo") and a few other common SEO plugins.
      * If no SEO field is present or no image set, returns null and the card just shows the title.
      */
-    private static function seoImageUrl(Entry $entry): ?string
+    private static function seoImageUrl(\craft\base\Element $entry): ?string
     {
         $seoHandles = ['seo', 'seoSettings', 'seomatic', 'seoPro'];
         foreach ($seoHandles as $handle) {
@@ -173,7 +176,7 @@ class OgController extends Controller
         return null;
     }
 
-    private static function seoDescription(Entry $entry): ?string
+    private static function seoDescription(\craft\base\Element $entry): ?string
     {
         foreach (['seo', 'seoSettings', 'seomatic', 'seoPro'] as $handle) {
             try {

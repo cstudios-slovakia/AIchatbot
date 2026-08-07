@@ -208,8 +208,10 @@ class Chat extends Component
         $allowedUrls = [];
         // array_filter preserved the original keys; renumber so the citation
         // markers the model sees are contiguous.
-        foreach (array_values($usableHits) as $i => $h) {
-            $url = $this->resolveSourceUrl($h['sourceType'], (int)$h['sourceId']);
+        $usableHits = array_values($usableHits);
+        $sourceUrls = $this->resolveSourceUrls($usableHits);
+        foreach ($usableHits as $i => $h) {
+            $url = $sourceUrls[$i] ?? null;
             if ($url) {
                 $allowedUrls[$this->normalizeUrl($url)] = true;
             }
@@ -321,7 +323,7 @@ class Chat extends Component
         // Give form capabilities the session they were collected in, so a
         // submission made during the tool loop links back to this chat.
         $plugin->forms->setCurrentSession($session);
-        $reply = $this->complete($messages, $tools);
+        $reply = $this->complete($messages, $tools, $isCpUser);
         $responseTime = round(microtime(true) - $start, 3);
 
         // Sentinel token from the model = language-agnostic "offer human" signal. Strip before showing.
@@ -503,39 +505,119 @@ class Chat extends Component
     }
 
     /**
-     * Resolve a public URL for a retrieved chunk, keyed by its source.
-     * chunk.sourceId points at the training record id, not the element id.
+     * Public URLs for a set of retrieved chunks, keyed by their position.
+     *
+     * Batched by source kind on purpose: resolving them one at a time ran an
+     * element query per chunk, so raising the context size quietly multiplied
+     * the database work of every single turn.
+     *
+     * @param array<int, array<string, mixed>> $hits
+     * @return array<int, string>
      */
-    private function resolveSourceUrl(string $sourceType, int $sourceId): ?string
+    private function resolveSourceUrls(array $hits): array
     {
-        try {
-            switch ($sourceType) {
-                case 'entry':
-                    $rec = \cstudiossro\craftcschatbot\records\TrainingEntryRecord::findOne($sourceId);
-                    if (!$rec) {
-                        return null;
-                    }
-                    $entry = \craft\elements\Entry::find()
-                        ->id($rec->entryId)->siteId($rec->siteId)->status(null)->one();
-                    return $entry?->getUrl();
-                case 'category':
-                    $rec = \cstudiossro\craftcschatbot\records\TrainingCategoryRecord::findOne($sourceId);
-                    if (!$rec) {
-                        return null;
-                    }
-                    $cat = \craft\elements\Category::find()
-                        ->id($rec->categoryId)->siteId($rec->siteId)->status(null)->one();
-                    return $cat?->getUrl();
-                case 'url':
-                    $rec = \cstudiossro\craftcschatbot\records\TrainingUrlRecord::findOne($sourceId);
-                    return $rec?->url ?: null;
-                default:
-                    // file, global, qa have no public URL
-                    return null;
-            }
-        } catch (\Throwable) {
-            return null;
+        $positionsByType = [];
+        foreach ($hits as $position => $hit) {
+            $positionsByType[(string)$hit['sourceType']][$position] = (int)$hit['sourceId'];
         }
+
+        $urls = [];
+        foreach ($positionsByType as $sourceType => $positions) {
+            try {
+                $resolved = match ($sourceType) {
+                    'entry' => $this->elementUrls(
+                        $positions,
+                        \cstudiossro\craftcschatbot\records\TrainingEntryRecord::class,
+                        'entryId',
+                        \craft\elements\Entry::class,
+                    ),
+                    'category' => $this->elementUrls(
+                        $positions,
+                        \cstudiossro\craftcschatbot\records\TrainingCategoryRecord::class,
+                        'categoryId',
+                        \craft\elements\Category::class,
+                    ),
+                    'url' => $this->trainedUrls($positions),
+                    // file, global and custom sources have no public page
+                    default => [],
+                };
+            } catch (\Throwable) {
+                $resolved = [];
+            }
+            $urls += $resolved;
+        }
+        return $urls;
+    }
+
+    /**
+     * @param array<int, int> $positions chunk position => training record id
+     * @param class-string $recordClass
+     * @param class-string<\craft\base\Element> $elementClass
+     * @return array<int, string>
+     */
+    private function elementUrls(array $positions, string $recordClass, string $idAttribute, string $elementClass): array
+    {
+        $records = (new \craft\db\Query())
+            ->select(['id', 'elementId' => $idAttribute, 'siteId'])
+            ->from($recordClass::tableName())
+            ->where(['id' => array_values(array_unique($positions))])
+            ->all();
+        if (!$records) {
+            return [];
+        }
+
+        // One element query per site, not per chunk.
+        $elementIdsBySite = [];
+        $recordToElement = [];
+        foreach ($records as $record) {
+            $elementIdsBySite[(int)$record['siteId']][] = (int)$record['elementId'];
+            $recordToElement[(int)$record['id']] = [(int)$record['elementId'], (int)$record['siteId']];
+        }
+
+        $urlByElement = [];
+        foreach ($elementIdsBySite as $siteId => $elementIds) {
+            // Default status only: a page taken down since it was indexed should
+            // not be handed to a visitor as a link.
+            foreach ($elementClass::find()->id($elementIds)->siteId($siteId)->all() as $element) {
+                $url = $element->getUrl();
+                if ($url) {
+                    $urlByElement[$element->id . ':' . $siteId] = $url;
+                }
+            }
+        }
+
+        $urls = [];
+        foreach ($positions as $position => $recordId) {
+            [$elementId, $siteId] = $recordToElement[$recordId] ?? [null, null];
+            $url = $urlByElement[$elementId . ':' . $siteId] ?? null;
+            if ($url) {
+                $urls[$position] = $url;
+            }
+        }
+        return $urls;
+    }
+
+    /**
+     * @param array<int, int> $positions chunk position => training URL record id
+     * @return array<int, string>
+     */
+    private function trainedUrls(array $positions): array
+    {
+        $byId = (new \craft\db\Query())
+            ->select(['id', 'url'])
+            ->from(\cstudiossro\craftcschatbot\records\TrainingUrlRecord::tableName())
+            ->where(['id' => array_values(array_unique($positions))])
+            ->indexBy('id')
+            ->column();
+
+        $urls = [];
+        foreach ($positions as $position => $recordId) {
+            $url = $byId[$recordId] ?? null;
+            if ($url) {
+                $urls[$position] = (string)$url;
+            }
+        }
+        return $urls;
     }
 
     /**
@@ -547,7 +629,7 @@ class Chat extends Component
      * @param array<int, array<string, mixed>> $messages
      * @param array<int, array<string, mixed>> $tools
      */
-    private function complete(array $messages, array $tools): string
+    private function complete(array $messages, array $tools, bool $isCpUser = false): string
     {
         $plugin = Plugin::getInstance();
         if (empty($tools)) {
@@ -567,7 +649,7 @@ class Chat extends Component
                 $fn = (string)($call['function']['name'] ?? '');
                 $argsRaw = $call['function']['arguments'] ?? '{}';
                 $args = json_decode(is_string($argsRaw) ? $argsRaw : '{}', true);
-                $result = $caps->run($fn, is_array($args) ? $args : []);
+                $result = $caps->run($fn, is_array($args) ? $args : [], $isCpUser);
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => (string)($call['id'] ?? ''),
