@@ -184,17 +184,43 @@ class VectorSearch extends Component
     }
 
     /**
-     * Lowercase, Unicode-aware word tokenizer. Language-agnostic, no stemming or
-     * stopword list — keeps names/numbers intact. Single-character tokens dropped
-     * as noise.
+     * Lowercase, diacritic-folded, Unicode-aware word tokenizer.
+     * Language-agnostic, no stemming or stopword list — keeps names and numbers
+     * intact. Single-character tokens dropped as noise.
+     *
+     * Folding accents is what makes the lexical half work outside English:
+     * visitors type "Kosice", "Prerov", "Dusseldorf" on keyboards that make the
+     * accented form awkward, while the content is spelled "Košice", "Přerov",
+     * "Düsseldorf". Without folding those never match and BM25 quietly
+     * contributes nothing on exactly the queries it exists to rescue.
      *
      * @return string[]
      */
     private function tokenize(string $text): array
     {
-        $text = mb_strtolower($text, 'UTF-8');
+        $text = self::foldDiacritics(mb_strtolower($text, 'UTF-8'));
         $parts = preg_split('/[^\p{L}\p{N}]+/u', $text) ?: [];
         return array_values(array_filter($parts, fn($t) => mb_strlen($t) >= 2));
+    }
+
+    /**
+     * Strip combining accents so "košický" and "kosicky" tokenize identically.
+     */
+    private static function foldDiacritics(string $text): string
+    {
+        if (!preg_match('/[^\x00-\x7F]/', $text)) {
+            return $text;
+        }
+        if (class_exists(\Normalizer::class)) {
+            $decomposed = \Normalizer::normalize($text, \Normalizer::FORM_D);
+            if (is_string($decomposed)) {
+                // Drop the combining marks left behind by decomposition. Scripts
+                // that don't decompose (Greek, Cyrillic, CJK) pass through as-is,
+                // which is correct — they are matched on their own letters.
+                return (string)preg_replace('/\p{Mn}+/u', '', $decomposed);
+            }
+        }
+        return \craft\helpers\StringHelper::toAscii($text);
     }
 
     private function norm(array $v): float

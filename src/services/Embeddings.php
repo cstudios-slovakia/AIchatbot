@@ -258,8 +258,30 @@ class Embeddings extends Component
     }
 
     /**
-     * Remove irrelevant/boilerplate lines and normalize whitespace so noise
-     * (cookie banners, nav menus, repeated chrome, control chars) does not
+     * Lines that are pure UI chrome rather than content.
+     *
+     * Every pattern is anchored to the whole line on purpose. Boilerplate is a
+     * *shape* ("Back to top" standing alone), not a topic: a sentence that
+     * mentions cookies, consent or a copyright is content, and on a privacy or
+     * terms page it is the only content there is. Matching such words as
+     * substrings deletes precisely the pages visitors ask about most, so keep
+     * this list structural and never add a bare content word to it.
+     */
+    private const BOILERPLATE_LINES = [
+        '/^skip to (main )?content$/iu',
+        '/^toggle (navigation|menu)$/iu',
+        '/^(back|scroll|return) to top$/iu',
+        '/^share (this|on .{1,30})$/iu',
+        '/^subscribe( to our newsletter)?$/iu',
+        '/^all rights reserved\.?$/iu',
+        // Copyright notices: "©"/"(c)" opens a line only in a footer credit.
+        '/^(©|\(c\))\s*\S/iu',
+        '/^copyright\b.*\b\d{4}\b/iu',
+    ];
+
+    /**
+     * Remove boilerplate lines and normalize whitespace so page chrome
+     * (nav menus, footer credits, repeated headers, control chars) does not
      * degrade retrieval quality.
      */
     private function denoise(string $text): string
@@ -269,10 +291,6 @@ class Embeddings extends Component
         $text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00A0}]/u', ' ', $text) ?? $text;
         $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text) ?? $text;
 
-        // Line-level cleanup: drop obvious boilerplate and collapse repeats.
-        $noise = '/(cookie|cookies|consent|gdpr|privacy preferences|skip to (main )?content|'
-            . 'toggle navigation|back to top|share this|subscribe to our newsletter|'
-            . 'all rights reserved|©|\ball rights\b)/iu';
         $lines = explode("\n", $text);
         $out = [];
         $prev = null;
@@ -285,7 +303,7 @@ class Embeddings extends Component
                 $prev = '';
                 continue;
             }
-            if (preg_match($noise, $trimmed)) {
+            if ($this->isBoilerplateLine($trimmed)) {
                 continue;
             }
             // Drop consecutive duplicate lines (repeated nav/header/footer chrome).
@@ -299,5 +317,15 @@ class Embeddings extends Component
         $text = implode("\n", $out);
         $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
         return trim($text);
+    }
+
+    private function isBoilerplateLine(string $line): bool
+    {
+        foreach (self::BOILERPLATE_LINES as $pattern) {
+            if (preg_match($pattern, $line)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
