@@ -11,6 +11,7 @@ use craft\helpers\StringHelper;
 use craft\web\Controller;
 use craft\web\UploadedFile;
 use cstudiossro\craftcschatbot\helpers\CraftCompat;
+use cstudiossro\craftcschatbot\helpers\DocumentText;
 use cstudiossro\craftcschatbot\jobs\CrawlSitemapJob;
 use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
@@ -320,10 +321,12 @@ class TrainingController extends Controller
         if (!$upload) {
             return $this->asJson(['success' => false, 'error' => 'No file uploaded']);
         }
-        $allowed = ['txt', 'md'];
         $ext = strtolower($upload->getExtension());
-        if (!in_array($ext, $allowed, true)) {
-            return $this->asJson(['success' => false, 'error' => 'Only .txt and .md files allowed']);
+        if (!DocumentText::isSupported($ext)) {
+            return $this->asJson([
+                'success' => false,
+                'error' => 'Supported file types: .' . implode(', .', DocumentText::SUPPORTED),
+            ]);
         }
         if ($upload->size > 5 * 1024 * 1024) {
             return $this->asJson(['success' => false, 'error' => 'File exceeds 5 MB']);

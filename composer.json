@@ -27,7 +27,8 @@
   ],
   "require": {
     "php": ">=8.0.2",
-    "craftcms/cms": "^4.5 || ^5"
+    "craftcms/cms": "^4.5 || ^5",
+    "smalot/pdfparser": "^2.7"
   },
   "require-dev": {
     "craftcms/ecs": "dev-main",

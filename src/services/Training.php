@@ -620,10 +620,7 @@ class Training extends Component
         $rec->errorMessage = null;
         $rec->save(false);
         try {
-            if (!is_file($absolutePath)) {
-                throw new RuntimeException('File missing: ' . $absolutePath);
-            }
-            $raw = file_get_contents($absolutePath) ?: '';
+            $raw = \cstudiossro\craftcschatbot\helpers\DocumentText::extract($absolutePath);
             $count = Plugin::getInstance()->embeddings->reindexSource('file', (int)$rec->id, $raw, [
                 'siteId' => $rec->siteId ? (int)$rec->siteId : null,
                 'language' => $this->siteLanguage($rec->siteId ? (int)$rec->siteId : null),

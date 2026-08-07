@@ -15,10 +15,10 @@
 
 {% block content %}
   <div id="chatbot-drop" style="border:2px dashed #c9d3dc;border-radius:8px;padding:24px;text-align:center;margin-bottom:16px;background:#fafbfc;">
-    <p><strong>Drop .txt or .md files here</strong> or
+    <p><strong>Drop .txt, .md, .pdf or .docx files here</strong> or
       <button class="btn submit" id="chatbot-file-pick">Browse</button></p>
-    <p class="light" style="font-size:12px;">Max 5 MB each</p>
-    <input type="file" id="chatbot-file-input" accept=".txt,.md" multiple style="display:none;">
+    <p class="light" style="font-size:12px;">Max 5 MB each. Scanned PDFs need OCR first — there is no text in them to read.</p>
+    <input type="file" id="chatbot-file-input" accept=".txt,.md,.pdf,.docx" multiple style="display:none;">
     {% if sites|length > 1 %}
       <div style="margin-top:10px;">
         <label>Applies to
