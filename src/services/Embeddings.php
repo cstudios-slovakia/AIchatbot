@@ -26,18 +26,18 @@ class Embeddings extends Component
      */
     public function reindexSource(string $sourceType, int $sourceId, string $text, array $meta = []): int
     {
-        $this->deleteChunks($sourceType, $sourceId);
-
         $settings = Plugin::getInstance()->getSettings();
         $this->chunkSize = max(300, (int)($settings->chunkSize ?: 1200));
         $this->chunkOverlap = max(0, min((int)($settings->chunkOverlap ?: 150), (int)floor($this->chunkSize / 2)));
 
         $text = $this->normalize($text);
         if ($text === '') {
+            $this->deleteChunks($sourceType, $sourceId);
             return 0;
         }
         $pieces = $this->chunk($text);
         if (empty($pieces)) {
+            $this->deleteChunks($sourceType, $sourceId);
             return 0;
         }
 
@@ -60,21 +60,33 @@ class Embeddings extends Component
             $contents[] = $prefix . $p['content'];
         }
 
+        // Embed before touching what is already indexed. Replacing a source used
+        // to start by deleting its chunks, so an embedding failure — a rate
+        // limit, a network blip — left the source with nothing at all and the
+        // assistant silently lost that content until someone retrained it.
         $vectors = Plugin::getInstance()->openAi->embed($contents);
 
-        foreach ($pieces as $i => $p) {
-            $content = $contents[$i];
-            $rec = new ChunkRecord();
-            $rec->sourceType = $sourceType;
-            $rec->sourceId = $sourceId;
-            $rec->siteId = $siteId;
-            $rec->language = $language;
-            $rec->position = $i;
-            $rec->section = ($p['section'] ?? null) !== null ? mb_substr((string)$p['section'], 0, 500) : null;
-            $rec->content = $content;
-            $rec->embedding = isset($vectors[$i]) ? json_encode($vectors[$i]) : null;
-            $rec->tokens = (int)ceil(mb_strlen($content) / 4);
-            $rec->save(false);
+        $transaction = Craft::$app->db->beginTransaction();
+        try {
+            $this->deleteChunks($sourceType, $sourceId);
+            foreach ($pieces as $i => $p) {
+                $content = $contents[$i];
+                $rec = new ChunkRecord();
+                $rec->sourceType = $sourceType;
+                $rec->sourceId = $sourceId;
+                $rec->siteId = $siteId;
+                $rec->language = $language;
+                $rec->position = $i;
+                $rec->section = ($p['section'] ?? null) !== null ? mb_substr((string)$p['section'], 0, 500) : null;
+                $rec->content = $content;
+                $rec->embedding = isset($vectors[$i]) ? json_encode($vectors[$i]) : null;
+                $rec->tokens = (int)ceil(mb_strlen($content) / 4);
+                $rec->save(false);
+            }
+            $transaction?->commit();
+        } catch (\Throwable $e) {
+            $transaction?->rollBack();
+            throw $e;
         }
         return count($pieces);
     }

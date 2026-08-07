@@ -36,6 +36,17 @@ class OpenAi extends Component
     }
 
     /**
+     * Inputs per embedding request. The API caps a batch at 2048 inputs and at a
+     * total token count, and a whole document's chunks can exceed either — a
+     * 5 MB upload chunks into thousands of pieces. Batching keeps every request
+     * inside both limits regardless of document size.
+     */
+    private const EMBED_BATCH_SIZE = 96;
+
+    /** Character budget per request, as a second guard on the token limit. */
+    private const EMBED_BATCH_CHARS = 200000;
+
+    /**
      * @param string[] $inputs
      * @return float[][] embedding vectors aligned to inputs
      */
@@ -44,6 +55,48 @@ class OpenAi extends Component
         if (empty($inputs)) {
             return [];
         }
+        $vectors = [];
+        foreach ($this->batchInputs(array_values($inputs)) as $batch) {
+            foreach ($this->embedBatch($batch, $model) as $vector) {
+                $vectors[] = $vector;
+            }
+        }
+        return $vectors;
+    }
+
+    /**
+     * Split inputs into request-sized batches, by count and by total characters.
+     *
+     * @param string[] $inputs
+     * @return array<int, string[]>
+     */
+    private function batchInputs(array $inputs): array
+    {
+        $batches = [];
+        $batch = [];
+        $chars = 0;
+        foreach ($inputs as $input) {
+            $length = strlen($input);
+            if ($batch && (count($batch) >= self::EMBED_BATCH_SIZE || $chars + $length > self::EMBED_BATCH_CHARS)) {
+                $batches[] = $batch;
+                $batch = [];
+                $chars = 0;
+            }
+            $batch[] = $input;
+            $chars += $length;
+        }
+        if ($batch) {
+            $batches[] = $batch;
+        }
+        return $batches;
+    }
+
+    /**
+     * @param string[] $inputs
+     * @return float[][]
+     */
+    private function embedBatch(array $inputs, ?string $model = null): array
+    {
         $settings = Plugin::getInstance()->getSettings();
         $model = $model ?: $settings->embeddingModel;
         $json = [
