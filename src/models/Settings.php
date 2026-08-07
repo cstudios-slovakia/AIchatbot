@@ -47,6 +47,12 @@ class Settings extends Model
     // so 0.65 filtered out almost everything. Keep this low to avoid starving
     // the model of context.
     public float $minSimilarityScore = 0.35;
+    // Also drop chunks scoring far below the best match of the same query, as a
+    // fraction of it (0.7 = keep anything within 30% of the top hit; 0 = off).
+    // Absolute floors need per-site tuning because cosine ranges differ by
+    // embedding model; this one adapts on its own and trims the weak tail that
+    // otherwise pads the context with near-misses.
+    public float $relativeScoreFloor = 0.7;
 
     // Retrieval (RAG) tuning. Each flag gates a retrieval improvement and can be
     // switched off to fall back to the original cosine-only behaviour.
@@ -197,6 +203,7 @@ class Settings extends Model
             [['historyMessages'], 'integer', 'min' => 2, 'max' => 40],
             [['logRetentionDays'], 'integer', 'min' => 0],
             [['minSimilarityScore'], 'number', 'min' => 0, 'max' => 1],
+            [['relativeScoreFloor'], 'number', 'min' => 0, 'max' => 1],
             [['rrfK'], 'integer', 'min' => 1],
             [['retrievalCandidatePool'], 'integer', 'min' => 5, 'max' => 100],
             [['rerankMode'], 'in', 'range' => ['off', 'mmr', 'llm']],

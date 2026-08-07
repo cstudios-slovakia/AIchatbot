@@ -176,7 +176,7 @@ class Chat extends Component
 
         // Turn the (possibly elliptical) latest message into a standalone
         // retrieval query and decide whether this turn needs retrieval at all.
-        [$retrievalQuery, $needsRetrieval] = $this->buildRetrievalQuery($history, $question);
+        [$retrievalQuery, $needsRetrieval, $outOfScope] = $this->buildRetrievalQuery($history, $question);
         $guarded = !$needsRetrieval;
 
         $hits = [];
@@ -193,13 +193,22 @@ class Chat extends Component
             $candidates = $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors, $siteId);
             $hits = $this->rerank($candidates, $retrievalQuery);
 
-            $usableHits = array_filter($hits, fn($h) => $h['score'] >= $settings->minSimilarityScore);
-            $confidence = !empty($hits) ? (float)$hits[0]['score'] : 0.0;
+            // Rows come back in fused rank order, so the best cosine isn't
+            // necessarily first — take the maximum for both the confidence
+            // signal and the relative floor.
+            $confidence = !empty($hits) ? max(array_map(fn($h) => (float)$h['score'], $hits)) : 0.0;
+            $floor = (float)$settings->minSimilarityScore;
+            if ($settings->relativeScoreFloor > 0) {
+                $floor = max($floor, $confidence * (float)$settings->relativeScoreFloor);
+            }
+            $usableHits = array_filter($hits, fn($h) => $h['score'] >= $floor);
         }
 
         $contextBlocks = [];
         $allowedUrls = [];
-        foreach ($usableHits as $i => $h) {
+        // array_filter preserved the original keys; renumber so the citation
+        // markers the model sees are contiguous.
+        foreach (array_values($usableHits) as $i => $h) {
             $url = $this->resolveSourceUrl($h['sourceType'], (int)$h['sourceId']);
             if ($url) {
                 $allowedUrls[$this->normalizeUrl($url)] = true;
@@ -229,9 +238,30 @@ class Chat extends Component
             }
         }
 
-        $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](url)`, using the exact `URL:` value given for the relevant context block below. Never invent, guess, or use placeholder URLs — only link to a page when its real URL is present in the context. The UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph.";
+        // Language. Without this the model follows whichever language dominates
+        // the prompt — the site's own content and its opening greeting — and
+        // answers an English visitor in the site's language.
+        $siteLanguage = $site->language ?? Craft::$app->language;
+        $systemPrompt .= "\n\n# Language\nAlways reply in the same language the visitor wrote their latest message in, even when the context passages, this prompt and the rest of the conversation are in another language. Translate what you find in the context rather than quoting it in its original language — except for names, addresses, product names and other proper nouns, which stay as written. If the visitor's language is genuinely unclear, use `{$siteLanguage}`.";
+
+        // Retrieval returns the nearest passages, not necessarily relevant ones.
+        // Told nothing, the model treats everything it was handed as material it
+        // ought to use, and pads answers with whatever came back.
+        $systemPrompt .= "\n\n# Using the context\nThe context below was selected by similarity search, so some passages will have nothing to do with the question. Answer only from the passages that genuinely address it and ignore the rest — never list or mention unrelated items to fill out an answer. If none of the passages answer the question, say you don't have that information instead of offering the nearest thing you were given.";
+
+        $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](url)`, using the exact `URL:` value given for the relevant context block below. Never invent, guess, or use placeholder URLs — only link to a page when its real URL is present in the context. The UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph. Never print a bare URL or path as plain text: either write it as a Markdown link or leave it out.";
+        // Starter prompts double as the only machine-readable statement of what
+        // this assistant is for. Without them a turn that retrieves nothing —
+        // a greeting, an off-topic opener — leaves the model to invent a menu of
+        // services the site may not offer.
+        $canHelpWith = $settings->getSuggestionsForSite($siteUid);
+        if (!empty($canHelpWith)) {
+            $systemPrompt .= "\n\n# What visitors ask you\nThese are the questions this assistant is set up to answer. Treat them as the shape of your job: when you have to describe what you can help with, describe these, and never advertise a service the site has not shown you evidence of.\n- "
+                . implode("\n- ", array_map(fn($s) => trim((string)$s), $canHelpWith));
+        }
+
         if ($settings->humanHandoffEnabled) {
-            $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";
+            $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation — in particular, never offer a human for a request that falls outside what this assistant is for, because a person cannot help with those either. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";
         }
         // Skills (tool-calling). Respect per-skill availability: 'admins' skills
         // are exposed only to logged-in CP users so they can be tested live.
@@ -336,6 +366,12 @@ class Chat extends Component
         }
         if ($hasHandoffToken) {
             $offerHuman = true;
+        }
+        // A request the assistant should not serve at all is not one a colleague
+        // can serve either — routing it to the live-chat queue only wastes an
+        // agent's time. The guard excludes plain "I want to speak to someone".
+        if ($outOfScope) {
+            $offerHuman = false;
         }
         // Nothing to offer if both human handoff and contact capture are off.
         if (!$settings->humanHandoffEnabled && !$settings->contactCaptureEnabled) {
@@ -620,7 +656,7 @@ class Chat extends Component
      * breaks.
      *
      * @param array<int, array{role:string, content:string}> $history
-     * @return array{0:string, 1:bool} [standaloneQuery, needsRetrieval]
+     * @return array{0:string, 1:bool, 2:bool} [standaloneQuery, needsRetrieval, outOfScope]
      */
     private function buildRetrievalQuery(array $history, string $question): array
     {
@@ -629,9 +665,9 @@ class Chat extends Component
         // Cheap heuristic guard for pure smalltalk (works without any LLM call).
         $smalltalk = $settings->retrievalGuardEnabled && $this->looksLikeSmalltalk($question);
 
-        // First turn or rewrite disabled: nothing to resolve against.
-        if (empty($history) || !$settings->queryRewriteEnabled) {
-            return [$question, !$smalltalk];
+        // Nothing to ask the model for: no rewriting wanted and no guard to run.
+        if (!$settings->queryRewriteEnabled && !$settings->retrievalGuardEnabled) {
+            return [$question, true, false];
         }
 
         try {
@@ -643,9 +679,18 @@ class Chat extends Component
             $sys = "You rewrite a chat user's latest message into a standalone search query "
                 . "for a knowledge base. Resolve pronouns and ellipsis using the conversation. "
                 . "Keep it concise and in the user's language. Also decide whether answering needs "
-                . "a knowledge-base lookup at all — greetings, thanks and pure chit-chat do not. "
-                . 'Respond with ONLY compact JSON: {"query": string, "needs_retrieval": boolean}.';
-            $usr = "Conversation so far:\n" . trim($convo) . "\n\nLatest user message: " . $question;
+                . "a knowledge-base lookup at all — greetings, thanks, pure chit-chat and requests "
+                . "that have nothing to do with a website's own content (writing code, general "
+                . "trivia, homework) do not. Finally, set out_of_scope when the message asks for "
+                . "something a website assistant should not do at all — but never for a message "
+                . "that simply asks to speak to a person. "
+                . 'Respond with ONLY compact JSON: '
+                . '{"query": string, "needs_retrieval": boolean, "out_of_scope": boolean}.';
+            // The conversation may be empty — this runs on the first turn too,
+            // which is exactly where an off-topic opener arrives and where
+            // skipping the check used to pull a full context set for nothing.
+            $usr = ($convo !== '' ? "Conversation so far:\n" . trim($convo) . "\n\n" : '')
+                . 'Latest user message: ' . $question;
             $msg = Plugin::getInstance()->openAi->chatRaw(
                 [
                     ['role' => 'system', 'content' => $sys],
@@ -655,18 +700,19 @@ class Chat extends Component
             );
             $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
             if (is_array($data)) {
-                $q = trim((string)($data['query'] ?? ''));
+                $q = $settings->queryRewriteEnabled ? trim((string)($data['query'] ?? '')) : '';
                 $q = $q !== '' ? $q : $question;
                 $needs = !array_key_exists('needs_retrieval', $data) || (bool)$data['needs_retrieval'];
+                $outOfScope = !empty($data['out_of_scope']);
                 if ($settings->retrievalGuardEnabled) {
-                    return [$q, $needs];
+                    return [$q, $needs, $outOfScope];
                 }
-                return [$q, true];
+                return [$q, true, $outOfScope];
             }
         } catch (\Throwable) {
             // fall through to the safe default
         }
-        return [$question, !$smalltalk];
+        return [$question, !$smalltalk, false];
     }
 
     /**

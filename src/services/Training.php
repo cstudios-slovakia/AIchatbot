@@ -122,11 +122,7 @@ class Training extends Component
         if (!empty($el->title)) {
             $header['Title'] = (string)$el->title;
         }
-        try {
-            $header['URL'] = $el->getUrl();
-        } catch (Throwable) {
-            // element type or site without URLs
-        }
+        $header['URL'] = $this->absoluteUrl($el);
         foreach ($extraHeader as $label => $value) {
             $header[$label] = $value;
         }
@@ -151,6 +147,36 @@ class Training extends Component
         }
 
         return Plugin::getInstance()->embeddings->normalize(implode("\n\n", $parts));
+    }
+
+    /**
+     * An element's public URL, but only when it is genuinely absolute.
+     *
+     * Craft's default site baseUrl is the `@web` alias, which resolves from the
+     * current request — and indexing runs in the queue, normally started from
+     * cron, where there is no request and `@web` resolves to nothing. Left
+     * alone that writes a root-relative path into the index, which the model
+     * later hands to the visitor as a broken link. A missing URL is recoverable
+     * (retrieval resolves one at answer time); a wrong one is not.
+     */
+    private function absoluteUrl(\craft\base\Element $el): ?string
+    {
+        try {
+            $url = (string)$el->getUrl();
+        } catch (Throwable) {
+            return null; // element type or site without URLs
+        }
+        if (!preg_match('#^https?://#i', $url)) {
+            if ($url !== '') {
+                Craft::warning(
+                    "Skipping non-absolute URL '{$url}' for element {$el->id} — set an absolute site baseUrl "
+                    . 'so indexed content carries real links.',
+                    __METHOD__,
+                );
+            }
+            return null;
+        }
+        return $url;
     }
 
     /**

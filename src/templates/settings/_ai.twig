@@ -119,6 +119,18 @@
   size: 6,
 }) }}
 
+{{ forms.textField({
+  label: 'Relative Score Floor',
+  instructions: 'Also drop chunks scoring far below the best match for the same question, as a fraction of it. 0.7 keeps anything within 30% of the top hit; 0 turns it off. Unlike the absolute floor above, this needs no per-site tuning.',
+  name: 'settings[relativeScoreFloor]',
+  value: settings.relativeScoreFloor,
+  type: 'number',
+  step: '0.05',
+  min: 0,
+  max: 1,
+  size: 6,
+}) }}
+
 <hr>
 <h2>Retrieval (RAG)</h2>
 <p class="light">These improve how relevant context is found. Turn any of them off to fall back to the original cosine-only retrieval. No retraining is required.</p>
