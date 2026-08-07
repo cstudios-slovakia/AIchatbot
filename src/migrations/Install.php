@@ -50,6 +50,8 @@ class Install extends Migration
 
         $this->createTable('{{%chatbot_training_files}}', [
             'id' => $this->primaryKey(),
+            // null = all sites
+            'siteId' => $this->integer()->null(),
             'filename' => $this->string(255)->notNull(),
             'originalName' => $this->string(255)->notNull(),
             'size' => $this->integer()->notNull()->defaultValue(0),
@@ -64,6 +66,8 @@ class Install extends Migration
 
         $this->createTable('{{%chatbot_training_urls}}', [
             'id' => $this->primaryKey(),
+            // null = all sites
+            'siteId' => $this->integer()->null(),
             'url' => $this->string(2048)->notNull(),
             'source' => $this->string(20)->notNull()->defaultValue('manual'),
             'status' => $this->string(20)->notNull()->defaultValue('pending'),
@@ -77,6 +81,10 @@ class Install extends Migration
 
         $this->createTable('{{%chatbot_training_qa}}', [
             'id' => $this->primaryKey(),
+            // null = all sites
+            'siteId' => $this->integer()->null(),
+            // Embed a translated copy per site instead of one shared copy.
+            'translate' => $this->boolean()->notNull()->defaultValue(false),
             'question' => $this->text()->notNull(),
             'answer' => $this->text()->notNull(),
             'source' => $this->string(20)->notNull()->defaultValue('manual'),
@@ -139,6 +147,9 @@ class Install extends Migration
             'position' => $this->integer()->notNull()->defaultValue(0),
             'section' => $this->string(500)->null(),
             'content' => $this->mediumText()->notNull(),
+            // Packed little-endian float32; 'embedding' held JSON before and is
+            // still read so chunks indexed by older versions keep working.
+            'embeddingBlob' => $this->binary()->null(),
             'embedding' => $this->longText(),
             'tokens' => $this->integer()->notNull()->defaultValue(0),
             'dateCreated' => $this->dateTime()->notNull(),
@@ -179,6 +190,11 @@ class Install extends Migration
             'sessionId' => $this->integer()->notNull(),
             'role' => $this->string(10)->notNull(), // user|bot|admin|system
             'content' => $this->mediumText()->notNull(),
+            // The standalone query retrieval actually searched for, and how many
+            // chunks cleared the threshold. null chunks = retrieval was skipped.
+            'retrievalQuery' => $this->string(500)->null(),
+            'contextChunks' => $this->integer()->null(),
+            'gapResolvedAt' => $this->dateTime()->null(),
             'confidence' => $this->decimal(5, 4),
             'responseTime' => $this->decimal(8, 3),
             'rating' => $this->integer(), // null|1|-1

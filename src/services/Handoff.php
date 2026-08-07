@@ -121,6 +121,11 @@ class Handoff extends Component
         $session->messageCount = (int)$session->messageCount + 1;
         $session->adminLastReadAt = Db::prepareDateForDb(new DateTime());
         $session->save(false);
+
+        // If the handoff later ends, the bot picks the conversation back up and
+        // needs to know what the agent already said. With transcript logging off
+        // the model reads history from the cache, so put it there too.
+        Plugin::getInstance()->chat->rememberForContext($session, 'admin', $text);
         return $msg;
     }
 

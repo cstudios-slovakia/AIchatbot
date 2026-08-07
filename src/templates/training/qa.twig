@@ -8,6 +8,7 @@
   files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
   urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
   qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
+  gaps:    { label: 'Gaps',          url: cpUrl('interactive-ai-assistant/training/gaps') },
   plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
 } %}
 {% set selectedTab = 'qa' %}
@@ -25,18 +26,57 @@
       <div class="heading"><label>Answer</label></div>
       <div class="input"><textarea class="text fullwidth" name="answer" rows="4" required></textarea></div>
     </div>
+    {% if sites|length > 1 %}
+      <div class="field">
+        <div class="heading"><label>Applies to</label></div>
+        <div class="instructions"><p>Leave on all sites unless the answer is only true for one of them.</p></div>
+        <div class="input">
+          <div class="select">
+            <select name="siteId" id="qa-site">
+              <option value="0">All sites</option>
+              {% for site in sites %}
+                <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="field" id="qa-translate-field">
+        <div class="input">
+          <label><input type="checkbox" name="translate" value="1" checked> Index a translated copy for each site</label>
+        </div>
+        <div class="instructions"><p>Write the pair once. It gets embedded per site in that site's language, so a visitor asking in their own language still matches it. Turn this off to index your wording as-is for every site.</p></div>
+      </div>
+      <script>
+        (function () {
+          var site = document.getElementById('qa-site');
+          var translate = document.getElementById('qa-translate-field');
+          var sync = function () { translate.style.display = site.value === '0' ? '' : 'none'; };
+          site.addEventListener('change', sync);
+          sync();
+        })();
+      </script>
+    {% endif %}
     <button type="submit" class="btn submit">Save Q&amp;A</button>
   </form>
 
   <h2>Pairs</h2>
   {% if rows|length %}
     <table class="data fullwidth">
-      <thead><tr><th>Question</th><th>Answer</th><th>Source</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>Question</th><th>Answer</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Source</th><th>Active</th><th></th></tr></thead>
       <tbody>
+        {% set siteNames = {} %}
+        {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
         {% for r in rows %}
           <tr>
             <td>{{ r.question|slice(0, 120) }}</td>
             <td>{{ r.answer|slice(0, 200) }}</td>
+            {% if sites|length > 1 %}
+              <td>
+                {% if r.siteId %}{{ siteNames[r.siteId] ?? 'Site #' ~ r.siteId }}
+                {% else %}All sites{{ r.translate ? ' (translated)' }}{% endif %}
+              </td>
+            {% endif %}
             <td><span class="status-pill status-{{ r.source }}">{{ r.source }}</span></td>
             <td>
               <button class="btn small js-toggle" data-id="{{ r.id }}">{{ r.active ? 'On' : 'Off' }}</button>

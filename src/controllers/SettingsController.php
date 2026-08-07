@@ -4,6 +4,7 @@ namespace cstudiossro\craftcschatbot\controllers;
 
 use Craft;
 use craft\web\Controller;
+use cstudiossro\craftcschatbot\helpers\CraftCompat;
 use cstudiossro\craftcschatbot\Plugin;
 use yii\web\Response;
 
@@ -25,7 +26,7 @@ class SettingsController extends Controller
         return $this->renderTemplate('interactive-ai-assistant/settings/_index', [
             'plugin' => $plugin,
             'settings' => $plugin->getSettings(),
-            'sections' => Craft::$app->entries->getAllSections(),
+            'sections' => CraftCompat::getAllSections(),
             'categoryGroups' => Craft::$app->categories->getAllGroups(),
             'globalSets' => Craft::$app->globals->getAllSets(),
             'capabilities' => Plugin::getInstance()->capabilities->all(),
@@ -89,7 +90,7 @@ class SettingsController extends Controller
             return $this->renderTemplate('interactive-ai-assistant/settings/_index', [
                 'plugin' => $plugin,
                 'settings' => $settings,
-                'sections' => Craft::$app->entries->getAllSections(),
+                'sections' => CraftCompat::getAllSections(),
                 'categoryGroups' => Craft::$app->categories->getAllGroups(),
                 'globalSets' => Craft::$app->globals->getAllSets(),
             'capabilities' => Plugin::getInstance()->capabilities->all(),

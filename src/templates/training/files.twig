@@ -8,27 +8,45 @@
   files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
   urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
   qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
+  gaps:    { label: 'Gaps',          url: cpUrl('interactive-ai-assistant/training/gaps') },
   plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
 } %}
 {% set selectedTab = 'files' %}
 
 {% block content %}
   <div id="chatbot-drop" style="border:2px dashed #c9d3dc;border-radius:8px;padding:24px;text-align:center;margin-bottom:16px;background:#fafbfc;">
-    <p><strong>Drop .txt or .md files here</strong> or
+    <p><strong>Drop .txt, .md, .pdf or .docx files here</strong> or
       <button class="btn submit" id="chatbot-file-pick">Browse</button></p>
-    <p class="light" style="font-size:12px;">Max 5 MB each</p>
-    <input type="file" id="chatbot-file-input" accept=".txt,.md" multiple style="display:none;">
+    <p class="light" style="font-size:12px;">Max 5 MB each. Scanned PDFs need OCR first — there is no text in them to read.</p>
+    <input type="file" id="chatbot-file-input" accept=".txt,.md,.pdf,.docx" multiple style="display:none;">
+    {% if sites|length > 1 %}
+      <div style="margin-top:10px;">
+        <label>Applies to
+          <span class="select">
+            <select id="chatbot-file-site">
+              <option value="0">All sites</option>
+              {% for site in sites %}
+                <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+              {% endfor %}
+            </select>
+          </span>
+        </label>
+      </div>
+    {% endif %}
     <div id="chatbot-upload-status" style="margin-top:8px;color:#596673;"></div>
   </div>
 
   <h2>Files</h2>
   {% if rows|length %}
     <table class="data fullwidth">
-      <thead><tr><th>Name</th><th>Status</th><th>Chunks</th><th>Size</th><th>Last indexed</th><th></th></tr></thead>
+      {% set siteNames = {} %}
+      {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
+      <thead><tr><th>Name</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Status</th><th>Chunks</th><th>Size</th><th>Last indexed</th><th></th></tr></thead>
       <tbody>
         {% for r in rows %}
           <tr>
             <td>{{ r.originalName }}</td>
+            {% if sites|length > 1 %}<td>{{ r.siteId ? (siteNames[r.siteId] ?? 'Site #' ~ r.siteId) : 'All sites' }}</td>{% endif %}
             <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
             <td>{{ r.chunkCount }}</td>
             <td>{{ (r.size / 1024)|number_format(1) }} KB</td>
@@ -68,6 +86,8 @@
           var data = new FormData();
           data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
           data.append('file', f);
+          var siteSelect = document.getElementById('chatbot-file-site');
+          data.append('siteId', siteSelect ? siteSelect.value : 0);
           fetch(Craft.getActionUrl('interactive-ai-assistant/training/upload-file'), {method:'POST', body:data, credentials:'same-origin'})
             .then(function(r){return r.json();})
             .then(function(j){

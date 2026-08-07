@@ -8,6 +8,7 @@
   files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
   urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
   qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
+  gaps:    { label: 'Gaps',          url: cpUrl('interactive-ai-assistant/training/gaps') },
   plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
 } %}
 {% set selectedTab = 'urls' %}
@@ -19,7 +20,23 @@
       {{ actionInput('interactive-ai-assistant/training/import-sitemap') }}
       <h2>Sitemap import</h2>
       <input type="url" name="sitemap" class="text fullwidth" placeholder="https://example.com/sitemap.xml" required>
+      {% if sites|length > 1 %}
+        <div class="field" style="margin-top:8px;">
+          <div class="heading"><label>Applies to</label></div>
+          <div class="input">
+            <div class="select">
+              <select name="siteId">
+                <option value="0">All sites</option>
+                {% for site in sites %}
+                  <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+      {% endif %}
       <button type="submit" class="btn submit" style="margin-top:8px;">Import sitemap</button>
+      <p class="light" style="font-size:12px;margin-top:6px;">Up to 500 URLs per import. Each one is fetched and embedded.</p>
     </form>
 
     <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
@@ -27,6 +44,21 @@
       {{ actionInput('interactive-ai-assistant/training/add-urls') }}
       <h2>Manual URLs</h2>
       <textarea name="urls" class="text fullwidth" rows="5" placeholder="One URL per line"></textarea>
+      {% if sites|length > 1 %}
+        <div class="field" style="margin-top:8px;">
+          <div class="heading"><label>Applies to</label></div>
+          <div class="input">
+            <div class="select">
+              <select name="siteId">
+                <option value="0">All sites</option>
+                {% for site in sites %}
+                  <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+      {% endif %}
       <button type="submit" class="btn submit" style="margin-top:8px;">Add URLs</button>
     </form>
   </div>
@@ -40,11 +72,14 @@
   <h2>URLs</h2>
   {% if rows|length %}
     <table class="data fullwidth">
-      <thead><tr><th>URL</th><th>Source</th><th>Status</th><th>Chunks</th><th>Last</th><th></th></tr></thead>
+      {% set siteNames = {} %}
+      {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
+      <thead><tr><th>URL</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Source</th><th>Status</th><th>Chunks</th><th>Last</th><th></th></tr></thead>
       <tbody>
         {% for r in rows %}
           <tr>
             <td><a href="{{ url('interactive-ai-assistant/training/url-chunks/' ~ r.id) }}">{{ r.url }}</a></td>
+            {% if sites|length > 1 %}<td>{{ r.siteId ? (siteNames[r.siteId] ?? 'Site #' ~ r.siteId) : 'All sites' }}</td>{% endif %}
             <td>{{ r.source }}</td>
             <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
             <td>{{ r.chunkCount }}</td>

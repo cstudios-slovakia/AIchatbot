@@ -10,6 +10,8 @@ use craft\helpers\FileHelper;
 use craft\helpers\StringHelper;
 use craft\web\Controller;
 use craft\web\UploadedFile;
+use cstudiossro\craftcschatbot\helpers\CraftCompat;
+use cstudiossro\craftcschatbot\helpers\DocumentText;
 use cstudiossro\craftcschatbot\jobs\CrawlSitemapJob;
 use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
@@ -52,7 +54,7 @@ class TrainingController extends Controller
                 $entryTitles[(int)$e->id] = $e->title;
             }
         }
-        $sections = Craft::$app->entries->getAllSections();
+        $sections = CraftCompat::getAllSections();
         $settings = Plugin::getInstance()->getSettings();
         return $this->renderTemplate('interactive-ai-assistant/training/entries', [
             'rows' => $rows,
@@ -72,7 +74,7 @@ class TrainingController extends Controller
         }
         $sectionIds = [];
         foreach ($sectionUids as $uid) {
-            $s = Craft::$app->entries->getSectionByUid($uid);
+            $s = CraftCompat::getSectionByUid($uid);
             if ($s) {
                 $sectionIds[] = $s->id;
             }
@@ -162,7 +164,7 @@ class TrainingController extends Controller
         }
         $groupIds = [];
         foreach ($groupUids as $uid) {
-            $g = Craft::$app->categories->getGroupByUid($uid);
+            $g = CraftCompat::getCategoryGroupByUid($uid);
             if ($g) {
                 $groupIds[] = $g->id;
             }
@@ -252,7 +254,7 @@ class TrainingController extends Controller
         }
         $queued = 0;
         foreach ($setUids as $uid) {
-            $s = Craft::$app->globals->getSetByUid($uid);
+            $s = CraftCompat::getGlobalSetByUid($uid);
             if ($s) {
                 Craft::$app->queue->push(new IndexGlobalSetJob(['globalSetId' => (int)$s->id, 'siteId' => (int)$s->siteId]));
                 $queued++;
@@ -308,6 +310,7 @@ class TrainingController extends Controller
         $rows = TrainingFileRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/files', [
             'rows' => $rows,
+            'sites' => Craft::$app->sites->getAllSites(),
         ]);
     }
 
@@ -318,10 +321,12 @@ class TrainingController extends Controller
         if (!$upload) {
             return $this->asJson(['success' => false, 'error' => 'No file uploaded']);
         }
-        $allowed = ['txt', 'md'];
         $ext = strtolower($upload->getExtension());
-        if (!in_array($ext, $allowed, true)) {
-            return $this->asJson(['success' => false, 'error' => 'Only .txt and .md files allowed']);
+        if (!DocumentText::isSupported($ext)) {
+            return $this->asJson([
+                'success' => false,
+                'error' => 'Supported file types: .' . implode(', .', DocumentText::SUPPORTED),
+            ]);
         }
         if ($upload->size > 5 * 1024 * 1024) {
             return $this->asJson(['success' => false, 'error' => 'File exceeds 5 MB']);
@@ -332,7 +337,9 @@ class TrainingController extends Controller
         $path = $dir . DIRECTORY_SEPARATOR . $filename;
         $upload->saveAs($path);
 
+        $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
         $rec = new TrainingFileRecord();
+        $rec->siteId = $siteId > 0 ? $siteId : null;
         $rec->filename = $filename;
         $rec->originalName = $upload->name;
         $rec->size = $upload->size;
@@ -375,6 +382,7 @@ class TrainingController extends Controller
         $rows = TrainingUrlRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/urls', [
             'rows' => $rows,
+            'sites' => Craft::$app->sites->getAllSites(),
         ]);
     }
 
@@ -382,6 +390,7 @@ class TrainingController extends Controller
     {
         $this->requirePostRequest();
         $raw = (string)Craft::$app->request->getBodyParam('urls', '');
+        $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
         $urls = array_filter(array_map('trim', preg_split('/\r?\n/', $raw) ?: []));
         $added = 0;
         foreach ($urls as $u) {
@@ -394,6 +403,7 @@ class TrainingController extends Controller
             }
             $rec = new TrainingUrlRecord();
             $rec->url = $u;
+            $rec->siteId = $siteId > 0 ? $siteId : null;
             $rec->source = 'manual';
             $rec->status = 'pending';
             $rec->save(false);
@@ -413,7 +423,12 @@ class TrainingController extends Controller
             Craft::$app->session->setError('Invalid sitemap URL.');
             return $this->redirectToPostedUrl();
         }
-        Craft::$app->queue->push(new CrawlSitemapJob(['sitemapUrl' => $url, 'autoIndex' => true]));
+        $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
+        Craft::$app->queue->push(new CrawlSitemapJob([
+            'sitemapUrl' => $url,
+            'autoIndex' => true,
+            'siteId' => $siteId > 0 ? $siteId : null,
+        ]));
         Craft::$app->session->setNotice('Sitemap import queued.');
         return $this->redirectToPostedUrl();
     }
@@ -575,6 +590,7 @@ class TrainingController extends Controller
         $rows = TrainingQaRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/qa', [
             'rows' => $rows,
+            'sites' => Craft::$app->sites->getAllSites(),
         ]);
     }
 
@@ -593,6 +609,12 @@ class TrainingController extends Controller
             $rec->source = 'manual';
         }
         $rec->active = (bool)$req->getBodyParam('active', true);
+        // 0 (or absent) means every site — the default, and the only meaningful
+        // value on a single-site install.
+        $siteId = (int)$req->getBodyParam('siteId', 0);
+        $rec->siteId = $siteId > 0 ? $siteId : null;
+        // Translating only makes sense for a pair shared across sites.
+        $rec->translate = $rec->siteId === null && (bool)$req->getBodyParam('translate', false);
         if (!$rec->save()) {
             Craft::$app->session->setError('Could not save Q&A.');
             return $this->redirectToPostedUrl();

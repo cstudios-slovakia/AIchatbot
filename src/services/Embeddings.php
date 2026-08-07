@@ -3,6 +3,7 @@
 namespace cstudiossro\craftcschatbot\services;
 
 use Craft;
+use cstudiossro\craftcschatbot\helpers\Vector;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\ChunkRecord;
 use yii\base\Component;
@@ -26,57 +27,95 @@ class Embeddings extends Component
      */
     public function reindexSource(string $sourceType, int $sourceId, string $text, array $meta = []): int
     {
-        $this->deleteChunks($sourceType, $sourceId);
+        return $this->reindexSourceVariants($sourceType, $sourceId, [['text' => $text] + $meta]);
+    }
 
+    /**
+     * Replace a source's chunks with the chunks of several site-scoped variants
+     * of the same source.
+     *
+     * One authored Q&A can be indexed once per site in that site's language:
+     * a Hungarian visitor asks in Hungarian, and an embedding of the Slovak
+     * original matches that poorly however good the answer is. Each variant is
+     * chunked separately but they are embedded in one batched call and swapped
+     * in together, so a partial failure cannot leave a source half-indexed.
+     *
+     * @param array<int, array{text:string, siteId?:?int, language?:?string, title?:?string}> $variants
+     * @return int total chunk count
+     */
+    public function reindexSourceVariants(string $sourceType, int $sourceId, array $variants): int
+    {
         $settings = Plugin::getInstance()->getSettings();
         $this->chunkSize = max(300, (int)($settings->chunkSize ?: 1200));
         $this->chunkOverlap = max(0, min((int)($settings->chunkOverlap ?: 150), (int)floor($this->chunkSize / 2)));
-
-        $text = $this->normalize($text);
-        if ($text === '') {
-            return 0;
-        }
-        $pieces = $this->chunk($text);
-        if (empty($pieces)) {
-            return 0;
-        }
-
-        $title = trim((string)($meta['title'] ?? ''));
         $usePrefix = (bool)$settings->contextualPrefixEnabled;
-        $siteId = array_key_exists('siteId', $meta) && $meta['siteId'] !== null ? (int)$meta['siteId'] : null;
-        $language = isset($meta['language']) && $meta['language'] !== '' ? (string)$meta['language'] : null;
 
-        // Build stored content — prepend a breadcrumb so both the embedding and
-        // the generator see what document/section each chunk belongs to.
+        // Flatten every variant's chunks into one list so a single embedding
+        // pass covers them all.
+        $rows = [];
         $contents = [];
-        foreach ($pieces as $p) {
-            $prefix = '';
-            if ($usePrefix) {
-                $crumb = array_values(array_filter([$title, $p['section'] ?? null], fn($s) => (string)$s !== ''));
-                if (!empty($crumb)) {
-                    $prefix = implode(' > ', $crumb) . "\n\n";
-                }
+        foreach ($variants as $variant) {
+            $text = $this->normalize((string)($variant['text'] ?? ''));
+            if ($text === '') {
+                continue;
             }
-            $contents[] = $prefix . $p['content'];
+            $pieces = $this->chunk($text);
+            $title = trim((string)($variant['title'] ?? ''));
+            $siteId = isset($variant['siteId']) && $variant['siteId'] !== null ? (int)$variant['siteId'] : null;
+            $language = isset($variant['language']) && $variant['language'] !== '' ? (string)$variant['language'] : null;
+
+            foreach ($pieces as $position => $piece) {
+                $prefix = '';
+                if ($usePrefix) {
+                    $crumb = array_values(array_filter([$title, $piece['section'] ?? null], fn($s) => (string)$s !== ''));
+                    if (!empty($crumb)) {
+                        $prefix = implode(' > ', $crumb) . "\n\n";
+                    }
+                }
+                $contents[] = $prefix . $piece['content'];
+                $rows[] = [
+                    'siteId' => $siteId,
+                    'language' => $language,
+                    'position' => $position,
+                    'section' => ($piece['section'] ?? null) !== null ? mb_substr((string)$piece['section'], 0, 500) : null,
+                ];
+            }
         }
 
+        if (empty($rows)) {
+            $this->deleteChunks($sourceType, $sourceId);
+            return 0;
+        }
+
+        // Embed before touching what is already indexed. Replacing a source used
+        // to start by deleting its chunks, so an embedding failure — a rate
+        // limit, a network blip — left the source with nothing at all and the
+        // assistant silently lost that content until someone retrained it.
         $vectors = Plugin::getInstance()->openAi->embed($contents);
 
-        foreach ($pieces as $i => $p) {
-            $content = $contents[$i];
-            $rec = new ChunkRecord();
-            $rec->sourceType = $sourceType;
-            $rec->sourceId = $sourceId;
-            $rec->siteId = $siteId;
-            $rec->language = $language;
-            $rec->position = $i;
-            $rec->section = ($p['section'] ?? null) !== null ? mb_substr((string)$p['section'], 0, 500) : null;
-            $rec->content = $content;
-            $rec->embedding = isset($vectors[$i]) ? json_encode($vectors[$i]) : null;
-            $rec->tokens = (int)ceil(mb_strlen($content) / 4);
-            $rec->save(false);
+        $transaction = Craft::$app->db->beginTransaction();
+        try {
+            $this->deleteChunks($sourceType, $sourceId);
+            foreach ($rows as $i => $row) {
+                $content = $contents[$i];
+                $rec = new ChunkRecord();
+                $rec->sourceType = $sourceType;
+                $rec->sourceId = $sourceId;
+                $rec->siteId = $row['siteId'];
+                $rec->language = $row['language'];
+                $rec->position = $row['position'];
+                $rec->section = $row['section'];
+                $rec->content = $content;
+                $rec->embeddingBlob = isset($vectors[$i]) ? Vector::pack($vectors[$i]) : null;
+                $rec->tokens = (int)ceil(mb_strlen($content) / 4);
+                $rec->save(false);
+            }
+            $transaction?->commit();
+        } catch (\Throwable $e) {
+            $transaction?->rollBack();
+            throw $e;
         }
-        return count($pieces);
+        return count($rows);
     }
 
     public function deleteChunks(string $sourceType, int $sourceId): void
@@ -258,8 +297,30 @@ class Embeddings extends Component
     }
 
     /**
-     * Remove irrelevant/boilerplate lines and normalize whitespace so noise
-     * (cookie banners, nav menus, repeated chrome, control chars) does not
+     * Lines that are pure UI chrome rather than content.
+     *
+     * Every pattern is anchored to the whole line on purpose. Boilerplate is a
+     * *shape* ("Back to top" standing alone), not a topic: a sentence that
+     * mentions cookies, consent or a copyright is content, and on a privacy or
+     * terms page it is the only content there is. Matching such words as
+     * substrings deletes precisely the pages visitors ask about most, so keep
+     * this list structural and never add a bare content word to it.
+     */
+    private const BOILERPLATE_LINES = [
+        '/^skip to (main )?content$/iu',
+        '/^toggle (navigation|menu)$/iu',
+        '/^(back|scroll|return) to top$/iu',
+        '/^share (this|on .{1,30})$/iu',
+        '/^subscribe( to our newsletter)?$/iu',
+        '/^all rights reserved\.?$/iu',
+        // Copyright notices: "©"/"(c)" opens a line only in a footer credit.
+        '/^(©|\(c\))\s*\S/iu',
+        '/^copyright\b.*\b\d{4}\b/iu',
+    ];
+
+    /**
+     * Remove boilerplate lines and normalize whitespace so page chrome
+     * (nav menus, footer credits, repeated headers, control chars) does not
      * degrade retrieval quality.
      */
     private function denoise(string $text): string
@@ -269,10 +330,6 @@ class Embeddings extends Component
         $text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00A0}]/u', ' ', $text) ?? $text;
         $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text) ?? $text;
 
-        // Line-level cleanup: drop obvious boilerplate and collapse repeats.
-        $noise = '/(cookie|cookies|consent|gdpr|privacy preferences|skip to (main )?content|'
-            . 'toggle navigation|back to top|share this|subscribe to our newsletter|'
-            . 'all rights reserved|©|\ball rights\b)/iu';
         $lines = explode("\n", $text);
         $out = [];
         $prev = null;
@@ -285,7 +342,7 @@ class Embeddings extends Component
                 $prev = '';
                 continue;
             }
-            if (preg_match($noise, $trimmed)) {
+            if ($this->isBoilerplateLine($trimmed)) {
                 continue;
             }
             // Drop consecutive duplicate lines (repeated nav/header/footer chrome).
@@ -299,5 +356,15 @@ class Embeddings extends Component
         $text = implode("\n", $out);
         $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
         return trim($text);
+    }
+
+    private function isBoilerplateLine(string $line): bool
+    {
+        foreach (self::BOILERPLATE_LINES as $pattern) {
+            if (preg_match($pattern, $line)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

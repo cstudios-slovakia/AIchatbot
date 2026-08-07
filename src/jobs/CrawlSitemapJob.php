@@ -11,15 +11,21 @@ class CrawlSitemapJob extends BaseJob
 {
     public string $sitemapUrl;
     public bool $autoIndex = true;
+    /** Site the discovered URLs belong to; null = all sites. */
+    public ?int $siteId = null;
 
     public function execute($queue): void
     {
         $plugin = Plugin::getInstance();
-        $urls = $plugin->training->importSitemap($this->sitemapUrl);
+        $urls = $plugin->training->importSitemap($this->sitemapUrl, $this->siteId);
         if (!$this->autoIndex) {
             return;
         }
-        $pending = TrainingUrlRecord::find()->where(['status' => 'pending'])->all();
+        // Only the URLs this import just discovered — another pending URL may be
+        // waiting for a different sitemap, or for a person who added it by hand.
+        $pending = $urls
+            ? TrainingUrlRecord::find()->where(['status' => 'pending', 'url' => $urls])->all()
+            : [];
         $total = count($pending);
         $i = 0;
         foreach ($pending as $rec) {

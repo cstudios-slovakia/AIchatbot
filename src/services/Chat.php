@@ -44,12 +44,18 @@ class Chat extends Component
                 return $session;
             }
         }
+        // Console/queue contexts have no client request — a chat can legitimately
+        // be driven from the CLI (evaluation runs, replaying a conversation), so
+        // read request details defensively instead of assuming a web request.
+        $request = Craft::$app->getRequest();
+        $isWeb = $request instanceof \craft\web\Request;
+
         $session = new ChatSessionRecord();
         $session->sessionToken = StringHelper::randomString(48);
         // IP always stored — needed for bans even if logging disabled
-        $session->ip = Craft::$app->getRequest()->getUserIP();
+        $session->ip = $isWeb ? $request->getUserIP() : null;
         if ($settings->loggingEnabled) {
-            $ua = Craft::$app->getRequest()->getUserAgent();
+            $ua = $isWeb ? $request->getUserAgent() : null;
             $session->userAgent = $ua ? substr($ua, 0, 512) : null;
             $session->pageUrl = $pageUrl;
         }
@@ -60,24 +66,32 @@ class Chat extends Component
     /**
      * @return array<string, mixed>
      */
-    public function ask(string $question, ?string $sessionToken = null, ?string $pageUrl = null): array
+    /**
+     * @param callable(string):void|null $onDelta called with each fragment of the
+     *        reply as the model produces it, for callers that stream to the visitor
+     * @return array<string, mixed>
+     */
+    public function ask(string $question, ?string $sessionToken = null, ?string $pageUrl = null, ?callable $onDelta = null): array
     {
-        $settings = Plugin::getInstance()->getSettings();
-        $plugin = Plugin::getInstance();
         $session = $this->getOrCreateSession($sessionToken, $pageUrl);
 
-        // Throttle bot mode: if previous message in this session is a user message without a bot reply yet,
-        // reject this incoming one. Skip the check for handoff sessions where humans are slow on purpose.
+        // Throttle bot mode: if the previous message in this session is a user
+        // message without a bot reply yet, that turn is still in flight — reject
+        // this incoming one. Only while it *could* still be in flight, though: a
+        // turn that died (API timeout, fatal) leaves the same orphan row behind
+        // forever, and an unbounded check would lock the visitor out of their own
+        // conversation permanently. Skip entirely for handoff sessions, where
+        // humans are slow on purpose.
         if (!in_array($session->handoffStatus, ['requested', 'active'], true)) {
-            $lastRole = (new \craft\db\Query())
-                ->select(['role'])
+            $last = (new \craft\db\Query())
+                ->select(['role', 'dateCreated'])
                 ->from('{{%chatbot_messages}}')
                 ->where(['sessionId' => $session->id])
-                ->andWhere(['in', 'role', ['user', 'bot']])
+                ->andWhere(['in', 'role', ['user', 'bot', 'admin']])
                 ->orderBy(['id' => SORT_DESC])
                 ->limit(1)
-                ->scalar();
-            if ($lastRole === 'user') {
+                ->one();
+            if (($last['role'] ?? null) === 'user' && $this->turnStillInFlight($last['dateCreated'] ?? null)) {
                 throw new \RuntimeException('Please wait for the previous reply.');
             }
         }
@@ -96,11 +110,68 @@ class Chat extends Component
             ];
         }
 
+        try {
+            return $this->generateReply($session, $question, $onDelta);
+        } catch (\Throwable $e) {
+            // The turn died before any reply was logged (API timeout, fatal in a
+            // tool call). Roll the user message back so the in-flight check above
+            // can't lock the visitor out of their own conversation for good.
+            $this->discardFailedTurn($session, $userMsg);
+            throw $e;
+        }
+    }
+
+    /**
+     * How long a logged user message with no reply yet is treated as a turn
+     * still being generated. Past this the turn is assumed dead and a new
+     * message is let through. Covers the OpenAI client timeout plus a bounded
+     * tool-calling loop.
+     */
+    private const IN_FLIGHT_SECONDS = 180;
+
+    private function turnStillInFlight(?string $utcDateCreated): bool
+    {
+        if (!$utcDateCreated) {
+            return false;
+        }
+        $ts = strtotime($utcDateCreated . ' UTC');
+        if ($ts === false) {
+            return false;
+        }
+        return (time() - $ts) < self::IN_FLIGHT_SECONDS;
+    }
+
+    /**
+     * Undo the bookkeeping of a turn that threw before logging a reply, so the
+     * conversation is left exactly as it was before the failed attempt.
+     */
+    private function discardFailedTurn(ChatSessionRecord $session, ChatMessageRecord $userMsg): void
+    {
+        try {
+            $userMsg->delete();
+            $session->messageCount = max(0, (int)$session->messageCount - 1);
+            $session->save(false);
+        } catch (\Throwable $e) {
+            Craft::error('Could not roll back failed turn: ' . $e->getMessage(), __METHOD__);
+        }
+    }
+
+    /**
+     * Retrieve context, generate the reply, log it and assemble the widget
+     * payload. Split out of {@see self::ask()} so a turn that throws part-way
+     * has exactly one rollback point.
+     *
+     * @return array<string, mixed>
+     */
+    private function generateReply(ChatSessionRecord $session, string $question, ?callable $onDelta = null): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $plugin = Plugin::getInstance();
         $start = microtime(true);
 
         // Conversation so far (excludes the user message we just logged). Reused
         // for both building the retrieval query and generation further down.
-        $history = $this->recentHistory($session->id, 6);
+        $history = $this->recentHistory($session->id, max(2, (int)$settings->historyMessages));
 
         // Resolve the site up front so retrieval can filter to it (a Slovak-site
         // query shouldn't pull English chunks). Reused for the system prompt below.
@@ -110,7 +181,7 @@ class Chat extends Component
 
         // Turn the (possibly elliptical) latest message into a standalone
         // retrieval query and decide whether this turn needs retrieval at all.
-        [$retrievalQuery, $needsRetrieval] = $this->buildRetrievalQuery($history, $question);
+        [$retrievalQuery, $needsRetrieval, $outOfScope] = $this->buildRetrievalQuery($history, $question);
         $guarded = !$needsRetrieval;
 
         $hits = [];
@@ -127,14 +198,25 @@ class Chat extends Component
             $candidates = $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors, $siteId);
             $hits = $this->rerank($candidates, $retrievalQuery);
 
-            $usableHits = array_filter($hits, fn($h) => $h['score'] >= $settings->minSimilarityScore);
-            $confidence = !empty($hits) ? (float)$hits[0]['score'] : 0.0;
+            // Rows come back in fused rank order, so the best cosine isn't
+            // necessarily first — take the maximum for both the confidence
+            // signal and the relative floor.
+            $confidence = !empty($hits) ? max(array_map(fn($h) => (float)$h['score'], $hits)) : 0.0;
+            $floor = (float)$settings->minSimilarityScore;
+            if ($settings->relativeScoreFloor > 0) {
+                $floor = max($floor, $confidence * (float)$settings->relativeScoreFloor);
+            }
+            $usableHits = array_filter($hits, fn($h) => $h['score'] >= $floor);
         }
 
         $contextBlocks = [];
         $allowedUrls = [];
+        // array_filter preserved the original keys; renumber so the citation
+        // markers the model sees are contiguous.
+        $usableHits = array_values($usableHits);
+        $sourceUrls = $this->resolveSourceUrls($usableHits);
         foreach ($usableHits as $i => $h) {
-            $url = $this->resolveSourceUrl($h['sourceType'], (int)$h['sourceId']);
+            $url = $sourceUrls[$i] ?? null;
             if ($url) {
                 $allowedUrls[$this->normalizeUrl($url)] = true;
             }
@@ -163,9 +245,30 @@ class Chat extends Component
             }
         }
 
-        $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](url)`, using the exact `URL:` value given for the relevant context block below. Never invent, guess, or use placeholder URLs — only link to a page when its real URL is present in the context. The UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph.";
+        // Language. Without this the model follows whichever language dominates
+        // the prompt — the site's own content and its opening greeting — and
+        // answers an English visitor in the site's language.
+        $siteLanguage = $site->language ?? Craft::$app->language;
+        $systemPrompt .= "\n\n# Language\nAlways reply in the same language the visitor wrote their latest message in, even when the context passages, this prompt and the rest of the conversation are in another language. Translate what you find in the context rather than quoting it in its original language — except for names, addresses, product names and other proper nouns, which stay as written. If the visitor's language is genuinely unclear, use `{$siteLanguage}`.";
+
+        // Retrieval returns the nearest passages, not necessarily relevant ones.
+        // Told nothing, the model treats everything it was handed as material it
+        // ought to use, and pads answers with whatever came back.
+        $systemPrompt .= "\n\n# Using the context\nThe context below was selected by similarity search, so some passages will have nothing to do with the question. Answer only from the passages that genuinely address it and ignore the rest — never list or mention unrelated items to fill out an answer. If none of the passages answer the question, say you don't have that information instead of offering the nearest thing you were given.";
+
+        $systemPrompt .= "\n\n# Output format\nFormat all replies as GitHub-flavored Markdown. Use **bold**, *italic*, `inline code`, fenced code blocks with language tags, bullet/numbered lists (including nested ones), pipe tables when you are comparing two or more things across the same handful of attributes, headings (## or ###), and [links](https://example.com) where they aid clarity. Do not wrap the whole answer in a code block. Keep formatting purposeful — short answers stay short.\n\nWhen you suggest a page from the site for the user to read, put the link on its own line as `[Title](url)`, using the exact `URL:` value given for the relevant context block below. Never invent, guess, or use placeholder URLs — only link to a page when its real URL is present in the context. The UI renders such standalone links as a rich preview card with the page's title, description and image — so place at most one per paragraph. Never print a bare URL or path as plain text: either write it as a Markdown link or leave it out.";
+        // Starter prompts double as the only machine-readable statement of what
+        // this assistant is for. Without them a turn that retrieves nothing —
+        // a greeting, an off-topic opener — leaves the model to invent a menu of
+        // services the site may not offer.
+        $canHelpWith = $settings->getSuggestionsForSite($siteUid);
+        if (!empty($canHelpWith)) {
+            $systemPrompt .= "\n\n# What visitors ask you\nThese are the questions this assistant is set up to answer. Treat them as the shape of your job: when you have to describe what you can help with, describe these, and never advertise a service the site has not shown you evidence of.\n- "
+                . implode("\n- ", array_map(fn($s) => trim((string)$s), $canHelpWith));
+        }
+
         if ($settings->humanHandoffEnabled) {
-            $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";
+            $systemPrompt .= "\n\n# Handoff signal\nWhenever you (a) cannot answer the user's question from the provided context, (b) are uncertain, or (c) the user is explicitly asking for a human, append the exact literal token `[[HANDOFF_OFFER]]` on its own line at the very end of your reply. Do not translate, modify, paraphrase, or comment on this token. Do not output it in any other situation — in particular, never offer a human for a request that falls outside what this assistant is for, because a person cannot help with those either. The UI strips the token and uses it to show a 'Talk to a human' button — language does not matter.";
         }
         // Skills (tool-calling). Respect per-skill availability: 'admins' skills
         // are exposed only to logged-in CP users so they can be tested live.
@@ -215,7 +318,9 @@ class Chat extends Component
             }
         }
         foreach ($history as $h) {
-            $messages[] = ['role' => $h['role'] === 'bot' ? 'assistant' : 'user', 'content' => $h['content']];
+            // A human agent's turn reached the visitor as the assistant speaking.
+            $isAssistant = in_array($h['role'], ['bot', 'admin'], true);
+            $messages[] = ['role' => $isAssistant ? 'assistant' : 'user', 'content' => $h['content']];
         }
         $messages[] = ['role' => 'user', 'content' => $question];
 
@@ -223,7 +328,7 @@ class Chat extends Component
         // Give form capabilities the session they were collected in, so a
         // submission made during the tool loop links back to this chat.
         $plugin->forms->setCurrentSession($session);
-        $reply = $this->complete($messages, $tools);
+        $reply = $this->complete($messages, $tools, $isCpUser, $onDelta);
         $responseTime = round(microtime(true) - $start, 3);
 
         // Sentinel token from the model = language-agnostic "offer human" signal. Strip before showing.
@@ -252,7 +357,12 @@ class Chat extends Component
         $this->trigger(self::EVENT_TRANSFORM_REPLY, $transformEvent);
         $reply = $transformEvent->reply;
 
-        $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime);
+        $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime, [
+            // A guarded turn searched for nothing, which is different from
+            // searching and finding nothing — only the latter is a gap.
+            'query' => $guarded ? '' : $retrievalQuery,
+            'chunks' => $guarded ? null : count($usableHits),
+        ]);
 
         // low-confidence streak tracking → offer help (human handoff and/or contact capture).
         // Guarded chit-chat turns (no retrieval) carry no confidence signal, so they
@@ -270,6 +380,12 @@ class Chat extends Component
         }
         if ($hasHandoffToken) {
             $offerHuman = true;
+        }
+        // A request the assistant should not serve at all is not one a colleague
+        // can serve either — routing it to the live-chat queue only wastes an
+        // agent's time. The guard excludes plain "I want to speak to someone".
+        if ($outOfScope) {
+            $offerHuman = false;
         }
         // Nothing to offer if both human handoff and contact capture are off.
         if (!$settings->humanHandoffEnabled && !$settings->contactCaptureEnabled) {
@@ -394,39 +510,119 @@ class Chat extends Component
     }
 
     /**
-     * Resolve a public URL for a retrieved chunk, keyed by its source.
-     * chunk.sourceId points at the training record id, not the element id.
+     * Public URLs for a set of retrieved chunks, keyed by their position.
+     *
+     * Batched by source kind on purpose: resolving them one at a time ran an
+     * element query per chunk, so raising the context size quietly multiplied
+     * the database work of every single turn.
+     *
+     * @param array<int, array<string, mixed>> $hits
+     * @return array<int, string>
      */
-    private function resolveSourceUrl(string $sourceType, int $sourceId): ?string
+    private function resolveSourceUrls(array $hits): array
     {
-        try {
-            switch ($sourceType) {
-                case 'entry':
-                    $rec = \cstudiossro\craftcschatbot\records\TrainingEntryRecord::findOne($sourceId);
-                    if (!$rec) {
-                        return null;
-                    }
-                    $entry = \craft\elements\Entry::find()
-                        ->id($rec->entryId)->siteId($rec->siteId)->status(null)->one();
-                    return $entry?->getUrl();
-                case 'category':
-                    $rec = \cstudiossro\craftcschatbot\records\TrainingCategoryRecord::findOne($sourceId);
-                    if (!$rec) {
-                        return null;
-                    }
-                    $cat = \craft\elements\Category::find()
-                        ->id($rec->categoryId)->siteId($rec->siteId)->status(null)->one();
-                    return $cat?->getUrl();
-                case 'url':
-                    $rec = \cstudiossro\craftcschatbot\records\TrainingUrlRecord::findOne($sourceId);
-                    return $rec?->url ?: null;
-                default:
-                    // file, global, qa have no public URL
-                    return null;
-            }
-        } catch (\Throwable) {
-            return null;
+        $positionsByType = [];
+        foreach ($hits as $position => $hit) {
+            $positionsByType[(string)$hit['sourceType']][$position] = (int)$hit['sourceId'];
         }
+
+        $urls = [];
+        foreach ($positionsByType as $sourceType => $positions) {
+            try {
+                $resolved = match ($sourceType) {
+                    'entry' => $this->elementUrls(
+                        $positions,
+                        \cstudiossro\craftcschatbot\records\TrainingEntryRecord::class,
+                        'entryId',
+                        \craft\elements\Entry::class,
+                    ),
+                    'category' => $this->elementUrls(
+                        $positions,
+                        \cstudiossro\craftcschatbot\records\TrainingCategoryRecord::class,
+                        'categoryId',
+                        \craft\elements\Category::class,
+                    ),
+                    'url' => $this->trainedUrls($positions),
+                    // file, global and custom sources have no public page
+                    default => [],
+                };
+            } catch (\Throwable) {
+                $resolved = [];
+            }
+            $urls += $resolved;
+        }
+        return $urls;
+    }
+
+    /**
+     * @param array<int, int> $positions chunk position => training record id
+     * @param class-string $recordClass
+     * @param class-string<\craft\base\Element> $elementClass
+     * @return array<int, string>
+     */
+    private function elementUrls(array $positions, string $recordClass, string $idAttribute, string $elementClass): array
+    {
+        $records = (new \craft\db\Query())
+            ->select(['id', 'elementId' => $idAttribute, 'siteId'])
+            ->from($recordClass::tableName())
+            ->where(['id' => array_values(array_unique($positions))])
+            ->all();
+        if (!$records) {
+            return [];
+        }
+
+        // One element query per site, not per chunk.
+        $elementIdsBySite = [];
+        $recordToElement = [];
+        foreach ($records as $record) {
+            $elementIdsBySite[(int)$record['siteId']][] = (int)$record['elementId'];
+            $recordToElement[(int)$record['id']] = [(int)$record['elementId'], (int)$record['siteId']];
+        }
+
+        $urlByElement = [];
+        foreach ($elementIdsBySite as $siteId => $elementIds) {
+            // Default status only: a page taken down since it was indexed should
+            // not be handed to a visitor as a link.
+            foreach ($elementClass::find()->id($elementIds)->siteId($siteId)->all() as $element) {
+                $url = $element->getUrl();
+                if ($url) {
+                    $urlByElement[$element->id . ':' . $siteId] = $url;
+                }
+            }
+        }
+
+        $urls = [];
+        foreach ($positions as $position => $recordId) {
+            [$elementId, $siteId] = $recordToElement[$recordId] ?? [null, null];
+            $url = $urlByElement[$elementId . ':' . $siteId] ?? null;
+            if ($url) {
+                $urls[$position] = $url;
+            }
+        }
+        return $urls;
+    }
+
+    /**
+     * @param array<int, int> $positions chunk position => training URL record id
+     * @return array<int, string>
+     */
+    private function trainedUrls(array $positions): array
+    {
+        $byId = (new \craft\db\Query())
+            ->select(['id', 'url'])
+            ->from(\cstudiossro\craftcschatbot\records\TrainingUrlRecord::tableName())
+            ->where(['id' => array_values(array_unique($positions))])
+            ->indexBy('id')
+            ->column();
+
+        $urls = [];
+        foreach ($positions as $position => $recordId) {
+            $url = $byId[$recordId] ?? null;
+            if ($url) {
+                $urls[$position] = (string)$url;
+            }
+        }
+        return $urls;
     }
 
     /**
@@ -438,16 +634,20 @@ class Chat extends Component
      * @param array<int, array<string, mixed>> $messages
      * @param array<int, array<string, mixed>> $tools
      */
-    private function complete(array $messages, array $tools): string
+    private function complete(array $messages, array $tools, bool $isCpUser = false, ?callable $onDelta = null): string
     {
         $plugin = Plugin::getInstance();
         if (empty($tools)) {
-            return $plugin->openAi->chat($messages);
+            return $onDelta === null
+                ? $plugin->openAi->chat($messages)
+                : (string)($plugin->openAi->chatStream($messages, [], $onDelta)['content'] ?? '');
         }
         $caps = $plugin->capabilities;
         $maxIter = max(1, (int)$plugin->getSettings()->maxToolIterations);
         for ($i = 0; $i < $maxIter; $i++) {
-            $message = $plugin->openAi->chatRaw($messages, ['tools' => $tools]);
+            $message = $onDelta === null
+                ? $plugin->openAi->chatRaw($messages, ['tools' => $tools])
+                : $plugin->openAi->chatStream($messages, ['tools' => $tools], $onDelta);
             $calls = $message['tool_calls'] ?? [];
             if (empty($calls)) {
                 return (string)($message['content'] ?? '');
@@ -458,7 +658,7 @@ class Chat extends Component
                 $fn = (string)($call['function']['name'] ?? '');
                 $argsRaw = $call['function']['arguments'] ?? '{}';
                 $args = json_decode(is_string($argsRaw) ? $argsRaw : '{}', true);
-                $result = $caps->run($fn, is_array($args) ? $args : []);
+                $result = $caps->run($fn, is_array($args) ? $args : [], $isCpUser);
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => (string)($call['id'] ?? ''),
@@ -467,42 +667,110 @@ class Chat extends Component
             }
         }
         // Hit the iteration cap with calls still pending — force a final answer.
-        $message = $plugin->openAi->chatRaw($messages);
+        $message = $onDelta === null
+            ? $plugin->openAi->chatRaw($messages)
+            : $plugin->openAi->chatStream($messages, [], $onDelta);
         return (string)($message['content'] ?? '');
     }
 
-    private function logMessage(ChatSessionRecord $session, string $role, string $content, ?float $confidence, ?float $responseTime): ChatMessageRecord
-    {
+    /**
+     * @param array{query?:string, chunks?:?int} $retrieval what retrieval searched
+     *        for and how many chunks cleared the threshold (chunks null = skipped)
+     */
+    private function logMessage(
+        ChatSessionRecord $session,
+        string $role,
+        string $content,
+        ?float $confidence,
+        ?float $responseTime,
+        array $retrieval = [],
+    ): ChatMessageRecord {
         $rec = new ChatMessageRecord();
         $rec->sessionId = (int)$session->id;
         $rec->role = $role;
         $rec->content = $content;
         $rec->confidence = $confidence;
         $rec->responseTime = $responseTime;
+        if (array_key_exists('query', $retrieval)) {
+            $rec->retrievalQuery = mb_substr((string)$retrieval['query'], 0, 500);
+        }
+        if (array_key_exists('chunks', $retrieval)) {
+            $rec->contextChunks = $retrieval['chunks'];
+        }
         if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
             // still persist minimal so we can rate, but strip content
             $rec->content = $role === 'user' ? '[redacted]' : $content;
+            // The model still needs the real words to follow the conversation.
+            // Keep them out of the transcript the CP shows and out of the
+            // retention window, in a short-lived cache entry instead.
+            $this->pushContextCache((int)$session->id, $role, $content);
         }
         $rec->save(false);
         return $rec;
     }
 
     /**
+     * Where the conversation is kept for the model when transcript logging is
+     * off. Short-lived on purpose: long enough to finish a conversation, not
+     * long enough to be a record of one.
+     */
+    private const CONTEXT_CACHE_TTL = 7200;
+
+    private function contextCacheKey(int $sessionId): string
+    {
+        return 'cs-chatbot:context:' . $sessionId;
+    }
+
+    /**
+     * @param array<int, array{role:string, content:string}> $messages
+     */
+    /**
+     * Record a turn this service did not log itself — a live-chat agent's reply —
+     * so the model still sees it when transcript logging is off and history
+     * therefore comes from the cache rather than the database.
+     */
+    public function rememberForContext(ChatSessionRecord $session, string $role, string $content): void
+    {
+        if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
+            $this->pushContextCache((int)$session->id, $role, $content);
+        }
+    }
+
+    private function pushContextCache(int $sessionId, string $role, string $content): void
+    {
+        $cache = Craft::$app->getCache();
+        $key = $this->contextCacheKey($sessionId);
+        $messages = $cache->get($key);
+        $messages = is_array($messages) ? $messages : [];
+        $messages[] = ['role' => $role, 'content' => $content];
+        // Bounded so a long conversation can't grow one cache entry without limit.
+        $messages = array_slice($messages, -40);
+        $cache->set($key, $messages, self::CONTEXT_CACHE_TTL);
+    }
+
+    /**
+     * The turns before the message currently being answered, oldest first.
+     *
      * @return array<int, array{role:string, content:string}>
      */
     private function recentHistory(int $sessionId, int $limit): array
     {
-        $rows = (new \craft\db\Query())
-            ->select(['role', 'content'])
-            ->from('{{%chatbot_messages}}')
-            ->where(['sessionId' => $sessionId])
-            ->andWhere(['in', 'role', ['user', 'bot']])
-            ->orderBy(['id' => SORT_DESC])
-            ->limit($limit)
-            ->all();
-        // skip the most recent (the user msg we just inserted)
-        array_shift($rows);
-        return array_reverse($rows);
+        if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
+            $cached = Craft::$app->getCache()->get($this->contextCacheKey($sessionId));
+            $messages = is_array($cached) ? $cached : [];
+        } else {
+            $messages = array_reverse((new \craft\db\Query())
+                ->select(['role', 'content'])
+                ->from('{{%chatbot_messages}}')
+                ->where(['sessionId' => $sessionId])
+                ->andWhere(['in', 'role', ['user', 'bot', 'admin']])
+                ->orderBy(['id' => SORT_DESC])
+                ->limit($limit + 1)
+                ->all());
+        }
+        // Drop the trailing message — that's the one we're answering right now.
+        array_pop($messages);
+        return array_slice($messages, -$limit);
     }
 
     /**
@@ -516,7 +784,7 @@ class Chat extends Component
      * breaks.
      *
      * @param array<int, array{role:string, content:string}> $history
-     * @return array{0:string, 1:bool} [standaloneQuery, needsRetrieval]
+     * @return array{0:string, 1:bool, 2:bool} [standaloneQuery, needsRetrieval, outOfScope]
      */
     private function buildRetrievalQuery(array $history, string $question): array
     {
@@ -525,9 +793,9 @@ class Chat extends Component
         // Cheap heuristic guard for pure smalltalk (works without any LLM call).
         $smalltalk = $settings->retrievalGuardEnabled && $this->looksLikeSmalltalk($question);
 
-        // First turn or rewrite disabled: nothing to resolve against.
-        if (empty($history) || !$settings->queryRewriteEnabled) {
-            return [$question, !$smalltalk];
+        // Nothing to ask the model for: no rewriting wanted and no guard to run.
+        if (!$settings->queryRewriteEnabled && !$settings->retrievalGuardEnabled) {
+            return [$question, true, false];
         }
 
         try {
@@ -537,32 +805,45 @@ class Chat extends Component
                 $convo .= $role . ': ' . trim((string)($h['content'] ?? '')) . "\n";
             }
             $sys = "You rewrite a chat user's latest message into a standalone search query "
-                . "for a knowledge base. Resolve pronouns and ellipsis using the conversation. "
-                . "Keep it concise and in the user's language. Also decide whether answering needs "
-                . "a knowledge-base lookup at all — greetings, thanks and pure chit-chat do not. "
-                . 'Respond with ONLY compact JSON: {"query": string, "needs_retrieval": boolean}.';
-            $usr = "Conversation so far:\n" . trim($convo) . "\n\nLatest user message: " . $question;
+                . "for a knowledge base. Resolve pronouns and ellipsis using the conversation, and "
+                . "put inflected words into their dictionary form so they match how the content is "
+                . "written. Stay strictly in the user's own language — never translate, and never "
+                . "swap their vocabulary for synonyms. Restore missing accents where the language "
+                . "requires them. Also decide whether answering needs "
+                . "a knowledge-base lookup at all — greetings, thanks, pure chit-chat and requests "
+                . "that have nothing to do with a website's own content (writing code, general "
+                . "trivia, homework) do not. Finally, set out_of_scope when the message asks for "
+                . "something a website assistant should not do at all — but never for a message "
+                . "that simply asks to speak to a person. "
+                . 'Respond with ONLY compact JSON: '
+                . '{"query": string, "needs_retrieval": boolean, "out_of_scope": boolean}.';
+            // The conversation may be empty — this runs on the first turn too,
+            // which is exactly where an off-topic opener arrives and where
+            // skipping the check used to pull a full context set for nothing.
+            $usr = ($convo !== '' ? "Conversation so far:\n" . trim($convo) . "\n\n" : '')
+                . 'Latest user message: ' . $question;
             $msg = Plugin::getInstance()->openAi->chatRaw(
                 [
                     ['role' => 'system', 'content' => $sys],
                     ['role' => 'user', 'content' => $usr],
                 ],
-                ['model' => 'gpt-4o-mini', 'temperature' => 0.0]
+                ['model' => $settings->helperModel, 'temperature' => 0.0]
             );
             $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
             if (is_array($data)) {
-                $q = trim((string)($data['query'] ?? ''));
+                $q = $settings->queryRewriteEnabled ? trim((string)($data['query'] ?? '')) : '';
                 $q = $q !== '' ? $q : $question;
                 $needs = !array_key_exists('needs_retrieval', $data) || (bool)$data['needs_retrieval'];
+                $outOfScope = !empty($data['out_of_scope']);
                 if ($settings->retrievalGuardEnabled) {
-                    return [$q, $needs];
+                    return [$q, $needs, $outOfScope];
                 }
-                return [$q, true];
+                return [$q, true, $outOfScope];
             }
         } catch (\Throwable) {
             // fall through to the safe default
         }
-        return [$question, !$smalltalk];
+        return [$question, !$smalltalk, false];
     }
 
     /**
@@ -664,7 +945,7 @@ class Chat extends Component
                     ['role' => 'system', 'content' => $sys],
                     ['role' => 'user', 'content' => $usr],
                 ],
-                ['model' => 'gpt-4o-mini', 'temperature' => 0.0]
+                ['model' => $settings->helperModel, 'temperature' => 0.0]
             );
             $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
             $order = is_array($data['order'] ?? null) ? $data['order'] : null;

@@ -42,6 +42,21 @@ class Training extends Component
         $rec->entryId = $entry->id;
         $rec->siteId = $entry->siteId;
         $rec->sectionId = (int)$entry->sectionId;
+        // Only live entries belong in the index. Disabled and expired ones are
+        // content the site has deliberately taken down — answering from them
+        // tells visitors about products that are gone and links them to pages
+        // that 404. Drop whatever was indexed before rather than leaving it.
+        $entryStatus = (string)$entry->getStatus();
+        if ($entryStatus !== Entry::STATUS_LIVE) {
+            Plugin::getInstance()->embeddings->deleteChunks('entry', (int)$rec->id);
+            $rec->chunkCount = 0;
+            $rec->status = 'skipped';
+            $rec->errorMessage = "Not indexed: entry is {$entryStatus}.";
+            $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
+            $rec->save(false);
+            return;
+        }
+
         $rec->status = 'training';
         $rec->errorMessage = null;
         $rec->save(false);
@@ -89,12 +104,157 @@ class Training extends Component
 
     private function extractEntryText(Entry $entry): string
     {
-        $parts = [$entry->title ?? ''];
-        foreach ($entry->getFieldValues() as $handle => $value) {
-            $parts[] = $this->fieldValueToText($value);
+        $section = null;
+        try {
+            $section = $entry->getSection()?->name;
+        } catch (Throwable) {
+            // entry type without a section (Craft 5 nested entries)
         }
-        $text = implode("\n\n", array_filter(array_map('trim', $parts)));
-        return Plugin::getInstance()->embeddings->normalize($text);
+        return $this->buildElementText($entry, [
+            'Section' => $section,
+            'Published' => $entry->postDate?->format('Y-m-d'),
+        ]);
+    }
+
+    /**
+     * Render an element as labelled plain text: a metadata header followed by
+     * one "Field label: value" block per non-empty custom field.
+     *
+     * The labels are the point. Values alone ("Secum Euro / 649 / Košický")
+     * embed and read as noise — nothing says the number is a price or the word
+     * is a region, so the model cannot answer "how much is it?" or "where are
+     * you?" from them. Naming each value costs a few tokens per chunk and makes
+     * the difference between a retrievable fact and a floating string.
+     *
+     * @param array<string, string|null> $extraHeader metadata lines to add after Title/URL
+     */
+    private function buildElementText(\craft\base\Element $el, array $extraHeader = [], string $prefix = ''): string
+    {
+        $header = [];
+        if ($prefix !== '') {
+            $header['Name'] = $prefix;
+        }
+        if (!empty($el->title)) {
+            $header['Title'] = (string)$el->title;
+        }
+        $header['URL'] = $this->absoluteUrl($el);
+        foreach ($extraHeader as $label => $value) {
+            $header[$label] = $value;
+        }
+
+        $parts = [];
+        foreach ($header as $label => $value) {
+            $value = trim((string)$value);
+            if ($value !== '') {
+                $parts[] = $label . ': ' . $value;
+            }
+        }
+        // The header lines belong together as one block; field blocks follow.
+        $parts = $parts ? [implode("\n", $parts)] : [];
+
+        foreach ($this->labelledFieldValues($el) as [$label, $value]) {
+            // Multi-line values (rich text, tables, matrix) start on their own
+            // line so headings and list markers stay at the start of a line and
+            // the chunker can still see them as structure.
+            $parts[] = str_contains($value, "\n")
+                ? $label . ":\n" . $value
+                : $label . ': ' . $value;
+        }
+
+        return Plugin::getInstance()->embeddings->normalize(implode("\n\n", $parts));
+    }
+
+    /**
+     * An element's public URL, but only when it is genuinely absolute.
+     *
+     * Craft's default site baseUrl is the `@web` alias, which resolves from the
+     * current request — and indexing runs in the queue, normally started from
+     * cron, where there is no request and `@web` resolves to nothing. Left
+     * alone that writes a root-relative path into the index, which the model
+     * later hands to the visitor as a broken link. A missing URL is recoverable
+     * (retrieval resolves one at answer time); a wrong one is not.
+     */
+    private function absoluteUrl(\craft\base\Element $el): ?string
+    {
+        try {
+            $url = (string)$el->getUrl();
+        } catch (Throwable) {
+            return null; // element type or site without URLs
+        }
+        if (!preg_match('#^https?://#i', $url)) {
+            if ($url !== '') {
+                Craft::warning(
+                    "Skipping non-absolute URL '{$url}' for element {$el->id} — set an absolute site baseUrl "
+                    . 'so indexed content carries real links.',
+                    __METHOD__,
+                );
+            }
+            return null;
+        }
+        return $url;
+    }
+
+    /**
+     * Each non-empty custom field of an element as [label, text], using the
+     * field's control-panel name and falling back to a humanized handle.
+     *
+     * @return array<int, array{0:string, 1:string}>
+     */
+    private function labelledFieldValues(\craft\base\Element $el): array
+    {
+        $labels = $this->fieldLabels($el);
+        $out = [];
+        foreach ($el->getFieldValues() as $handle => $value) {
+            $text = trim($this->fieldValueToText($value));
+            if ($text === '') {
+                continue;
+            }
+            $out[] = [$labels[$handle] ?? $this->humanizeHandle($handle), $text];
+        }
+        return $out;
+    }
+
+    /**
+     * handle => control-panel field name for an element's layout.
+     *
+     * @return array<string, string>
+     */
+    private function fieldLabels(\craft\base\Element $el): array
+    {
+        $labels = [];
+        try {
+            $layout = $el->getFieldLayout();
+            if (!$layout) {
+                return $labels;
+            }
+            // getCustomFields() is Craft 4.4+/5; getFields() covers older Craft 4.
+            $fields = method_exists($layout, 'getCustomFields')
+                ? $layout->getCustomFields()
+                : $layout->getFields();
+            foreach ($fields as $field) {
+                if (!empty($field->handle)) {
+                    $labels[$field->handle] = (string)($field->name ?: $field->handle);
+                }
+            }
+        } catch (Throwable) {
+            // unreadable layout — fall back to humanized handles
+        }
+        return $labels;
+    }
+
+    /**
+     * True for the filenames cameras and phones generate — "IMG 6159",
+     * "DSC_6370", "PXL 20240101 120000", "20240101 123456".
+     */
+    private function looksLikeCameraFilename(string $name): bool
+    {
+        return (bool)preg_match('/^(img|dsc|dscn|dscf|pxl|gopr|p|photo|foto|image)?[ _-]?\d{3,}[ _-]?\w{0,8}$/i', trim($name));
+    }
+
+    private function humanizeHandle(string $handle): string
+    {
+        $words = preg_replace('/(?<!^)[A-Z]/', ' $0', $handle) ?? $handle;
+        return ucfirst(trim(str_replace(['_', '-'], ' ', $words)));
     }
 
     /**
@@ -163,7 +323,37 @@ class Training extends Component
                 return '';
             }
         }
+        // Data objects contributed by field-type plugins (SEO metadata and
+        // similar). They carry hand-written prose next to machine config, and
+        // that prose is often the best one-line summary of the page — so read
+        // the prose properties and ignore the rest.
+        if (is_object($value)) {
+            return $this->proseProperties($value);
+        }
         return '';
+    }
+
+    /**
+     * Human-written prose exposed by an arbitrary object, by convention over
+     * property names. Returns '' for objects that carry no such text.
+     */
+    private function proseProperties(object $value): string
+    {
+        $parts = [];
+        foreach (['description', 'summary', 'text'] as $property) {
+            try {
+                if (!isset($value->$property)) {
+                    continue;
+                }
+                $text = $value->$property;
+            } catch (Throwable) {
+                continue;
+            }
+            if (is_string($text) && trim($text) !== '') {
+                $parts[] = trim($text);
+            }
+        }
+        return implode("\n", array_unique($parts));
     }
 
     /**
@@ -192,19 +382,32 @@ class Training extends Component
             return is_scalar($el) ? trim((string)$el) : '';
         }
         $parts = [];
-        if (!empty($el->title)) {
+        if ($el instanceof \craft\elements\Asset) {
+            // Alt text is written for humans; an asset title is usually just the
+            // camera's filename ("IMG 6159", "DSC 6370"), which embeds as noise
+            // and pollutes every chunk that relates to an image.
+            $alt = trim((string)($el->alt ?? ''));
+            $title = trim((string)($el->title ?? ''));
+            if ($alt !== '') {
+                $parts[] = $alt;
+            } elseif ($title !== '' && !$this->looksLikeCameraFilename($title)) {
+                $parts[] = $title;
+            }
+        } elseif (!empty($el->title)) {
             $parts[] = (string)$el->title;
         }
-        if ($el instanceof \craft\elements\Asset && !empty($el->alt)) {
-            $parts[] = (string)$el->alt;
-        }
-        if ($depth < 2 && method_exists($el, 'getFieldValues')) {
+        if ($depth < 2 && $el instanceof \craft\base\Element) {
             try {
-                foreach ($el->getFieldValues() as $v) {
-                    $t = $this->fieldValueToText($v, $depth + 1);
-                    if ($t !== '') {
-                        $parts[] = $t;
+                // Label nested values too: a Matrix block's fields are as
+                // meaningless unlabelled as the owner element's are.
+                $labels = $this->fieldLabels($el);
+                foreach ($el->getFieldValues() as $handle => $v) {
+                    $t = trim($this->fieldValueToText($v, $depth + 1));
+                    if ($t === '') {
+                        continue;
                     }
+                    $label = $labels[$handle] ?? $this->humanizeHandle($handle);
+                    $parts[] = str_contains($t, "\n") ? $label . ":\n" . $t : $label . ': ' . $t;
                 }
             } catch (\Throwable) {
                 // ignore unreadable field values
@@ -305,20 +508,24 @@ class Training extends Component
         $rec->delete();
     }
 
+    /**
+     * Labelled plain text for any element — the entry point custom training
+     * sources use for element kinds this plugin doesn't handle natively.
+     */
     public function extractElementText(\craft\base\Element $el, string $prefix = ''): string
     {
-        $parts = [];
-        if ($prefix !== '') {
-            $parts[] = $prefix;
+        if ($el instanceof Entry) {
+            return $this->extractEntryText($el);
         }
-        if (property_exists($el, 'title') && $el->title) {
-            $parts[] = (string)$el->title;
+        $extra = [];
+        if ($el instanceof Category) {
+            try {
+                $extra['Group'] = $el->getGroup()->name ?? null;
+            } catch (Throwable) {
+                // group no longer exists
+            }
         }
-        foreach ($el->getFieldValues() as $value) {
-            $parts[] = $this->fieldValueToText($value);
-        }
-        $text = implode("\n\n", array_filter(array_map('trim', $parts)));
-        return Plugin::getInstance()->embeddings->normalize($text);
+        return $this->buildElementText($el, $extra, $prefix);
     }
 
     // ---------- CUSTOM SOURCES (plugin-contributed) ----------
@@ -413,11 +620,10 @@ class Training extends Component
         $rec->errorMessage = null;
         $rec->save(false);
         try {
-            if (!is_file($absolutePath)) {
-                throw new RuntimeException('File missing: ' . $absolutePath);
-            }
-            $raw = file_get_contents($absolutePath) ?: '';
+            $raw = \cstudiossro\craftcschatbot\helpers\DocumentText::extract($absolutePath);
             $count = Plugin::getInstance()->embeddings->reindexSource('file', (int)$rec->id, $raw, [
+                'siteId' => $rec->siteId ? (int)$rec->siteId : null,
+                'language' => $this->siteLanguage($rec->siteId ? (int)$rec->siteId : null),
                 'title' => (string)($rec->originalName ?: pathinfo((string)$rec->filename, PATHINFO_FILENAME)),
             ]);
             $rec->chunkCount = $count;
@@ -464,6 +670,8 @@ class Training extends Component
                 : (string)$rec->url;
             $text = $this->htmlToText($html);
             $count = Plugin::getInstance()->embeddings->reindexSource('url', (int)$rec->id, $text, [
+                'siteId' => $rec->siteId ? (int)$rec->siteId : null,
+                'language' => $this->siteLanguage($rec->siteId ? (int)$rec->siteId : null),
                 'title' => $pageTitle,
             ]);
             $rec->chunkCount = $count;
@@ -489,12 +697,32 @@ class Training extends Component
     }
 
     /**
-     * @return string[] URLs discovered
+     * Most URLs one sitemap import will take on.
+     *
+     * Every discovered URL becomes an HTTP fetch and an embedding call, so a
+     * large sitemap can spend real money and hammer the target site before
+     * anyone notices. Importing the first slice and saying so is recoverable;
+     * queuing ten thousand crawls from one click is not.
      */
-    public function importSitemap(string $sitemapUrl): array
+    public const SITEMAP_URL_LIMIT = 500;
+
+    /**
+     * @param int|null $siteId site the discovered URLs belong to; null = all sites
+     * @return string[] URLs imported
+     */
+    public function importSitemap(string $sitemapUrl, ?int $siteId = null): array
     {
         $xml = $this->fetch($sitemapUrl);
         $urls = $this->parseSitemap($xml);
+        $discovered = count($urls);
+        $urls = array_slice($urls, 0, self::SITEMAP_URL_LIMIT);
+        if ($discovered > count($urls)) {
+            Craft::warning(
+                "Sitemap {$sitemapUrl} listed {$discovered} URLs; importing the first "
+                . self::SITEMAP_URL_LIMIT . '.',
+                __METHOD__,
+            );
+        }
         foreach ($urls as $u) {
             $existing = TrainingUrlRecord::find()
                 ->where(['url' => $u])
@@ -504,6 +732,7 @@ class Training extends Component
             }
             $rec = new TrainingUrlRecord();
             $rec->url = $u;
+            $rec->siteId = $siteId;
             $rec->source = 'sitemap';
             $rec->status = 'pending';
             $rec->save(false);
@@ -592,12 +821,106 @@ class Training extends Component
             Plugin::getInstance()->embeddings->deleteChunks('qa', (int)$rec->id);
             return;
         }
-        $text = "Q: {$rec->question}\nA: {$rec->answer}";
-        $count = Plugin::getInstance()->embeddings->reindexSource('qa', (int)$rec->id, $text, [
-            'title' => mb_substr((string)$rec->question, 0, 200),
-        ]);
+
+        $question = (string)$rec->question;
+        $answer = (string)$rec->answer;
+        $title = mb_substr($question, 0, 200);
+        $variants = [];
+
+        if ($rec->siteId) {
+            // Pinned to one site.
+            $variants[] = [
+                'text' => "Q: {$question}\nA: {$answer}",
+                'siteId' => (int)$rec->siteId,
+                'language' => $this->siteLanguage((int)$rec->siteId),
+                'title' => $title,
+            ];
+        } elseif ($rec->translate) {
+            // One authored pair, indexed once per site in that site's language.
+            // Retrieval is an embedding match against how the visitor phrased
+            // the question, so a Hungarian visitor needs a Hungarian embedding
+            // however good the Slovak answer is.
+            foreach (Craft::$app->sites->getAllSites() as $site) {
+                $language = (string)$site->language;
+                [$q, $a] = $this->translateQa($question, $answer, $language);
+                $variants[] = [
+                    'text' => "Q: {$q}\nA: {$a}",
+                    'siteId' => (int)$site->id,
+                    'language' => $language,
+                    'title' => mb_substr($q, 0, 200),
+                ];
+            }
+        } else {
+            // Shared across every site, exactly as written.
+            $variants[] = [
+                'text' => "Q: {$question}\nA: {$answer}",
+                'siteId' => null,
+                'language' => null,
+                'title' => $title,
+            ];
+        }
+
+        Plugin::getInstance()->embeddings->reindexSourceVariants('qa', (int)$rec->id, $variants);
         $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
         $rec->save(false);
+    }
+
+    /**
+     * Translate a Q&A pair into $language, cached on the source text so a
+     * retrain does not pay for the same translation twice.
+     *
+     * Falls back to the original on any failure: an untranslated pair still
+     * answers the question, a missing one does not.
+     *
+     * @return array{0:string, 1:string} [question, answer]
+     */
+    private function translateQa(string $question, string $answer, string $language): array
+    {
+        $cache = Craft::$app->getCache();
+        $key = 'cs-chatbot:qa-translation:' . md5($language . "\x00" . $question . "\x00" . $answer);
+        $cached = $cache->get($key);
+        if (is_array($cached) && count($cached) === 2) {
+            return $cached;
+        }
+        try {
+            $settings = Plugin::getInstance()->getSettings();
+            $message = Plugin::getInstance()->openAi->chatRaw(
+                [
+                    [
+                        'role' => 'system',
+                        'content' => "Translate the question and answer into the locale {$language}. "
+                            . 'Keep the meaning exact and the tone natural for a website visitor. '
+                            . 'Leave proper nouns, product names, addresses, phone numbers, prices and URLs as they are. '
+                            . 'Respond with ONLY compact JSON: {"question": string, "answer": string}.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => json_encode(['question' => $question, 'answer' => $answer], JSON_UNESCAPED_UNICODE),
+                    ],
+                ],
+                ['model' => $settings->helperModel, 'temperature' => 0.0],
+            );
+            $data = json_decode($this->stripJsonFence((string)($message['content'] ?? '')), true);
+            $q = trim((string)($data['question'] ?? ''));
+            $a = trim((string)($data['answer'] ?? ''));
+            if ($q !== '' && $a !== '') {
+                $cache->set($key, [$q, $a], 60 * 60 * 24 * 30);
+                return [$q, $a];
+            }
+        } catch (Throwable $e) {
+            Craft::warning("Q&A translation to {$language} failed: " . $e->getMessage(), __METHOD__);
+        }
+        return [$question, $answer];
+    }
+
+    private function stripJsonFence(string $s): string
+    {
+        $s = trim($s);
+        if (str_starts_with($s, '```')) {
+            $s = (string)preg_replace('/^```[a-zA-Z]*\s*/', '', $s);
+            $s = (string)preg_replace('/\s*```$/', '', $s);
+        }
+        return trim($s);
     }
 
     public function removeQa(int $qaId): void
@@ -610,6 +933,191 @@ class Training extends Component
         $rec->delete();
     }
 
+    // ---------- INDEX HEALTH ----------
+
+    /**
+     * What is wrong with the index right now.
+     *
+     * An assistant answers confidently from whatever it was trained on, so the
+     * failure modes that matter are the silent ones: a page edited after it was
+     * indexed, a section nobody ever trained, a source that errored months ago,
+     * a source that indexed to nothing because its text could not be extracted.
+     * None of those announce themselves in a chat transcript.
+     *
+     * @return array{
+     *   stale: array<int, array{id:int, elementId:int, siteId:int, kind:string}>,
+     *   failed: array<int, array{id:int, kind:string, message:string}>,
+     *   blank: array<int, array{id:int, kind:string}>,
+     *   orphaned: array<int, array{id:int, kind:string}>,
+     *   untrainedBySection: array<string, int>,
+     *   totals: array{sources:int, chunks:int}
+     * }
+     */
+    public function indexHealth(): array
+    {
+        $stale = [];
+        $failed = [];
+        $blank = [];
+        $orphaned = [];
+
+        $elementKinds = [
+            'entry' => [TrainingEntryRecord::class, 'entryId'],
+            'category' => [TrainingCategoryRecord::class, 'categoryId'],
+            'global' => [TrainingGlobalSetRecord::class, 'globalSetId'],
+        ];
+        foreach ($elementKinds as $kind => [$recordClass, $idAttribute]) {
+            /** @var class-string<\craft\db\ActiveRecord> $recordClass */
+            $rows = (new \craft\db\Query())
+                ->select([
+                    'id' => 't.id',
+                    'elementId' => "t.{$idAttribute}",
+                    'siteId' => 't.siteId',
+                    'status' => 't.status',
+                    'chunkCount' => 't.chunkCount',
+                    'errorMessage' => 't.errorMessage',
+                    'lastTrainedAt' => 't.lastTrainedAt',
+                    'elementUpdated' => 'e.dateUpdated',
+                    'elementDeleted' => 'e.dateDeleted',
+                ])
+                ->from(['t' => $recordClass::tableName()])
+                ->leftJoin(['e' => \craft\db\Table::ELEMENTS], "e.id = t.{$idAttribute}")
+                ->all();
+
+            foreach ($rows as $row) {
+                $entry = ['id' => (int)$row['id'], 'kind' => $kind];
+                if ($row['elementUpdated'] === null || $row['elementDeleted'] !== null) {
+                    $orphaned[] = $entry;
+                    continue;
+                }
+                if ($row['status'] === 'error') {
+                    $failed[] = $entry + ['message' => (string)($row['errorMessage'] ?? 'unknown error')];
+                    continue;
+                }
+                if ((int)$row['chunkCount'] === 0 && $row['status'] !== 'skipped') {
+                    $blank[] = $entry;
+                    continue;
+                }
+                if ($row['lastTrainedAt'] === null || $row['elementUpdated'] > $row['lastTrainedAt']) {
+                    $stale[] = $entry + [
+                        'elementId' => (int)$row['elementId'],
+                        'siteId' => (int)$row['siteId'],
+                    ];
+                }
+            }
+        }
+
+        // Sources that have no element behind them: only their own status counts.
+        $standaloneKinds = [
+            'file' => TrainingFileRecord::class,
+            'url' => TrainingUrlRecord::class,
+            'source' => TrainingSourceRecord::class,
+        ];
+        foreach ($standaloneKinds as $kind => $recordClass) {
+            /** @var class-string<\craft\db\ActiveRecord> $recordClass */
+            foreach ($recordClass::find()->all() as $rec) {
+                if ($rec->status === 'error') {
+                    $failed[] = ['id' => (int)$rec->id, 'kind' => $kind, 'message' => (string)($rec->errorMessage ?? '')];
+                } elseif ((int)($rec->chunkCount ?? 0) === 0) {
+                    $blank[] = ['id' => (int)$rec->id, 'kind' => $kind];
+                }
+            }
+        }
+
+        return [
+            'stale' => $stale,
+            'failed' => $failed,
+            'blank' => $blank,
+            'orphaned' => $orphaned,
+            'untrainedBySection' => $this->untrainedBySection(),
+            'totals' => [
+                'sources' => count($stale) + count($failed) + count($blank) + count($orphaned),
+                'chunks' => (int)(new \craft\db\Query())->from('{{%chatbot_chunks}}')->count(),
+                // Chunks still holding a JSON embedding from before the packed
+                // format. They work, they just cost five times the memory.
+                'legacyVectors' => (int)(new \craft\db\Query())
+                    ->from('{{%chatbot_chunks}}')
+                    ->where(['embeddingBlob' => null])
+                    ->andWhere(['not', ['embedding' => null]])
+                    ->count(),
+            ],
+        ];
+    }
+
+    /**
+     * Live entries in each section selected for training that have never been
+     * indexed, keyed by section name. A section can be ticked in the settings
+     * and still contain nothing the assistant knows about.
+     *
+     * @return array<string, int>
+     */
+    private function untrainedBySection(): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $trained = (new \craft\db\Query())
+            ->select(['entryId', 'siteId'])
+            ->from('{{%chatbot_training_entries}}')
+            ->all();
+        $known = [];
+        foreach ($trained as $row) {
+            $known[$row['entryId'] . ':' . $row['siteId']] = true;
+        }
+
+        $out = [];
+        foreach ($settings->trainingSections as $uid) {
+            $section = \cstudiossro\craftcschatbot\helpers\CraftCompat::getSectionByUid((string)$uid);
+            if (!$section) {
+                continue;
+            }
+            $missing = 0;
+            foreach (Craft::$app->sites->getAllSites() as $site) {
+                $entries = Entry::find()
+                    ->sectionId($section->id)
+                    ->siteId($site->id)
+                    ->status(Entry::STATUS_LIVE)
+                    ->ids();
+                foreach ($entries as $entryId) {
+                    if (!isset($known[$entryId . ':' . $site->id])) {
+                        $missing++;
+                    }
+                }
+            }
+            if ($missing > 0) {
+                $out[$section->name] = $missing;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Re-queue every source whose content changed after it was last indexed.
+     *
+     * @return int number queued
+     */
+    public function retrainStale(): int
+    {
+        $health = $this->indexHealth();
+        $queue = Craft::$app->queue;
+        $jobs = [
+            'entry' => IndexEntryJob::class,
+            'category' => IndexCategoryJob::class,
+            'global' => IndexGlobalSetJob::class,
+        ];
+        $keys = ['entry' => 'entryId', 'category' => 'categoryId', 'global' => 'globalSetId'];
+        $n = 0;
+        foreach ($health['stale'] as $item) {
+            $jobClass = $jobs[$item['kind']] ?? null;
+            if (!$jobClass) {
+                continue;
+            }
+            $queue->push(new $jobClass([
+                $keys[$item['kind']] => $item['elementId'],
+                'siteId' => $item['siteId'],
+            ]));
+            $n++;
+        }
+        return $n;
+    }
+
     // ---------- RETRAIN ALL ----------
 
     /**
@@ -619,35 +1127,39 @@ class Training extends Component
      * Job-backed sources are queued (processed by the worker); Q&A pairs run
      * inline as they have no dedicated job.
      *
+     * @param string[]|null $types limit to these source kinds (entries, categories,
+     *        globals, files, urls, sources, qa); null retrains everything. Useful
+     *        to re-embed local content without re-crawling remote URLs.
      * @return int number of sources queued/reindexed
      */
-    public function reindexAll(): int
+    public function reindexAll(?array $types = null): int
     {
         $queue = Craft::$app->queue;
         $n = 0;
+        $wants = fn(string $type): bool => $types === null || in_array($type, $types, true);
 
-        foreach (TrainingEntryRecord::find()->all() as $rec) {
+        foreach ($wants('entries') ? TrainingEntryRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexEntryJob(['entryId' => (int)$rec->entryId, 'siteId' => (int)$rec->siteId]));
             $n++;
         }
-        foreach (TrainingCategoryRecord::find()->all() as $rec) {
+        foreach ($wants('categories') ? TrainingCategoryRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexCategoryJob(['categoryId' => (int)$rec->categoryId, 'siteId' => (int)$rec->siteId]));
             $n++;
         }
-        foreach (TrainingGlobalSetRecord::find()->all() as $rec) {
+        foreach ($wants('globals') ? TrainingGlobalSetRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexGlobalSetJob(['globalSetId' => (int)$rec->globalSetId, 'siteId' => (int)$rec->siteId]));
             $n++;
         }
-        foreach (TrainingFileRecord::find()->all() as $rec) {
+        foreach ($wants('files') ? TrainingFileRecord::find()->all() : [] as $rec) {
             $path = Plugin::getInstance()->getUploadPath() . DIRECTORY_SEPARATOR . $rec->filename;
             $queue->push(new IndexFileJob(['fileRecId' => (int)$rec->id, 'absolutePath' => $path]));
             $n++;
         }
-        foreach (TrainingUrlRecord::find()->all() as $rec) {
+        foreach ($wants('urls') ? TrainingUrlRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexUrlJob(['urlRecId' => (int)$rec->id]));
             $n++;
         }
-        foreach (TrainingSourceRecord::find()->all() as $rec) {
+        foreach ($wants('sources') ? TrainingSourceRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexSourceJob([
                 'handle' => (string)$rec->sourceKey,
                 'itemId' => (int)$rec->itemId,
@@ -655,7 +1167,7 @@ class Training extends Component
             ]));
             $n++;
         }
-        foreach (TrainingQaRecord::find()->where(['active' => true])->all() as $rec) {
+        foreach ($wants('qa') ? TrainingQaRecord::find()->where(['active' => true])->all() : [] as $rec) {
             $this->trainQa((int)$rec->id);
             $n++;
         }

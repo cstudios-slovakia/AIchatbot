@@ -76,14 +76,24 @@ class Filter extends Component
         if ($len === 0) return true;
         if ($len < 4) return false; // too short to judge
 
-        // Strip whitespace and punctuation for analysis
-        $letters = preg_replace('/[^\p{L}]+/u', '', $text) ?? '';
-        $letterCount = mb_strlen($letters);
-        if ($letterCount === 0) return true; // pure punctuation/digits
-
         // Skip non-Latin scripts (CJK, Arabic, Hebrew, Cyrillic, etc.)
         if (!preg_match('/^[\p{Latin}\s\p{P}\p{N}]+$/u', $text)) {
             return false;
+        }
+
+        // Product codes, SKUs, model numbers, dimensions and acronyms break every
+        // heuristic below — they are deliberately vowel-poor. Visitors ask about
+        // them constantly ("DSC 6370 SMALL?", "RC2 vs RC3", "90x197 L"), so judge
+        // the prose around them and never the codes themselves.
+        if (!preg_match('/[\p{L}\p{N}]/u', $text)) {
+            return true; // pure punctuation
+        }
+
+        $prose = self::stripCodeTokens($text);
+        $letters = preg_replace('/[^\p{L}]+/u', '', $prose) ?? '';
+        $letterCount = mb_strlen($letters);
+        if ($letterCount === 0) {
+            return false; // nothing but codes and numbers — a lookup, not a keysmash
         }
 
         $lower = mb_strtolower($letters);
@@ -119,6 +129,33 @@ class Filter extends Component
         }
 
         return false;
+    }
+
+    /**
+     * Drop the tokens of a message that are identifiers rather than words, so
+     * only prose is left for the keysmash heuristics to judge.
+     *
+     * Removed: anything containing a digit (SKUs, model numbers, dimensions,
+     * years) and short all-caps runs (RC2, MDF, NBU, ISO, EI45).
+     */
+    private static function stripCodeTokens(string $text): string
+    {
+        $tokens = preg_split('/\s+/u', $text) ?: [];
+        $kept = [];
+        foreach ($tokens as $token) {
+            $bare = preg_replace('/^\p{P}+|\p{P}+$/u', '', $token) ?? $token;
+            if ($bare === '') {
+                continue;
+            }
+            if (preg_match('/\p{N}/u', $bare)) {
+                continue;
+            }
+            if (mb_strlen($bare) <= 5 && $bare === mb_strtoupper($bare, 'UTF-8')) {
+                continue;
+            }
+            $kept[] = $bare;
+        }
+        return implode(' ', $kept);
     }
 
     private function rateLimited(?string $sessionToken, ?string $ip, int $windowSec, int $limit): bool

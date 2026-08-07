@@ -24,6 +24,27 @@
   },
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Stream replies',
+  instructions: 'Show the answer as it is written instead of when it is finished. Turn off if a proxy or CDN in front of the site buffers responses.',
+  name: 'settings[streamingEnabled]',
+  on: settings.streamingEnabled,
+}) }}
+
+{{ forms.selectField({
+  label: 'Helper Model',
+  instructions: 'Used for the internal steps that are not the answer itself — rewriting follow-up questions into search queries, reranking results, and translating Q&A pairs. Keep it cheap; it runs on most turns.',
+  name: 'settings[helperModel]',
+  value: settings.helperModel,
+  options: {
+    'gpt-4o-mini': 'gpt-4o-mini (recommended)',
+    'gpt-4.1-mini': 'gpt-4.1-mini',
+    'gpt-4.1-nano': 'gpt-4.1-nano',
+    'gpt-5-mini': 'gpt-5-mini',
+    'gpt-5-nano': 'gpt-5-nano',
+  },
+}) }}
+
 {{ forms.selectField({
   label: 'Embedding Model',
   instructions: 'Switching this requires full retraining of all content.',
@@ -97,12 +118,35 @@
 }) }}
 
 {{ forms.textField({
+  label: 'Conversation Memory',
+  instructions: 'How many earlier messages are replayed to the model each turn. Lower is cheaper and faster; higher lets it remember what was agreed earlier in a long conversation.',
+  name: 'settings[historyMessages]',
+  value: settings.historyMessages,
+  type: 'number',
+  min: 2,
+  max: 40,
+  size: 6,
+}) }}
+
+{{ forms.textField({
   label: 'Min Similarity Score',
   instructions: '0.00 to 1.00',
   name: 'settings[minSimilarityScore]',
   value: settings.minSimilarityScore,
   type: 'number',
   step: '0.01',
+  min: 0,
+  max: 1,
+  size: 6,
+}) }}
+
+{{ forms.textField({
+  label: 'Relative Score Floor',
+  instructions: 'Also drop chunks scoring far below the best match for the same question, as a fraction of it. 0.7 keeps anything within 30% of the top hit; 0 turns it off. Unlike the absolute floor above, this needs no per-site tuning.',
+  name: 'settings[relativeScoreFloor]',
+  value: settings.relativeScoreFloor,
+  type: 'number',
+  step: '0.05',
   min: 0,
   max: 1,
   size: 6,
