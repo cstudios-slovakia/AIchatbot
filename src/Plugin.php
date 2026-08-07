@@ -31,6 +31,7 @@ use cstudiossro\craftcschatbot\services\Contacts;
 use cstudiossro\craftcschatbot\services\Embeddings;
 use cstudiossro\craftcschatbot\services\Filter;
 use cstudiossro\craftcschatbot\services\Forms;
+use cstudiossro\craftcschatbot\services\Gaps;
 use cstudiossro\craftcschatbot\services\Handoff;
 use cstudiossro\craftcschatbot\services\OpenAi;
 use cstudiossro\craftcschatbot\services\Sources;
@@ -58,6 +59,7 @@ use yii\base\Event;
  * @property-read Contacts $contacts
  * @property-read Capabilities $capabilities
  * @property-read Forms $forms
+ * @property-read Gaps $gaps
  * @property-read Sources $sources
  */
 class Plugin extends BasePlugin
@@ -82,6 +84,7 @@ class Plugin extends BasePlugin
                 'contacts' => Contacts::class,
                 'capabilities' => Capabilities::class,
                 'forms' => Forms::class,
+                'gaps' => Gaps::class,
                 'sources' => Sources::class,
             ],
         ];
@@ -223,6 +226,7 @@ class Plugin extends BasePlugin
                 'interactive-ai-assistant/training/urls' => 'interactive-ai-assistant/training/urls',
                 'interactive-ai-assistant/training/qa' => 'interactive-ai-assistant/training/qa',
                 'interactive-ai-assistant/training/sources' => 'interactive-ai-assistant/training/sources',
+                'interactive-ai-assistant/training/gaps' => 'interactive-ai-assistant/gaps/index',
                 'interactive-ai-assistant/training/entry-chunks/<id:\d+>' => 'interactive-ai-assistant/training/entry-chunks',
                 'interactive-ai-assistant/training/source-chunks/<id:\d+>' => 'interactive-ai-assistant/training/source-chunks',
                 'interactive-ai-assistant/training/url-chunks/<id:\d+>' => 'interactive-ai-assistant/training/url-chunks',

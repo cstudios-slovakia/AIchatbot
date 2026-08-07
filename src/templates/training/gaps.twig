@@ -1,0 +1,223 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Training · Gaps' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
+  gaps:    { label: 'Gaps',          url: cpUrl('interactive-ai-assistant/training/gaps') },
+  plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
+} %}
+{% set selectedTab = 'gaps' %}
+
+{% set reasonLabels = {
+  no_context: 'Found nothing',
+  rated_down: 'Rated down',
+  low_confidence: 'Weak match',
+  offered_human: 'Offered a human',
+} %}
+{% set reasonColors = {
+  no_context: '#cf1124',
+  rated_down: '#cf1124',
+  low_confidence: '#b44d12',
+  offered_human: '#7c3aed',
+} %}
+
+{% block content %}
+  <p class="light" style="margin-top:0;">
+    Questions the assistant answered without much to go on — retrieval found nothing, the match was
+    weak, the visitor rated it down, or it offered a human. Answer one here and it becomes a Q&amp;A
+    pair the assistant uses from then on.
+  </p>
+
+  {% if common|length > 1 %}
+    <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Asked most often</h2>
+      <ul style="margin:0;padding-left:18px;">
+        {% for c in common %}
+          {% if c.hits > 1 %}<li>{{ c.question }} <span class="light">— {{ c.hits }}×</span></li>{% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <div style="margin-bottom:12px;">
+    {% if includeResolved %}
+      <a class="btn" href="{{ url('interactive-ai-assistant/training/gaps') }}">Show open only</a>
+    {% else %}
+      <a class="btn" href="{{ url('interactive-ai-assistant/training/gaps', { resolved: 1 }) }}">Include answered</a>
+    {% endif %}
+    <span class="light" style="margin-left:8px;">{{ total }} total</span>
+  </div>
+
+  {% if rows|length %}
+    <table class="data fullwidth">
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>What the assistant said</th>
+          <th>Why</th>
+          <th>Match</th>
+          <th>When</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr data-id="{{ r.id }}"{% if r.gapResolvedAt %} style="opacity:.55;"{% endif %}>
+            <td style="max-width:280px;">
+              <strong>{{ r.question ?? '—' }}</strong>
+              {% if r.retrievalQuery and r.retrievalQuery != r.question %}
+                <div class="light" style="font-size:11px;">searched: {{ r.retrievalQuery }}</div>
+              {% endif %}
+            </td>
+            <td style="max-width:340px;font-size:12px;">{{ r.answer|slice(0, 220) }}{{ r.answer|length > 220 ? '…' }}</td>
+            <td>
+              <span class="status-pill" style="color:{{ reasonColors[r.reason] }};">{{ reasonLabels[r.reason] }}</span>
+            </td>
+            <td>{{ r.contextChunks }} chunk{{ r.contextChunks == 1 ? '' : 's' }}<br>
+              <span class="light" style="font-size:11px;">{{ r.confidence ? (r.confidence|number_format(2)) : '0.00' }}</span>
+            </td>
+            <td style="white-space:nowrap;">{{ r.dateCreated|slice(0, 16) }}</td>
+            <td style="white-space:nowrap;">
+              <a class="btn small" href="{{ url('interactive-ai-assistant/logs/session/' ~ r.sessionId) }}">Conversation</a>
+              {% if r.gapResolvedAt %}
+                <button class="btn small js-reopen">Reopen</button>
+              {% else %}
+                <button class="btn small submit js-answer">Answer</button>
+                <button class="btn small js-dismiss">Dismiss</button>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% set pages = (total / perPage)|round(0, 'ceil') %}
+    {% if pages > 1 %}
+      <div style="margin-top:12px;">
+        {% for p in 1..pages %}
+          {% if p == page %}
+            <strong style="padding:0 6px;">{{ p }}</strong>
+          {% else %}
+            <a style="padding:0 6px;" href="{{ url('interactive-ai-assistant/training/gaps', { page: p, resolved: includeResolved ? 1 : null }) }}">{{ p }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="light">Nothing here — every answered question had something to draw on.</p>
+  {% endif %}
+
+  <div id="gap-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100;align-items:center;justify-content:center;">
+    <div class="readable" style="background:#fff;border-radius:8px;padding:20px;max-width:640px;width:92%;max-height:86vh;overflow:auto;">
+      <h2 style="margin-top:0;">Answer this question</h2>
+      <p class="light" style="font-size:12px;">Saved as a Q&amp;A pair and indexed straight away.</p>
+      <div class="field">
+        <div class="heading"><label>Question</label></div>
+        <div class="input"><input type="text" class="text fullwidth" id="gap-question"></div>
+      </div>
+      <div class="field">
+        <div class="heading"><label>Answer</label></div>
+        <div class="input"><textarea class="text fullwidth" id="gap-answer" rows="6"></textarea></div>
+      </div>
+      {% if sites|length > 1 %}
+        <div class="field">
+          <div class="heading"><label>Applies to</label></div>
+          <div class="input">
+            <div class="select">
+              <select id="gap-site">
+                <option value="0">All sites</option>
+                {% for site in sites %}
+                  <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="field" id="gap-translate-field">
+          <div class="input">
+            <label><input type="checkbox" id="gap-translate" checked> Index a translated copy for each site</label>
+          </div>
+        </div>
+      {% endif %}
+      <div style="margin-top:12px;">
+        <button class="btn submit" id="gap-save">Save &amp; train</button>
+        <button class="btn" id="gap-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var dialog = document.getElementById('gap-dialog');
+      var questionInput = document.getElementById('gap-question');
+      var answerInput = document.getElementById('gap-answer');
+      var siteSelect = document.getElementById('gap-site');
+      var translateBox = document.getElementById('gap-translate');
+      var translateField = document.getElementById('gap-translate-field');
+      var current = null;
+
+      function post(action, fields) {
+        var data = new FormData();
+        data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
+        Object.keys(fields).forEach(function (k) { data.append(k, fields[k]); });
+        return fetch(Craft.getActionUrl(action), { method: 'POST', body: data, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); });
+      }
+
+      function rowId(el) { return el.closest('tr').dataset.id; }
+
+      document.querySelectorAll('.js-dismiss').forEach(function (b) {
+        b.addEventListener('click', function () {
+          post('interactive-ai-assistant/gaps/resolve', { id: rowId(b), resolved: 1 })
+            .then(function () { location.reload(); });
+        });
+      });
+      document.querySelectorAll('.js-reopen').forEach(function (b) {
+        b.addEventListener('click', function () {
+          post('interactive-ai-assistant/gaps/resolve', { id: rowId(b), resolved: 0 })
+            .then(function () { location.reload(); });
+        });
+      });
+      document.querySelectorAll('.js-answer').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var row = b.closest('tr');
+          current = row.dataset.id;
+          questionInput.value = row.querySelector('strong').textContent.trim();
+          answerInput.value = '';
+          dialog.style.display = 'flex';
+          answerInput.focus();
+        });
+      });
+
+      if (siteSelect) {
+        var syncTranslate = function () { translateField.style.display = siteSelect.value === '0' ? '' : 'none'; };
+        siteSelect.addEventListener('change', syncTranslate);
+        syncTranslate();
+      }
+
+      document.getElementById('gap-cancel').addEventListener('click', function () { dialog.style.display = 'none'; });
+      dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.style.display = 'none'; });
+
+      document.getElementById('gap-save').addEventListener('click', function () {
+        post('interactive-ai-assistant/gaps/answer', {
+          id: current,
+          question: questionInput.value,
+          answer: answerInput.value,
+          siteId: siteSelect ? siteSelect.value : 0,
+          translate: (translateBox && translateBox.checked) ? 1 : 0,
+        }).then(function (r) {
+          if (r.success) {
+            location.reload();
+          } else {
+            Craft.cp.displayError(r.error || 'Could not save.');
+          }
+        });
+      });
+    })();
+  </script>
+{% endblock %}

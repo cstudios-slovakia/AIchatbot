@@ -187,6 +187,11 @@ class Install extends Migration
             'sessionId' => $this->integer()->notNull(),
             'role' => $this->string(10)->notNull(), // user|bot|admin|system
             'content' => $this->mediumText()->notNull(),
+            // The standalone query retrieval actually searched for, and how many
+            // chunks cleared the threshold. null chunks = retrieval was skipped.
+            'retrievalQuery' => $this->string(500)->null(),
+            'contextChunks' => $this->integer()->null(),
+            'gapResolvedAt' => $this->dateTime()->null(),
             'confidence' => $this->decimal(5, 4),
             'responseTime' => $this->decimal(8, 3),
             'rating' => $this->integer(), // null|1|-1

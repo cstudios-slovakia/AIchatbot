@@ -29,6 +29,7 @@ class DashboardController extends Controller
             'suggestions' => $suggestions,
             'training' => $training,
             'health' => Plugin::getInstance()->training->indexHealth(),
+            'openGaps' => Plugin::getInstance()->gaps->openCount(),
             'missedChatsNew' => Plugin::getInstance()->contacts->newCount(),
             'from' => $fromDt->format('Y-m-d'),
             'to' => $toDt->format('Y-m-d'),

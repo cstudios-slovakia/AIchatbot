@@ -155,6 +155,42 @@ class RagController extends Controller
     }
 
     /**
+     * List the questions the assistant answered with little or nothing to go on.
+     *
+     * Usage: php craft interactive-ai-assistant/rag/gaps
+     */
+    public function actionGaps(int $limit = 25): int
+    {
+        $gaps = Plugin::getInstance()->gaps;
+        $result = $gaps->list(1, $limit);
+        if (!$result['rows']) {
+            $this->stdout("No gaps — every answered question had something to draw on.\n");
+            return ExitCode::OK;
+        }
+        $this->stdout("{$result['total']} question(s) worth answering:\n\n");
+        foreach ($result['rows'] as $row) {
+            $this->stdout(sprintf(
+                "  #%-5d %-15s %2d chunk(s) %.2f  %s\n",
+                $row['id'],
+                $row['reason'],
+                (int)$row['contextChunks'],
+                (float)$row['confidence'],
+                mb_substr(preg_replace('/\s+/', ' ', (string)($row['question'] ?? '—')), 0, 70),
+            ));
+        }
+        $common = $gaps->commonQuestions();
+        $repeated = array_values(array_filter($common, fn($c) => $c['hits'] > 1));
+        if ($repeated) {
+            $this->stdout("\nAsked more than once:\n");
+            foreach ($repeated as $item) {
+                $this->stdout("  {$item['hits']}x  {$item['question']}\n");
+            }
+        }
+        $this->stdout("\nAnswer them under Training -> Gaps in the control panel.\n");
+        return ExitCode::OK;
+    }
+
+    /**
      * Print the exact text an entry contributes to the index, and how it chunks.
      * The first thing to check when the assistant "doesn't know" about a page:
      * it answers whether the content ever reached the index at all.

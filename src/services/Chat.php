@@ -350,7 +350,12 @@ class Chat extends Component
         $this->trigger(self::EVENT_TRANSFORM_REPLY, $transformEvent);
         $reply = $transformEvent->reply;
 
-        $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime);
+        $botMsg = $this->logMessage($session, 'bot', $reply, $confidence, $responseTime, [
+            // A guarded turn searched for nothing, which is different from
+            // searching and finding nothing — only the latter is a gap.
+            'query' => $guarded ? '' : $retrievalQuery,
+            'chunks' => $guarded ? null : count($usableHits),
+        ]);
 
         // low-confidence streak tracking → offer help (human handoff and/or contact capture).
         // Guarded chit-chat turns (no retrieval) carry no confidence signal, so they
@@ -575,14 +580,30 @@ class Chat extends Component
         return (string)($message['content'] ?? '');
     }
 
-    private function logMessage(ChatSessionRecord $session, string $role, string $content, ?float $confidence, ?float $responseTime): ChatMessageRecord
-    {
+    /**
+     * @param array{query?:string, chunks?:?int} $retrieval what retrieval searched
+     *        for and how many chunks cleared the threshold (chunks null = skipped)
+     */
+    private function logMessage(
+        ChatSessionRecord $session,
+        string $role,
+        string $content,
+        ?float $confidence,
+        ?float $responseTime,
+        array $retrieval = [],
+    ): ChatMessageRecord {
         $rec = new ChatMessageRecord();
         $rec->sessionId = (int)$session->id;
         $rec->role = $role;
         $rec->content = $content;
         $rec->confidence = $confidence;
         $rec->responseTime = $responseTime;
+        if (array_key_exists('query', $retrieval)) {
+            $rec->retrievalQuery = mb_substr((string)$retrieval['query'], 0, 500);
+        }
+        if (array_key_exists('chunks', $retrieval)) {
+            $rec->contextChunks = $retrieval['chunks'];
+        }
         if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
             // still persist minimal so we can rate, but strip content
             $rec->content = $role === 'user' ? '[redacted]' : $content;
@@ -691,8 +712,10 @@ class Chat extends Component
                 $convo .= $role . ': ' . trim((string)($h['content'] ?? '')) . "\n";
             }
             $sys = "You rewrite a chat user's latest message into a standalone search query "
-                . "for a knowledge base. Resolve pronouns and ellipsis using the conversation. "
-                . "Keep it concise and in the user's language. Also decide whether answering needs "
+                . "for a knowledge base. Resolve pronouns and ellipsis using the conversation, and "
+                . "change nothing else: keep the user's own words, spelling and language exactly as "
+                . "written, including missing accents, and never translate or paraphrase them. If "
+                . "there is nothing to resolve, return the message unchanged. Also decide whether answering needs "
                 . "a knowledge-base lookup at all — greetings, thanks, pure chit-chat and requests "
                 . "that have nothing to do with a website's own content (writing code, general "
                 . "trivia, homework) do not. Finally, set out_of_scope when the message asks for "

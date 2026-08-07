@@ -8,7 +8,7 @@
     {% set failedCount = health.failed|length %}
     {% set blankCount = health.blank|length %}
     {% set untrainedTotal = health.untrainedBySection|reduce((carry, n) => carry + n, 0) %}
-    {% if staleCount or failedCount or blankCount or untrainedTotal %}
+    {% if staleCount or failedCount or blankCount or untrainedTotal or openGaps %}
       <div class="readable" style="padding:14px;border:1px solid #f0b429;border-left-width:4px;border-radius:6px;background:#fffaf0;margin-bottom:24px;">
         <h2 style="margin-top:0;">Training needs attention</h2>
         <ul style="margin:0 0 10px;padding-left:18px;">
@@ -24,6 +24,9 @@
           {% endif %}
           {% if blankCount %}
             <li><strong>{{ blankCount }}</strong> source{{ blankCount == 1 ? '' : 's' }} indexed to nothing — no text could be extracted from {{ blankCount == 1 ? 'it' : 'them' }}.</li>
+          {% endif %}
+          {% if openGaps %}
+            <li><strong>{{ openGaps }}</strong> question{{ openGaps == 1 ? '' : 's' }} {{ openGaps == 1 ? 'was' : 'were' }} answered with little or nothing to go on — <a href="{{ url('interactive-ai-assistant/training/gaps') }}">review and answer them</a>.</li>
           {% endif %}
         </ul>
         <a class="btn" href="{{ url('interactive-ai-assistant/training/entries') }}">Review training</a>
