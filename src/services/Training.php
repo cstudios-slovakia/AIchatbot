@@ -89,12 +89,131 @@ class Training extends Component
 
     private function extractEntryText(Entry $entry): string
     {
-        $parts = [$entry->title ?? ''];
-        foreach ($entry->getFieldValues() as $handle => $value) {
-            $parts[] = $this->fieldValueToText($value);
+        $section = null;
+        try {
+            $section = $entry->getSection()?->name;
+        } catch (Throwable) {
+            // entry type without a section (Craft 5 nested entries)
         }
-        $text = implode("\n\n", array_filter(array_map('trim', $parts)));
-        return Plugin::getInstance()->embeddings->normalize($text);
+        return $this->buildElementText($entry, [
+            'Section' => $section,
+            'Published' => $entry->postDate?->format('Y-m-d'),
+        ]);
+    }
+
+    /**
+     * Render an element as labelled plain text: a metadata header followed by
+     * one "Field label: value" block per non-empty custom field.
+     *
+     * The labels are the point. Values alone ("Secum Euro / 649 / Košický")
+     * embed and read as noise — nothing says the number is a price or the word
+     * is a region, so the model cannot answer "how much is it?" or "where are
+     * you?" from them. Naming each value costs a few tokens per chunk and makes
+     * the difference between a retrievable fact and a floating string.
+     *
+     * @param array<string, string|null> $extraHeader metadata lines to add after Title/URL
+     */
+    private function buildElementText(\craft\base\Element $el, array $extraHeader = [], string $prefix = ''): string
+    {
+        $header = [];
+        if ($prefix !== '') {
+            $header['Name'] = $prefix;
+        }
+        if (!empty($el->title)) {
+            $header['Title'] = (string)$el->title;
+        }
+        try {
+            $header['URL'] = $el->getUrl();
+        } catch (Throwable) {
+            // element type or site without URLs
+        }
+        foreach ($extraHeader as $label => $value) {
+            $header[$label] = $value;
+        }
+
+        $parts = [];
+        foreach ($header as $label => $value) {
+            $value = trim((string)$value);
+            if ($value !== '') {
+                $parts[] = $label . ': ' . $value;
+            }
+        }
+        // The header lines belong together as one block; field blocks follow.
+        $parts = $parts ? [implode("\n", $parts)] : [];
+
+        foreach ($this->labelledFieldValues($el) as [$label, $value]) {
+            // Multi-line values (rich text, tables, matrix) start on their own
+            // line so headings and list markers stay at the start of a line and
+            // the chunker can still see them as structure.
+            $parts[] = str_contains($value, "\n")
+                ? $label . ":\n" . $value
+                : $label . ': ' . $value;
+        }
+
+        return Plugin::getInstance()->embeddings->normalize(implode("\n\n", $parts));
+    }
+
+    /**
+     * Each non-empty custom field of an element as [label, text], using the
+     * field's control-panel name and falling back to a humanized handle.
+     *
+     * @return array<int, array{0:string, 1:string}>
+     */
+    private function labelledFieldValues(\craft\base\Element $el): array
+    {
+        $labels = $this->fieldLabels($el);
+        $out = [];
+        foreach ($el->getFieldValues() as $handle => $value) {
+            $text = trim($this->fieldValueToText($value));
+            if ($text === '') {
+                continue;
+            }
+            $out[] = [$labels[$handle] ?? $this->humanizeHandle($handle), $text];
+        }
+        return $out;
+    }
+
+    /**
+     * handle => control-panel field name for an element's layout.
+     *
+     * @return array<string, string>
+     */
+    private function fieldLabels(\craft\base\Element $el): array
+    {
+        $labels = [];
+        try {
+            $layout = $el->getFieldLayout();
+            if (!$layout) {
+                return $labels;
+            }
+            // getCustomFields() is Craft 4.4+/5; getFields() covers older Craft 4.
+            $fields = method_exists($layout, 'getCustomFields')
+                ? $layout->getCustomFields()
+                : $layout->getFields();
+            foreach ($fields as $field) {
+                if (!empty($field->handle)) {
+                    $labels[$field->handle] = (string)($field->name ?: $field->handle);
+                }
+            }
+        } catch (Throwable) {
+            // unreadable layout — fall back to humanized handles
+        }
+        return $labels;
+    }
+
+    /**
+     * True for the filenames cameras and phones generate — "IMG 6159",
+     * "DSC_6370", "PXL 20240101 120000", "20240101 123456".
+     */
+    private function looksLikeCameraFilename(string $name): bool
+    {
+        return (bool)preg_match('/^(img|dsc|dscn|dscf|pxl|gopr|p|photo|foto|image)?[ _-]?\d{3,}[ _-]?\w{0,8}$/i', trim($name));
+    }
+
+    private function humanizeHandle(string $handle): string
+    {
+        $words = preg_replace('/(?<!^)[A-Z]/', ' $0', $handle) ?? $handle;
+        return ucfirst(trim(str_replace(['_', '-'], ' ', $words)));
     }
 
     /**
@@ -163,7 +282,37 @@ class Training extends Component
                 return '';
             }
         }
+        // Data objects contributed by field-type plugins (SEO metadata and
+        // similar). They carry hand-written prose next to machine config, and
+        // that prose is often the best one-line summary of the page — so read
+        // the prose properties and ignore the rest.
+        if (is_object($value)) {
+            return $this->proseProperties($value);
+        }
         return '';
+    }
+
+    /**
+     * Human-written prose exposed by an arbitrary object, by convention over
+     * property names. Returns '' for objects that carry no such text.
+     */
+    private function proseProperties(object $value): string
+    {
+        $parts = [];
+        foreach (['description', 'summary', 'text'] as $property) {
+            try {
+                if (!isset($value->$property)) {
+                    continue;
+                }
+                $text = $value->$property;
+            } catch (Throwable) {
+                continue;
+            }
+            if (is_string($text) && trim($text) !== '') {
+                $parts[] = trim($text);
+            }
+        }
+        return implode("\n", array_unique($parts));
     }
 
     /**
@@ -192,19 +341,32 @@ class Training extends Component
             return is_scalar($el) ? trim((string)$el) : '';
         }
         $parts = [];
-        if (!empty($el->title)) {
+        if ($el instanceof \craft\elements\Asset) {
+            // Alt text is written for humans; an asset title is usually just the
+            // camera's filename ("IMG 6159", "DSC 6370"), which embeds as noise
+            // and pollutes every chunk that relates to an image.
+            $alt = trim((string)($el->alt ?? ''));
+            $title = trim((string)($el->title ?? ''));
+            if ($alt !== '') {
+                $parts[] = $alt;
+            } elseif ($title !== '' && !$this->looksLikeCameraFilename($title)) {
+                $parts[] = $title;
+            }
+        } elseif (!empty($el->title)) {
             $parts[] = (string)$el->title;
         }
-        if ($el instanceof \craft\elements\Asset && !empty($el->alt)) {
-            $parts[] = (string)$el->alt;
-        }
-        if ($depth < 2 && method_exists($el, 'getFieldValues')) {
+        if ($depth < 2 && $el instanceof \craft\base\Element) {
             try {
-                foreach ($el->getFieldValues() as $v) {
-                    $t = $this->fieldValueToText($v, $depth + 1);
-                    if ($t !== '') {
-                        $parts[] = $t;
+                // Label nested values too: a Matrix block's fields are as
+                // meaningless unlabelled as the owner element's are.
+                $labels = $this->fieldLabels($el);
+                foreach ($el->getFieldValues() as $handle => $v) {
+                    $t = trim($this->fieldValueToText($v, $depth + 1));
+                    if ($t === '') {
+                        continue;
                     }
+                    $label = $labels[$handle] ?? $this->humanizeHandle($handle);
+                    $parts[] = str_contains($t, "\n") ? $label . ":\n" . $t : $label . ': ' . $t;
                 }
             } catch (\Throwable) {
                 // ignore unreadable field values
@@ -305,20 +467,24 @@ class Training extends Component
         $rec->delete();
     }
 
+    /**
+     * Labelled plain text for any element — the entry point custom training
+     * sources use for element kinds this plugin doesn't handle natively.
+     */
     public function extractElementText(\craft\base\Element $el, string $prefix = ''): string
     {
-        $parts = [];
-        if ($prefix !== '') {
-            $parts[] = $prefix;
+        if ($el instanceof Entry) {
+            return $this->extractEntryText($el);
         }
-        if (property_exists($el, 'title') && $el->title) {
-            $parts[] = (string)$el->title;
+        $extra = [];
+        if ($el instanceof Category) {
+            try {
+                $extra['Group'] = $el->getGroup()->name ?? null;
+            } catch (Throwable) {
+                // group no longer exists
+            }
         }
-        foreach ($el->getFieldValues() as $value) {
-            $parts[] = $this->fieldValueToText($value);
-        }
-        $text = implode("\n\n", array_filter(array_map('trim', $parts)));
-        return Plugin::getInstance()->embeddings->normalize($text);
+        return $this->buildElementText($el, $extra, $prefix);
     }
 
     // ---------- CUSTOM SOURCES (plugin-contributed) ----------
@@ -619,35 +785,39 @@ class Training extends Component
      * Job-backed sources are queued (processed by the worker); Q&A pairs run
      * inline as they have no dedicated job.
      *
+     * @param string[]|null $types limit to these source kinds (entries, categories,
+     *        globals, files, urls, sources, qa); null retrains everything. Useful
+     *        to re-embed local content without re-crawling remote URLs.
      * @return int number of sources queued/reindexed
      */
-    public function reindexAll(): int
+    public function reindexAll(?array $types = null): int
     {
         $queue = Craft::$app->queue;
         $n = 0;
+        $wants = fn(string $type): bool => $types === null || in_array($type, $types, true);
 
-        foreach (TrainingEntryRecord::find()->all() as $rec) {
+        foreach ($wants('entries') ? TrainingEntryRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexEntryJob(['entryId' => (int)$rec->entryId, 'siteId' => (int)$rec->siteId]));
             $n++;
         }
-        foreach (TrainingCategoryRecord::find()->all() as $rec) {
+        foreach ($wants('categories') ? TrainingCategoryRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexCategoryJob(['categoryId' => (int)$rec->categoryId, 'siteId' => (int)$rec->siteId]));
             $n++;
         }
-        foreach (TrainingGlobalSetRecord::find()->all() as $rec) {
+        foreach ($wants('globals') ? TrainingGlobalSetRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexGlobalSetJob(['globalSetId' => (int)$rec->globalSetId, 'siteId' => (int)$rec->siteId]));
             $n++;
         }
-        foreach (TrainingFileRecord::find()->all() as $rec) {
+        foreach ($wants('files') ? TrainingFileRecord::find()->all() : [] as $rec) {
             $path = Plugin::getInstance()->getUploadPath() . DIRECTORY_SEPARATOR . $rec->filename;
             $queue->push(new IndexFileJob(['fileRecId' => (int)$rec->id, 'absolutePath' => $path]));
             $n++;
         }
-        foreach (TrainingUrlRecord::find()->all() as $rec) {
+        foreach ($wants('urls') ? TrainingUrlRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexUrlJob(['urlRecId' => (int)$rec->id]));
             $n++;
         }
-        foreach (TrainingSourceRecord::find()->all() as $rec) {
+        foreach ($wants('sources') ? TrainingSourceRecord::find()->all() : [] as $rec) {
             $queue->push(new IndexSourceJob([
                 'handle' => (string)$rec->sourceKey,
                 'itemId' => (int)$rec->itemId,
@@ -655,7 +825,7 @@ class Training extends Component
             ]));
             $n++;
         }
-        foreach (TrainingQaRecord::find()->where(['active' => true])->all() as $rec) {
+        foreach ($wants('qa') ? TrainingQaRecord::find()->where(['active' => true])->all() : [] as $rec) {
             $this->trainQa((int)$rec->id);
             $n++;
         }
