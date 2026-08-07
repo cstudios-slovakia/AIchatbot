@@ -7,6 +7,7 @@ use craft\elements\Category;
 use craft\elements\Entry;
 use craft\elements\GlobalSet;
 use craft\helpers\Db;
+use cstudiossro\craftcschatbot\helpers\CraftCompat;
 use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
 use cstudiossro\craftcschatbot\jobs\IndexFileJob;
@@ -203,8 +204,12 @@ class Training extends Component
     private function labelledFieldValues(\craft\base\Element $el): array
     {
         $labels = $this->fieldLabels($el);
+        $excluded = Plugin::getInstance()->getSettings()->excludedFieldsForScope($this->scopeUid($el));
         $out = [];
         foreach ($el->getFieldValues() as $handle => $value) {
+            if (in_array($handle, $excluded, true)) {
+                continue;
+            }
             $text = trim($this->fieldValueToText($value));
             if ($text === '') {
                 continue;
@@ -215,31 +220,40 @@ class Training extends Component
     }
 
     /**
+     * The UID an element's field exclusions are configured under: its section,
+     * category group, or — for a global set — the set itself. Null when the
+     * element belongs to none of those, which still picks up the '*' list.
+     */
+    private function scopeUid(\craft\base\Element $el): ?string
+    {
+        try {
+            if ($el instanceof Entry) {
+                return $el->getSection()?->uid;
+            }
+            if ($el instanceof Category) {
+                return $el->getGroup()->uid;
+            }
+            if ($el instanceof GlobalSet) {
+                return $el->uid;
+            }
+        } catch (Throwable) {
+            // Craft 5 nested entries have no section; a missing scope is fine
+        }
+        return null;
+    }
+
+    /**
      * handle => control-panel field name for an element's layout.
      *
      * @return array<string, string>
      */
     private function fieldLabels(\craft\base\Element $el): array
     {
-        $labels = [];
         try {
-            $layout = $el->getFieldLayout();
-            if (!$layout) {
-                return $labels;
-            }
-            // getCustomFields() is Craft 4.4+/5; getFields() covers older Craft 4.
-            $fields = method_exists($layout, 'getCustomFields')
-                ? $layout->getCustomFields()
-                : $layout->getFields();
-            foreach ($fields as $field) {
-                if (!empty($field->handle)) {
-                    $labels[$field->handle] = (string)($field->name ?: $field->handle);
-                }
-            }
+            return CraftCompat::layoutFieldMap($el->getFieldLayout());
         } catch (Throwable) {
-            // unreadable layout — fall back to humanized handles
+            return []; // unreadable layout — fall back to humanized handles
         }
-        return $labels;
     }
 
     /**

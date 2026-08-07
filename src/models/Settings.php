@@ -146,6 +146,21 @@ class Settings extends Model
     /** @var string[] global set UIDs */
     public array $trainingGlobalSets = [];
     public bool $autoTrainOnSave = false;
+    /**
+     * Field handles to keep out of the index, per scope.
+     *
+     * Shape: scope UID (section / category group / global set) => handles, plus
+     * the reserved key '*' for handles excluded everywhere. A field can be
+     * essential on the site and poison in the index — a price that only some
+     * entries carry makes the assistant quote a figure for one product and
+     * nothing for the next, which reads as inconsistency rather than as a gap.
+     *
+     * @var array<string, string[]>
+     */
+    public array $excludedFields = [];
+
+    /** Reserved scope key: applies to every section, group and set. */
+    public const EXCLUDE_ALL_SCOPES = '*';
 
     // Suggestions
     public bool $suggestionsEnabled = true;
@@ -229,7 +244,7 @@ class Settings extends Model
             [['humanHandoffMode'], 'in', 'range' => ['always', 'ai']],
             [['humanHandoffMode'], 'string'],
             [['logoText'], 'string', 'max' => 3],
-            [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite'], 'safe'],
+            [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite', 'excludedFields'], 'safe'],
             [['companyName'], 'required'],
         ];
     }
@@ -393,6 +408,26 @@ class Settings extends Model
             }
         }
         return $this->companyName;
+    }
+
+    /**
+     * Field handles to skip when indexing content from a given scope: the
+     * everywhere list plus that scope's own. An unknown or missing scope still
+     * gets the everywhere list, so a global exclusion holds for element types
+     * that have no scope of their own.
+     *
+     * @return string[]
+     */
+    public function excludedFieldsForScope(?string $scopeUid): array
+    {
+        $handles = (array)($this->excludedFields[self::EXCLUDE_ALL_SCOPES] ?? []);
+        if ($scopeUid !== null && $scopeUid !== self::EXCLUDE_ALL_SCOPES) {
+            $handles = array_merge($handles, (array)($this->excludedFields[$scopeUid] ?? []));
+        }
+        return array_values(array_unique(array_filter(array_map(
+            fn($h) => trim((string)$h),
+            $handles,
+        ), fn($h) => $h !== '')));
     }
 
     public function getSystemPromptForSite(?string $siteUid = null): string

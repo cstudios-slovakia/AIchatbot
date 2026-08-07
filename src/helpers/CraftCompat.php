@@ -65,4 +65,60 @@ class CraftCompat
         }
         return null;
     }
+
+    /**
+     * handle => control-panel label for every custom field in a layout.
+     *
+     * getCustomFields() is Craft 4.4+/5; getFields() covers older Craft 4.
+     *
+     * @return array<string, string>
+     */
+    public static function layoutFieldMap(mixed $layout): array
+    {
+        $map = [];
+        if (!$layout) {
+            return $map;
+        }
+        try {
+            $fields = method_exists($layout, 'getCustomFields')
+                ? $layout->getCustomFields()
+                : $layout->getFields();
+            foreach ($fields as $field) {
+                if (!empty($field->handle)) {
+                    $map[$field->handle] = (string)($field->name ?: $field->handle);
+                }
+            }
+        } catch (\Throwable) {
+            // unreadable layout — caller falls back to humanized handles
+        }
+        return $map;
+    }
+
+    /**
+     * Every custom field the content of a section / category group / global set
+     * can carry, as handle => label.
+     *
+     * A section's entry types each have their own layout, so this is the union
+     * across them — the exclusion list is per section, not per entry type, and a
+     * handle only has to appear in one type to be worth offering.
+     *
+     * @return array<string, string>
+     */
+    public static function scopeFieldMap(object $scope): array
+    {
+        $map = [];
+        try {
+            if (method_exists($scope, 'getEntryTypes')) {
+                foreach ($scope->getEntryTypes() as $type) {
+                    $map += self::layoutFieldMap($type->getFieldLayout());
+                }
+            } elseif (method_exists($scope, 'getFieldLayout')) {
+                $map = self::layoutFieldMap($scope->getFieldLayout());
+            }
+        } catch (\Throwable) {
+            // a scope we cannot introspect offers no fields to exclude
+        }
+        asort($map, SORT_NATURAL | SORT_FLAG_CASE);
+        return $map;
+    }
 }

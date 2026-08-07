@@ -24,6 +24,37 @@
   showAllOption: false,
 }) }}
 
+<hr>
+
+<h2>Fields to keep out of the index</h2>
+<p class="light" style="max-width:52em;">
+  Checked fields are skipped when content is indexed. They stay untouched on the site — this only
+  controls what the assistant can read. Use it for values that are real but incomplete: a price
+  only some entries carry makes the assistant quote a figure for one product and nothing for the
+  next, which reads as inconsistency rather than as a gap. <strong>Retrain the affected sources
+  after changing this</strong> — existing chunks keep whatever they were built with.
+</p>
+
+{% for scope in excludeScopes %}
+  {% set chosen = settings.excludedFields[scope.uid] ?? [] %}
+  <details{% if chosen|length %} open{% endif %} style="margin:0 0 8px;border:1px solid #d8dde2;border-radius:5px;padding:8px 12px;">
+    <summary style="cursor:pointer;">
+      {{ scope.label }}
+      {% if chosen|length %}<span class="light">— {{ chosen|length }} excluded</span>{% endif %}
+    </summary>
+    <div style="margin-top:8px;">
+      {{ forms.checkboxSelect({
+        name: 'settings[excludedFields][' ~ scope.uid ~ ']',
+        values: chosen,
+        options: scope.options,
+        showAllOption: false,
+      }) }}
+    </div>
+  </details>
+{% endfor %}
+
+<hr>
+
 {{ forms.lightswitchField({
   label: 'Auto-Train on Save',
   instructions: 'Automatically index entries, categories and globals whenever they are saved (background job). Only items in selected sections / groups / sets are auto-trained.',

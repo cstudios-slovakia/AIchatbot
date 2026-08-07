@@ -5,6 +5,7 @@ namespace cstudiossro\craftcschatbot\controllers;
 use Craft;
 use craft\web\Controller;
 use cstudiossro\craftcschatbot\helpers\CraftCompat;
+use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\Plugin;
 use yii\web\Response;
 
@@ -19,6 +20,69 @@ class SettingsController extends Controller
         return true;
     }
 
+    /**
+     * Everything the settings screens need to describe the site's content
+     * structure, including the field map each scope offers for exclusion.
+     *
+     * @return array<string, mixed>
+     */
+    private function structureVariables(): array
+    {
+        $sections = CraftCompat::getAllSections();
+        $categoryGroups = Craft::$app->categories->getAllGroups();
+        $globalSets = Craft::$app->globals->getAllSets();
+
+        // Field-exclusion scopes, most specific last so the everywhere list
+        // reads as the heading it is. Scopes with no custom fields are dropped
+        // — an empty checkbox list is only clutter.
+        $scopes = [];
+        $allFields = [];
+        foreach ([['Section', $sections], ['Category group', $categoryGroups], ['Global set', $globalSets]] as [$kind, $group]) {
+            foreach ($group as $scope) {
+                $map = CraftCompat::scopeFieldMap($scope);
+                $allFields += $map;
+                if ($map) {
+                    $scopes[] = [
+                        'label' => $kind . ': ' . $scope->name,
+                        'uid' => $scope->uid,
+                        'options' => self::fieldOptions($map),
+                    ];
+                }
+            }
+        }
+        asort($allFields, SORT_NATURAL | SORT_FLAG_CASE);
+        if ($allFields) {
+            array_unshift($scopes, [
+                'label' => 'Every section, group and set',
+                'uid' => Settings::EXCLUDE_ALL_SCOPES,
+                'options' => self::fieldOptions($allFields),
+            ]);
+        }
+
+        return [
+            'sections' => $sections,
+            'categoryGroups' => $categoryGroups,
+            'globalSets' => $globalSets,
+            'excludeScopes' => $scopes,
+        ];
+    }
+
+    /**
+     * @param array<string, string> $map handle => label
+     * @return array<int, array{label:string, value:string}>
+     */
+    private static function fieldOptions(array $map): array
+    {
+        $options = [];
+        foreach ($map as $handle => $label) {
+            $options[] = [
+                'label' => $label === $handle ? $handle : "{$label} ({$handle})",
+                'value' => $handle,
+            ];
+        }
+        return $options;
+    }
+
     public function actionEdit(?string $tab = null): Response
     {
         $tab ??= 'general';
@@ -26,12 +90,9 @@ class SettingsController extends Controller
         return $this->renderTemplate('interactive-ai-assistant/settings/_index', [
             'plugin' => $plugin,
             'settings' => $plugin->getSettings(),
-            'sections' => CraftCompat::getAllSections(),
-            'categoryGroups' => Craft::$app->categories->getAllGroups(),
-            'globalSets' => Craft::$app->globals->getAllSets(),
             'capabilities' => Plugin::getInstance()->capabilities->all(),
             'tab' => $tab,
-        ]);
+        ] + $this->structureVariables());
     }
 
     public function actionSave(): Response
@@ -79,6 +140,18 @@ class SettingsController extends Controller
         if (isset($data['trainingSections']) && !is_array($data['trainingSections'])) {
             $data['trainingSections'] = [$data['trainingSections']];
         }
+        // checkboxSelect posts '' for a scope with nothing ticked; keep only the
+        // scopes that actually exclude something so the setting stays readable.
+        if (isset($data['excludedFields'])) {
+            $clean = [];
+            foreach ((array)$data['excludedFields'] as $uid => $handles) {
+                $handles = array_values(array_filter(array_map('trim', (array)$handles), fn($h) => $h !== ''));
+                if ($handles) {
+                    $clean[(string)$uid] = $handles;
+                }
+            }
+            $data['excludedFields'] = $clean;
+        }
         if (isset($data['logoAssetId']) && is_array($data['logoAssetId'])) {
             $data['logoAssetId'] = (int)($data['logoAssetId'][0] ?? 0) ?: null;
         }
@@ -90,12 +163,9 @@ class SettingsController extends Controller
             return $this->renderTemplate('interactive-ai-assistant/settings/_index', [
                 'plugin' => $plugin,
                 'settings' => $settings,
-                'sections' => CraftCompat::getAllSections(),
-                'categoryGroups' => Craft::$app->categories->getAllGroups(),
-                'globalSets' => Craft::$app->globals->getAllSets(),
-            'capabilities' => Plugin::getInstance()->capabilities->all(),
+                'capabilities' => Plugin::getInstance()->capabilities->all(),
                 'tab' => $req->getBodyParam('tab', 'general'),
-            ]);
+            ] + $this->structureVariables());
         }
         Craft::$app->plugins->savePluginSettings($plugin, $settings->getAttributes());
         Craft::$app->session->setNotice('Settings saved.');
