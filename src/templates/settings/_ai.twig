@@ -97,6 +97,17 @@
 }) }}
 
 {{ forms.textField({
+  label: 'Conversation Memory',
+  instructions: 'How many earlier messages are replayed to the model each turn. Lower is cheaper and faster; higher lets it remember what was agreed earlier in a long conversation.',
+  name: 'settings[historyMessages]',
+  value: settings.historyMessages,
+  type: 'number',
+  min: 2,
+  max: 40,
+  size: 6,
+}) }}
+
+{{ forms.textField({
   label: 'Min Similarity Score',
   instructions: '0.00 to 1.00',
   name: 'settings[minSimilarityScore]',

@@ -40,6 +40,9 @@ class Settings extends Model
     /** @var array<string, string> Craft site UID => override system prompt. */
     public array $systemPrompts = [];
     public int $maxContextChunks = 5;
+    // How many earlier messages of the conversation are replayed to the model.
+    // Too few and it forgets what was just agreed ("book that one for Friday").
+    public int $historyMessages = 12;
     // text-embedding-3-small puts genuinely relevant matches around 0.3–0.5,
     // so 0.65 filtered out almost everything. Keep this low to avoid starving
     // the model of context.
@@ -180,7 +183,7 @@ class Settings extends Model
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
             [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
-            [['maxContextChunks', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
+            [['maxContextChunks', 'historyMessages', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
             [['capabilityStates'], 'safe'],
             [['forms'], 'safe'],
@@ -191,6 +194,7 @@ class Settings extends Model
             [['filterRateWindowSeconds', 'filterRateMaxMessages'], 'integer', 'min' => 0],
             [['filterBlockedWords'], 'safe'],
             [['maxContextChunks'], 'integer', 'min' => 1, 'max' => 20],
+            [['historyMessages'], 'integer', 'min' => 2, 'max' => 40],
             [['logRetentionDays'], 'integer', 'min' => 0],
             [['minSimilarityScore'], 'number', 'min' => 0, 'max' => 1],
             [['rrfK'], 'integer', 'min' => 1],

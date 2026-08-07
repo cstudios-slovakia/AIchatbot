@@ -44,12 +44,18 @@ class Chat extends Component
                 return $session;
             }
         }
+        // Console/queue contexts have no client request — a chat can legitimately
+        // be driven from the CLI (evaluation runs, replaying a conversation), so
+        // read request details defensively instead of assuming a web request.
+        $request = Craft::$app->getRequest();
+        $isWeb = $request instanceof \craft\web\Request;
+
         $session = new ChatSessionRecord();
         $session->sessionToken = StringHelper::randomString(48);
         // IP always stored — needed for bans even if logging disabled
-        $session->ip = Craft::$app->getRequest()->getUserIP();
+        $session->ip = $isWeb ? $request->getUserIP() : null;
         if ($settings->loggingEnabled) {
-            $ua = Craft::$app->getRequest()->getUserAgent();
+            $ua = $isWeb ? $request->getUserAgent() : null;
             $session->userAgent = $ua ? substr($ua, 0, 512) : null;
             $session->pageUrl = $pageUrl;
         }
@@ -62,22 +68,25 @@ class Chat extends Component
      */
     public function ask(string $question, ?string $sessionToken = null, ?string $pageUrl = null): array
     {
-        $settings = Plugin::getInstance()->getSettings();
-        $plugin = Plugin::getInstance();
         $session = $this->getOrCreateSession($sessionToken, $pageUrl);
 
-        // Throttle bot mode: if previous message in this session is a user message without a bot reply yet,
-        // reject this incoming one. Skip the check for handoff sessions where humans are slow on purpose.
+        // Throttle bot mode: if the previous message in this session is a user
+        // message without a bot reply yet, that turn is still in flight — reject
+        // this incoming one. Only while it *could* still be in flight, though: a
+        // turn that died (API timeout, fatal) leaves the same orphan row behind
+        // forever, and an unbounded check would lock the visitor out of their own
+        // conversation permanently. Skip entirely for handoff sessions, where
+        // humans are slow on purpose.
         if (!in_array($session->handoffStatus, ['requested', 'active'], true)) {
-            $lastRole = (new \craft\db\Query())
-                ->select(['role'])
+            $last = (new \craft\db\Query())
+                ->select(['role', 'dateCreated'])
                 ->from('{{%chatbot_messages}}')
                 ->where(['sessionId' => $session->id])
                 ->andWhere(['in', 'role', ['user', 'bot']])
                 ->orderBy(['id' => SORT_DESC])
                 ->limit(1)
-                ->scalar();
-            if ($lastRole === 'user') {
+                ->one();
+            if (($last['role'] ?? null) === 'user' && $this->turnStillInFlight($last['dateCreated'] ?? null)) {
                 throw new \RuntimeException('Please wait for the previous reply.');
             }
         }
@@ -96,11 +105,68 @@ class Chat extends Component
             ];
         }
 
+        try {
+            return $this->generateReply($session, $question);
+        } catch (\Throwable $e) {
+            // The turn died before any reply was logged (API timeout, fatal in a
+            // tool call). Roll the user message back so the in-flight check above
+            // can't lock the visitor out of their own conversation for good.
+            $this->discardFailedTurn($session, $userMsg);
+            throw $e;
+        }
+    }
+
+    /**
+     * How long a logged user message with no reply yet is treated as a turn
+     * still being generated. Past this the turn is assumed dead and a new
+     * message is let through. Covers the OpenAI client timeout plus a bounded
+     * tool-calling loop.
+     */
+    private const IN_FLIGHT_SECONDS = 180;
+
+    private function turnStillInFlight(?string $utcDateCreated): bool
+    {
+        if (!$utcDateCreated) {
+            return false;
+        }
+        $ts = strtotime($utcDateCreated . ' UTC');
+        if ($ts === false) {
+            return false;
+        }
+        return (time() - $ts) < self::IN_FLIGHT_SECONDS;
+    }
+
+    /**
+     * Undo the bookkeeping of a turn that threw before logging a reply, so the
+     * conversation is left exactly as it was before the failed attempt.
+     */
+    private function discardFailedTurn(ChatSessionRecord $session, ChatMessageRecord $userMsg): void
+    {
+        try {
+            $userMsg->delete();
+            $session->messageCount = max(0, (int)$session->messageCount - 1);
+            $session->save(false);
+        } catch (\Throwable $e) {
+            Craft::error('Could not roll back failed turn: ' . $e->getMessage(), __METHOD__);
+        }
+    }
+
+    /**
+     * Retrieve context, generate the reply, log it and assemble the widget
+     * payload. Split out of {@see self::ask()} so a turn that throws part-way
+     * has exactly one rollback point.
+     *
+     * @return array<string, mixed>
+     */
+    private function generateReply(ChatSessionRecord $session, string $question): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $plugin = Plugin::getInstance();
         $start = microtime(true);
 
         // Conversation so far (excludes the user message we just logged). Reused
         // for both building the retrieval query and generation further down.
-        $history = $this->recentHistory($session->id, 6);
+        $history = $this->recentHistory($session->id, max(2, (int)$settings->historyMessages));
 
         // Resolve the site up front so retrieval can filter to it (a Slovak-site
         // query shouldn't pull English chunks). Reused for the system prompt below.
@@ -482,27 +548,65 @@ class Chat extends Component
         if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
             // still persist minimal so we can rate, but strip content
             $rec->content = $role === 'user' ? '[redacted]' : $content;
+            // The model still needs the real words to follow the conversation.
+            // Keep them out of the transcript the CP shows and out of the
+            // retention window, in a short-lived cache entry instead.
+            $this->pushContextCache((int)$session->id, $role, $content);
         }
         $rec->save(false);
         return $rec;
     }
 
     /**
+     * Where the conversation is kept for the model when transcript logging is
+     * off. Short-lived on purpose: long enough to finish a conversation, not
+     * long enough to be a record of one.
+     */
+    private const CONTEXT_CACHE_TTL = 7200;
+
+    private function contextCacheKey(int $sessionId): string
+    {
+        return 'cs-chatbot:context:' . $sessionId;
+    }
+
+    /**
+     * @param array<int, array{role:string, content:string}> $messages
+     */
+    private function pushContextCache(int $sessionId, string $role, string $content): void
+    {
+        $cache = Craft::$app->getCache();
+        $key = $this->contextCacheKey($sessionId);
+        $messages = $cache->get($key);
+        $messages = is_array($messages) ? $messages : [];
+        $messages[] = ['role' => $role, 'content' => $content];
+        // Bounded so a long conversation can't grow one cache entry without limit.
+        $messages = array_slice($messages, -40);
+        $cache->set($key, $messages, self::CONTEXT_CACHE_TTL);
+    }
+
+    /**
+     * The turns before the message currently being answered, oldest first.
+     *
      * @return array<int, array{role:string, content:string}>
      */
     private function recentHistory(int $sessionId, int $limit): array
     {
-        $rows = (new \craft\db\Query())
-            ->select(['role', 'content'])
-            ->from('{{%chatbot_messages}}')
-            ->where(['sessionId' => $sessionId])
-            ->andWhere(['in', 'role', ['user', 'bot']])
-            ->orderBy(['id' => SORT_DESC])
-            ->limit($limit)
-            ->all();
-        // skip the most recent (the user msg we just inserted)
-        array_shift($rows);
-        return array_reverse($rows);
+        if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
+            $cached = Craft::$app->getCache()->get($this->contextCacheKey($sessionId));
+            $messages = is_array($cached) ? $cached : [];
+        } else {
+            $messages = array_reverse((new \craft\db\Query())
+                ->select(['role', 'content'])
+                ->from('{{%chatbot_messages}}')
+                ->where(['sessionId' => $sessionId])
+                ->andWhere(['in', 'role', ['user', 'bot']])
+                ->orderBy(['id' => SORT_DESC])
+                ->limit($limit + 1)
+                ->all());
+        }
+        // Drop the trailing message — that's the one we're answering right now.
+        array_pop($messages);
+        return array_slice($messages, -$limit);
     }
 
     /**
