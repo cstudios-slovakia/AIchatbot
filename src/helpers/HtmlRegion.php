@@ -83,8 +83,13 @@ class HtmlRegion
         // Guard: a template that names its content wrapper "main-banner", or one
         // that builds its hero out of <header>, can leave the pass having deleted
         // the article itself. Losing the page is worse than keeping its nav.
+        //
+        // Deliberately near-total: "most of the text went" is the normal result
+        // on a landing page that really is mostly nav, and reverting there keeps
+        // the chrome it was right to drop. Only near-total destruction is
+        // evidence the pass took the article with it.
         $after = self::textLength($scope);
-        if ($before > 0 && ($after < 200 || $after < $before * 0.2)) {
+        if ($before > 0 && ($after < 40 || $after < $before * 0.02)) {
             return $safe;
         }
 

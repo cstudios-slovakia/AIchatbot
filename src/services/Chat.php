@@ -584,7 +584,10 @@ class Chat extends Component
             // Default status only: a page taken down since it was indexed should
             // not be handed to a visitor as a link.
             foreach ($elementClass::find()->id($elementIds)->siteId($siteId)->all() as $element) {
-                $url = $element->getUrl();
+                // Same filter the indexer uses: a section with a URI format but
+                // no template produces addresses that 404, and a dead link over
+                // the assistant's signature is worse than no link at all.
+                $url = Plugin::getInstance()->training->publicUrl($element);
                 if ($url) {
                     $urlByElement[$element->id . ':' . $siteId] = $url;
                 }

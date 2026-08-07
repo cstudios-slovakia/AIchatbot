@@ -131,8 +131,11 @@ class RagController extends Controller
             $this->stdout("\n");
         };
 
+        foreach ($training->brokenUrlSections() as $problem) {
+            $this->stdout("Broken links: {$problem}\n\n");
+        }
         foreach ($training->pageRenderProblems() as $problem) {
-            $this->stderr("Page mode: {$problem}\n");
+            $this->stdout("Page mode: {$problem}\n\n");
         }
 
         $describe($health['stale'], 'Changed since last indexed', fn($i) => "{$i['kind']} #{$i['id']}");

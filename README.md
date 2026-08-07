@@ -86,6 +86,12 @@ Two things it needs:
 A URL training record pointing at a page that a page-rendered entry already
 covers is skipped rather than crawled twice.
 
+**Links that would 404 are never handed out.** A section can carry a URI format
+with no template behind it; Craft builds addresses from it happily and they all
+404. Those URLs are dropped both from indexed text and from answer-time link
+resolution — filtering only one leaves the other free to produce the link.
+`rag/doctor` names the section so it can be fixed at the source.
+
 ## Keeping the assistant right
 
 An assistant answers confidently from whatever it was trained on, so the failures

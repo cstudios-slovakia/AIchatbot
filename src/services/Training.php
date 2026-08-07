@@ -162,16 +162,66 @@ class Training extends Component
             if ($trained && !in_array($uid, $trained, true)) {
                 $problems[] = "'{$section->name}' is set to index from its page but is not selected for training, so nothing indexes it.";
             }
+            // Two very different faults look identical from here — a section
+            // whose entries were never meant to have pages, and a site whose
+            // baseUrl cannot resolve outside a request. Saying which one it is
+            // is the whole value of the check.
+            $hasUrls = false;
+            foreach ($section->getSiteSettings() as $siteSetting) {
+                $hasUrls = $hasUrls || $siteSetting->hasUrls;
+            }
+            if (!$hasUrls) {
+                $problems[] = "'{$section->name}' entries have no URLs of their own, so page mode does nothing "
+                    . 'and they stay indexed from their fields. Either drop it from the list or give the section a URI format.';
+                continue;
+            }
+
             $entry = Entry::find()->section($section->handle)->status(Entry::STATUS_LIVE)->one();
             if (!$entry) {
                 continue;
             }
             if ($this->absoluteUrl($entry) === null) {
-                $problems[] = "'{$section->name}' entries have no absolute URL, so they fall back to field indexing. "
+                $problems[] = "'{$section->name}' entries resolve to no absolute URL, so they fall back to field indexing. "
                     . 'Set the site baseUrl to a real URL (e.g. $PRIMARY_SITE_URL in .env) instead of @web.';
             }
         }
         return $problems;
+    }
+
+    /**
+     * Sections that give their entries a URL but have no template to render it.
+     *
+     * Craft builds the URL from the URI format regardless, so the address looks
+     * real, goes into the indexed text, and gets handed to a visitor as a link
+     * to a 404. Reported rather than worked around: a project can route those
+     * URIs from config/routes.php, and silently dropping URLs that do resolve
+     * would be the worse mistake.
+     *
+     * @return string[]
+     */
+    public function brokenUrlSections(): array
+    {
+        $view = Craft::$app->getView();
+        $mode = $view->getTemplateMode();
+        $view->setTemplateMode(\craft\web\View::TEMPLATE_MODE_SITE);
+        try {
+            $problems = [];
+            foreach (CraftCompat::getAllSections() as $section) {
+                foreach ($section->getSiteSettings() as $siteSetting) {
+                    $template = (string)$siteSetting->template;
+                    if (!$siteSetting->hasUrls || ($template !== '' && $view->doesTemplateExist($template))) {
+                        continue;
+                    }
+                    $problems[] = "'{$section->name}' entries get URLs like '{$siteSetting->uriFormat}' but the section's "
+                        . "template ('{$template}') does not exist, so those URLs 404. Turn off the section's URLs, or add the template, "
+                        . 'before indexing it — otherwise the assistant links visitors to missing pages.';
+                    break;
+                }
+            }
+            return $problems;
+        } finally {
+            $view->setTemplateMode($mode);
+        }
     }
 
     /** Whether this entry's section is configured to index from its rendered page. */
@@ -295,6 +345,17 @@ class Training extends Component
      * later hands to the visitor as a broken link. A missing URL is recoverable
      * (retrieval resolves one at answer time); a wrong one is not.
      */
+    /**
+     * An element's public URL, or null when handing it to a visitor would be a
+     * mistake. Shared with answer-time link resolution so a section whose URLs
+     * 404 is filtered in both places — filtering only at index time would still
+     * let the assistant produce the link from the live element.
+     */
+    public function publicUrl(\craft\base\Element $el): ?string
+    {
+        return $this->absoluteUrl($el);
+    }
+
     private function absoluteUrl(\craft\base\Element $el): ?string
     {
         try {
@@ -312,7 +373,70 @@ class Training extends Component
             }
             return null;
         }
+        if ($el instanceof Entry && !$this->sectionUrlResolves($el)) {
+            return null;
+        }
         return $url;
+    }
+
+    /**
+     * Whether a section's URLs actually reach a page.
+     *
+     * A section can have a URI format and no template, which Craft is happy to
+     * build addresses from — they simply 404. Indexing one puts a dead link in
+     * front of a visitor over the assistant's signature, which is worse than
+     * giving them no link at all: retrieval can resolve a URL later, but it
+     * cannot un-send a wrong one.
+     *
+     * Cached per section and site because indexing walks hundreds of entries
+     * through the same handful of sections, and each miss costs a template
+     * lookup on disk.
+     */
+    private function sectionUrlResolves(Entry $entry): bool
+    {
+        static $cache = [];
+
+        $sectionId = (int)($entry->sectionId ?? 0);
+        $key = $sectionId . ':' . (int)$entry->siteId;
+        if (isset($cache[$key])) {
+            return $cache[$key];
+        }
+
+        $siteSetting = null;
+        try {
+            foreach (($entry->getSection()?->getSiteSettings() ?? []) as $candidate) {
+                if ((int)$candidate->siteId === (int)$entry->siteId) {
+                    $siteSetting = $candidate;
+                    break;
+                }
+            }
+        } catch (Throwable) {
+            return $cache[$key] = true; // cannot tell — assume the URL is fine
+        }
+        if (!$siteSetting || !$siteSetting->hasUrls) {
+            return $cache[$key] = true; // getUrl() gave us something anyway; not ours to second-guess
+        }
+
+        $template = (string)$siteSetting->template;
+        $view = Craft::$app->getView();
+        $mode = $view->getTemplateMode();
+        try {
+            $view->setTemplateMode(\craft\web\View::TEMPLATE_MODE_SITE);
+            $resolves = $template !== '' && $view->doesTemplateExist($template);
+        } catch (Throwable) {
+            $resolves = true;
+        } finally {
+            $view->setTemplateMode($mode);
+        }
+
+        if (!$resolves) {
+            Craft::warning(
+                "Not indexing URLs for section '{$entry->getSection()?->name}': its template '{$template}' does not exist, "
+                . 'so those URLs 404. Turn off the section\'s URLs or add the template.',
+                __METHOD__,
+            );
+        }
+        return $cache[$key] = $resolves;
     }
 
     /**
@@ -1190,6 +1314,10 @@ class Training extends Component
             foreach ($recordClass::find()->all() as $rec) {
                 if ($rec->status === 'error') {
                     $failed[] = ['id' => (int)$rec->id, 'kind' => $kind, 'message' => (string)($rec->errorMessage ?? '')];
+                } elseif ($rec->status === 'skipped') {
+                    // Deliberately not indexed — a duplicate of something else in
+                    // the index. Nothing to fix, so nothing to report.
+                    continue;
                 } elseif ((int)($rec->chunkCount ?? 0) === 0) {
                     $blank[] = ['id' => (int)$rec->id, 'kind' => $kind];
                 }
