@@ -710,7 +710,7 @@ class Chat extends Component
                     ['role' => 'system', 'content' => $sys],
                     ['role' => 'user', 'content' => $usr],
                 ],
-                ['model' => 'gpt-4o-mini', 'temperature' => 0.0]
+                ['model' => $settings->helperModel, 'temperature' => 0.0]
             );
             $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
             if (is_array($data)) {
@@ -828,7 +828,7 @@ class Chat extends Component
                     ['role' => 'system', 'content' => $sys],
                     ['role' => 'user', 'content' => $usr],
                 ],
-                ['model' => 'gpt-4o-mini', 'temperature' => 0.0]
+                ['model' => $settings->helperModel, 'temperature' => 0.0]
             );
             $data = json_decode($this->stripJsonFence((string)($msg['content'] ?? '')), true);
             $order = is_array($data['order'] ?? null) ? $data['order'] : null;

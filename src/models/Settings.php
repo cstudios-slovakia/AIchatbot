@@ -33,6 +33,10 @@ class Settings extends Model
     public string $openaiApiKey = '';
     public string $chatModel = 'gpt-4o-mini';
     public string $embeddingModel = 'text-embedding-3-small';
+    // Cheap model for the internal steps that are not the answer itself: query
+    // rewriting, reranking and Q&A translation. Kept separate from chatModel so
+    // raising answer quality doesn't multiply the cost of the plumbing.
+    public string $helperModel = 'gpt-4o-mini';
     public string $initialMessage = 'Hi! How can I help you today?';
     /** @var array<string, string> Craft site UID => override initial message. Empty/missing => use $initialMessage. */
     public array $initialMessages = [];
@@ -186,7 +190,7 @@ class Settings extends Model
     {
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
-            [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'initialMessage', 'systemPrompt'], 'string'],
+            [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt'], 'string'],
             [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'historyMessages', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],

@@ -25,6 +25,20 @@
 }) }}
 
 {{ forms.selectField({
+  label: 'Helper Model',
+  instructions: 'Used for the internal steps that are not the answer itself — rewriting follow-up questions into search queries, reranking results, and translating Q&A pairs. Keep it cheap; it runs on most turns.',
+  name: 'settings[helperModel]',
+  value: settings.helperModel,
+  options: {
+    'gpt-4o-mini': 'gpt-4o-mini (recommended)',
+    'gpt-4.1-mini': 'gpt-4.1-mini',
+    'gpt-4.1-nano': 'gpt-4.1-nano',
+    'gpt-5-mini': 'gpt-5-mini',
+    'gpt-5-nano': 'gpt-5-nano',
+  },
+}) }}
+
+{{ forms.selectField({
   label: 'Embedding Model',
   instructions: 'Switching this requires full retraining of all content.',
   name: 'settings[embeddingModel]',
