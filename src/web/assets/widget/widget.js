@@ -323,6 +323,48 @@
 
   window.csChatbotRenderMarkdown = renderMarkdown;
 
+  // Read a server-sent-event stream from a POST. EventSource cannot POST, and
+  // the message body is what carries the question, so the frames are parsed by
+  // hand. onEvent is called with (eventName, data) per frame.
+  function postStream(url, data, onEvent) {
+    return fetch(url, {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin',
+      headers: { 'Accept': 'text/event-stream' },
+    }).then(function (response) {
+      var type = response.headers.get('Content-Type') || '';
+      if (!response.ok || type.indexOf('text/event-stream') === -1 || !response.body) {
+        // Server declined to stream (disabled, filtered, banned) — hand the
+        // body back so the caller can treat it as an ordinary reply.
+        return response.json().then(function (json) { return { streamed: false, json: json }; });
+      }
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      function pump() {
+        return reader.read().then(function (chunk) {
+          if (chunk.done) return { streamed: true };
+          buffer += decoder.decode(chunk.value, { stream: true });
+          var frames = buffer.split('\n\n');
+          buffer = frames.pop();
+          frames.forEach(function (frame) {
+            var name = 'message';
+            var payload = '';
+            frame.split('\n').forEach(function (line) {
+              if (line.indexOf('event:') === 0) name = line.slice(6).trim();
+              else if (line.indexOf('data:') === 0) payload += line.slice(5).trim();
+            });
+            if (!payload) return;
+            try { onEvent(name, JSON.parse(payload)); } catch (e) {}
+          });
+          return pump();
+        });
+      }
+      return pump();
+    });
+  }
+
   var ogCache = {};
   function fetchOg(url) {
     if (ogCache[url]) return ogCache[url];
@@ -961,6 +1003,18 @@
       scrollMessagesToBottom();
     }
 
+    // A bare bot bubble that text is appended into while the model writes.
+    // It carries no timestamp, rating or handoff offer: those belong to the
+    // finished message, which replaces this one when the stream ends.
+    function addStreamingBot() {
+      var cls = 'cs-chatbot__msg cs-chatbot__msg--bot cs-chatbot__msg--md'
+        + (isCont('bot') ? ' cs-chatbot__msg--cont' : '');
+      var bubble = el('div', { class: cls });
+      messages.appendChild(bubble);
+      scrollMessagesToBottom();
+      return bubble;
+    }
+
     function addUser(text, timeOrDate, fullDate) {
       var cls = 'cs-chatbot__msg cs-chatbot__msg--user cs-chatbot__msg--md' + (isCont('user') ? ' cs-chatbot__msg--cont' : '');
       var bubble = el('div', { class: cls, html: renderMarkdown(text) });
@@ -1064,38 +1118,78 @@
           input.focus();
         }
       }
-      post(urls().send, data)
-        .then(function (r) {
+      // While streaming, the reply lands in a bubble that grows; the final
+      // event replaces it with the processed text (hallucinated links removed,
+      // plugin transforms applied), so what the visitor keeps is never the raw
+      // model output.
+      var streamBubble = null;
+      var streamText = '';
+
+      function onStreamEvent(name, payload) {
+        if (name === 'delta' && payload && payload.text) {
           if (typing) typing.remove();
-          clearPending();
-          if (r && r.filtered) {
-            addSystem(r.error || T('messageRejected'), new Date().toISOString());
-            return;
-          }
-          if (r && r.banned) { root.remove(); return; }
-          if (!r.success) {
-            addBot(T('somethingWrong') + ' ' + (r.error || T('unknown')), new Date().toISOString());
-            return;
-          }
-          if (r.sessionToken) localStorage.setItem(STORAGE_TOKEN, r.sessionToken);
-          if (r.shortId) { state.shortId = r.shortId; updateBanner(); }
-          if (r.handoff) {
-            startPolling();
-            updateBanner();
-            refreshLauncherDot();
-            return;
-          }
-          if (r.messageId) state.lastMessageId = Math.max(state.lastMessageId, parseInt(r.messageId, 10));
-          addBot(r.reply, new Date().toISOString(), { messageId: r.messageId, offerHuman: r.offerHuman });
-          if (r.form && r.form.fields && r.form.fields.length) {
-            renderFormCard(r.form);
-          }
-        })
-        .catch(function () {
-          if (typing) typing.remove();
-          clearPending();
-          addBot(T('networkError'), new Date().toISOString());
-        });
+          if (!streamBubble) streamBubble = addStreamingBot();
+          streamText += payload.text;
+          streamBubble.innerHTML = renderMarkdown(streamText);
+          scrollMessagesToBottom();
+          return;
+        }
+        if (name === 'done') {
+          if (streamBubble) { streamBubble.remove(); streamBubble = null; }
+          handleReply(payload || {});
+        }
+      }
+
+      function handleReply(r) {
+        if (typing) typing.remove();
+        clearPending();
+        if (r && r.filtered) {
+          addSystem(r.error || T('messageRejected'), new Date().toISOString());
+          return;
+        }
+        if (r && r.banned) { root.remove(); return; }
+        if (!r.success) {
+          addBot(T('somethingWrong') + ' ' + (r.error || T('unknown')), new Date().toISOString());
+          return;
+        }
+        if (r.sessionToken) localStorage.setItem(STORAGE_TOKEN, r.sessionToken);
+        if (r.shortId) { state.shortId = r.shortId; updateBanner(); }
+        if (r.handoff) {
+          startPolling();
+          updateBanner();
+          refreshLauncherDot();
+          return;
+        }
+        if (r.messageId) state.lastMessageId = Math.max(state.lastMessageId, parseInt(r.messageId, 10));
+        addBot(r.reply, new Date().toISOString(), { messageId: r.messageId, offerHuman: r.offerHuman });
+        if (r.form && r.form.fields && r.form.fields.length) {
+          renderFormCard(r.form);
+        }
+      }
+
+      function onFailure() {
+        if (streamBubble) { streamBubble.remove(); streamBubble = null; }
+        if (typing) typing.remove();
+        clearPending();
+        addBot(T('networkError'), new Date().toISOString());
+      }
+
+      var canStream = config.streamingEnabled !== false
+        && typeof TextDecoder !== 'undefined'
+        && typeof ReadableStream !== 'undefined';
+
+      if (canStream && isBotChat) {
+        postStream(urls().stream, data, onStreamEvent)
+          .then(function (outcome) {
+            // The server answered with plain JSON instead of a stream — a
+            // rejected message, a ban, or streaming switched off.
+            if (outcome && outcome.streamed === false) handleReply(outcome.json || {});
+          })
+          .catch(onFailure);
+        return;
+      }
+
+      post(urls().send, data).then(handleReply).catch(onFailure);
     }
 
     function requestHuman() {

@@ -37,6 +37,10 @@ class Settings extends Model
     // rewriting, reranking and Q&A translation. Kept separate from chatModel so
     // raising answer quality doesn't multiply the cost of the plumbing.
     public string $helperModel = 'gpt-4o-mini';
+    // Push the reply out as it is generated instead of when it is finished. A
+    // ten-second wait on a typing indicator reads as broken; the same wait with
+    // words appearing reads as thinking.
+    public bool $streamingEnabled = true;
     public string $initialMessage = 'Hi! How can I help you today?';
     /** @var array<string, string> Craft site UID => override initial message. Empty/missing => use $initialMessage. */
     public array $initialMessages = [];
@@ -191,7 +195,7 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled', 'streamingEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'historyMessages', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],

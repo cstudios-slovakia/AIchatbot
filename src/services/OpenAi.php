@@ -136,14 +136,13 @@ class OpenAi extends Component
     }
 
     /**
-     * Low-level chat completion that returns the full assistant message
-     * (including any `tool_calls`), so callers can drive a tool-calling loop.
+     * The request body shared by the buffered and streaming paths.
      *
      * @param array<int, array<string, mixed>> $messages
      * @param array{model?:?string, temperature?:float, tools?:array, tool_choice?:mixed} $options
-     * @return array<string, mixed> the assistant message
+     * @return array<string, mixed>
      */
-    public function chatRaw(array $messages, array $options = []): array
+    private function payload(array $messages, array $options): array
     {
         $model = ($options['model'] ?? null) ?: Plugin::getInstance()->getSettings()->chatModel;
         $payload = [
@@ -160,6 +159,118 @@ class OpenAi extends Component
         if (!$isGpt5Reasoning) {
             $payload['temperature'] = $options['temperature'] ?? 0.2;
         }
+        return $payload;
+    }
+
+    /**
+     * Streaming chat completion.
+     *
+     * Behaves like {@see self::chatRaw()} and returns the same assembled
+     * assistant message, but calls $onDelta with each fragment of content as it
+     * arrives so a caller can forward it to the visitor. Fragments belonging to
+     * a tool call are assembled silently: the visitor should see the answer, not
+     * the machinery that produced it.
+     *
+     * @param array<int, array<string, mixed>> $messages
+     * @param array{model?:?string, temperature?:float, tools?:array, tool_choice?:mixed} $options
+     * @param callable(string):void $onDelta
+     * @return array<string, mixed> the assistant message
+     */
+    public function chatStream(array $messages, array $options, callable $onDelta): array
+    {
+        $payload = $this->payload($messages, $options);
+        $payload['stream'] = true;
+
+        try {
+            $res = $this->client()->post('chat/completions', [
+                'json' => $payload,
+                'stream' => true,
+                // Long answers outlive the default read timeout, and a stream
+                // that dies half-way is worse than one that never started.
+                'read_timeout' => $this->timeout,
+            ]);
+        } catch (GuzzleException $e) {
+            throw new RuntimeException('OpenAI chat request failed: ' . $e->getMessage(), 0, $e);
+        }
+
+        $body = $res->getBody();
+        $content = '';
+        $toolCalls = [];
+        $buffer = '';
+
+        while (!$body->eof()) {
+            $buffer .= $body->read(8192);
+            while (($newline = strpos($buffer, "\n")) !== false) {
+                $line = trim(substr($buffer, 0, $newline));
+                $buffer = substr($buffer, $newline + 1);
+                if ($line === '' || !str_starts_with($line, 'data:')) {
+                    continue;
+                }
+                $data = trim(substr($line, 5));
+                if ($data === '[DONE]') {
+                    break 2;
+                }
+                $event = json_decode($data, true);
+                if (!is_array($event)) {
+                    continue;
+                }
+                $delta = $event['choices'][0]['delta'] ?? [];
+                foreach ($delta['tool_calls'] ?? [] as $call) {
+                    $this->mergeToolCallDelta($toolCalls, $call);
+                }
+                $text = (string)($delta['content'] ?? '');
+                if ($text !== '') {
+                    $content .= $text;
+                    // Nothing is emitted once the model has committed to calling
+                    // a tool — that turn's visible answer comes later.
+                    if (!$toolCalls) {
+                        $onDelta($text);
+                    }
+                }
+            }
+        }
+
+        $message = ['role' => 'assistant', 'content' => $content];
+        if ($toolCalls) {
+            ksort($toolCalls);
+            $message['tool_calls'] = array_values($toolCalls);
+        }
+        return $message;
+    }
+
+    /**
+     * Tool calls arrive split across events: an index with an id and name first,
+     * then the arguments a few characters at a time.
+     *
+     * @param array<int, array<string, mixed>> $toolCalls
+     * @param array<string, mixed> $delta
+     */
+    private function mergeToolCallDelta(array &$toolCalls, array $delta): void
+    {
+        $index = (int)($delta['index'] ?? 0);
+        $toolCalls[$index] ??= ['id' => '', 'type' => 'function', 'function' => ['name' => '', 'arguments' => '']];
+        if (isset($delta['id'])) {
+            $toolCalls[$index]['id'] = (string)$delta['id'];
+        }
+        if (isset($delta['function']['name'])) {
+            $toolCalls[$index]['function']['name'] .= (string)$delta['function']['name'];
+        }
+        if (isset($delta['function']['arguments'])) {
+            $toolCalls[$index]['function']['arguments'] .= (string)$delta['function']['arguments'];
+        }
+    }
+
+    /**
+     * Low-level chat completion that returns the full assistant message
+     * (including any `tool_calls`), so callers can drive a tool-calling loop.
+     *
+     * @param array<int, array<string, mixed>> $messages
+     * @param array{model?:?string, temperature?:float, tools?:array, tool_choice?:mixed} $options
+     * @return array<string, mixed> the assistant message
+     */
+    public function chatRaw(array $messages, array $options = []): array
+    {
+        $payload = $this->payload($messages, $options);
         try {
             $res = $this->client()->post('chat/completions', [
                 'json' => $payload,

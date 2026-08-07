@@ -399,6 +399,7 @@ class Plugin extends BasePlugin
             $urls = [
                 'config' => UrlHelper::actionUrl('interactive-ai-assistant/chat/config'),
                 'send' => UrlHelper::actionUrl('interactive-ai-assistant/chat/send'),
+                'stream' => UrlHelper::actionUrl('interactive-ai-assistant/chat/stream'),
                 'rate' => UrlHelper::actionUrl('interactive-ai-assistant/chat/rate'),
                 'suggestionClick' => UrlHelper::actionUrl('interactive-ai-assistant/chat/suggestion-click'),
                 'poll' => UrlHelper::actionUrl('interactive-ai-assistant/chat/poll'),

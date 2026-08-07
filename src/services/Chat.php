@@ -66,7 +66,12 @@ class Chat extends Component
     /**
      * @return array<string, mixed>
      */
-    public function ask(string $question, ?string $sessionToken = null, ?string $pageUrl = null): array
+    /**
+     * @param callable(string):void|null $onDelta called with each fragment of the
+     *        reply as the model produces it, for callers that stream to the visitor
+     * @return array<string, mixed>
+     */
+    public function ask(string $question, ?string $sessionToken = null, ?string $pageUrl = null, ?callable $onDelta = null): array
     {
         $session = $this->getOrCreateSession($sessionToken, $pageUrl);
 
@@ -106,7 +111,7 @@ class Chat extends Component
         }
 
         try {
-            return $this->generateReply($session, $question);
+            return $this->generateReply($session, $question, $onDelta);
         } catch (\Throwable $e) {
             // The turn died before any reply was logged (API timeout, fatal in a
             // tool call). Roll the user message back so the in-flight check above
@@ -158,7 +163,7 @@ class Chat extends Component
      *
      * @return array<string, mixed>
      */
-    private function generateReply(ChatSessionRecord $session, string $question): array
+    private function generateReply(ChatSessionRecord $session, string $question, ?callable $onDelta = null): array
     {
         $settings = Plugin::getInstance()->getSettings();
         $plugin = Plugin::getInstance();
@@ -323,7 +328,7 @@ class Chat extends Component
         // Give form capabilities the session they were collected in, so a
         // submission made during the tool loop links back to this chat.
         $plugin->forms->setCurrentSession($session);
-        $reply = $this->complete($messages, $tools, $isCpUser);
+        $reply = $this->complete($messages, $tools, $isCpUser, $onDelta);
         $responseTime = round(microtime(true) - $start, 3);
 
         // Sentinel token from the model = language-agnostic "offer human" signal. Strip before showing.
@@ -629,16 +634,20 @@ class Chat extends Component
      * @param array<int, array<string, mixed>> $messages
      * @param array<int, array<string, mixed>> $tools
      */
-    private function complete(array $messages, array $tools, bool $isCpUser = false): string
+    private function complete(array $messages, array $tools, bool $isCpUser = false, ?callable $onDelta = null): string
     {
         $plugin = Plugin::getInstance();
         if (empty($tools)) {
-            return $plugin->openAi->chat($messages);
+            return $onDelta === null
+                ? $plugin->openAi->chat($messages)
+                : (string)($plugin->openAi->chatStream($messages, [], $onDelta)['content'] ?? '');
         }
         $caps = $plugin->capabilities;
         $maxIter = max(1, (int)$plugin->getSettings()->maxToolIterations);
         for ($i = 0; $i < $maxIter; $i++) {
-            $message = $plugin->openAi->chatRaw($messages, ['tools' => $tools]);
+            $message = $onDelta === null
+                ? $plugin->openAi->chatRaw($messages, ['tools' => $tools])
+                : $plugin->openAi->chatStream($messages, ['tools' => $tools], $onDelta);
             $calls = $message['tool_calls'] ?? [];
             if (empty($calls)) {
                 return (string)($message['content'] ?? '');
@@ -658,7 +667,9 @@ class Chat extends Component
             }
         }
         // Hit the iteration cap with calls still pending — force a final answer.
-        $message = $plugin->openAi->chatRaw($messages);
+        $message = $onDelta === null
+            ? $plugin->openAi->chatRaw($messages)
+            : $plugin->openAi->chatStream($messages, [], $onDelta);
         return (string)($message['content'] ?? '');
     }
 

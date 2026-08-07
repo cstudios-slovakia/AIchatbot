@@ -12,7 +12,7 @@ use yii\web\Response;
 
 class ChatController extends Controller
 {
-    protected array|bool|int $allowAnonymous = ['send', 'rate', 'suggestion-click', 'config', 'poll', 'request-human', 'end', 'rate-chat', 'logo', 'submit-contact', 'submit-form'];
+    protected array|bool|int $allowAnonymous = ['send', 'stream', 'rate', 'suggestion-click', 'config', 'poll', 'request-human', 'end', 'rate-chat', 'logo', 'submit-contact', 'submit-form'];
     public $enableCsrfValidation = false;
 
     private function maybeSweep(): void
@@ -77,6 +77,7 @@ class ChatController extends Controller
             'suggestionsEnabled' => $s->suggestionsEnabled,
             'suggestions' => $s->getSuggestionsForSite($siteUid),
             'ratingsEnabled' => $s->ratingsEnabled,
+            'streamingEnabled' => (bool)$s->streamingEnabled,
             'humanHandoffEnabled' => (bool)$s->humanHandoffEnabled,
             'humanHandoffMode' => in_array($s->humanHandoffMode, ['always', 'ai'], true) ? $s->humanHandoffMode : 'always',
             'contactCaptureEnabled' => (bool)$s->contactCaptureEnabled,
@@ -200,6 +201,87 @@ class ChatController extends Controller
             return $this->asJson(['success' => false, 'error' => 'Chat error: ' . $e->getMessage()]);
         }
         return $this->asJson(['success' => true] + $result);
+    }
+
+    /**
+     * Same as {@see self::actionSend()} but pushes the reply out as it is
+     * generated, over server-sent events.
+     *
+     * A visitor watching a typing indicator for ten or fifteen seconds assumes
+     * it is broken; the same wait with words appearing reads as thinking. The
+     * text streamed here is raw model output — the final `done` event carries
+     * the processed reply (hallucinated links removed, plugin transforms
+     * applied) for the widget to swap in.
+     */
+    public function actionStream(): Response
+    {
+        $this->requirePostRequest();
+        if ($blocked = $this->blockIfBanned()) return $blocked;
+        if (!Plugin::getInstance()->widgetVisibleForCurrentUser()) {
+            return $this->asJson(['success' => false, 'error' => 'Chatbot disabled']);
+        }
+        $req = Craft::$app->request;
+        $question = trim((string)$req->getBodyParam('message', ''));
+        if ($question === '') {
+            return $this->asJson(['success' => false, 'error' => 'Empty message']);
+        }
+        $token = $req->getBodyParam('sessionToken');
+        $pageUrl = $req->getBodyParam('pageUrl');
+
+        $check = Plugin::getInstance()->filter->check($question, is_string($token) ? $token : null, $req->getUserIP());
+        if (!$check['ok']) {
+            return $this->asJson([
+                'success' => false,
+                'filtered' => true,
+                'reason' => $check['reason'] ?? 'invalid',
+                'error' => $check['message'] ?? 'Message rejected.',
+            ]);
+        }
+
+        // Headers go out directly rather than through the response object,
+        // which only sends them once the action has returned — by which point
+        // there is nothing left to stream. Marking the response sent stops Yii
+        // sending a second set on the way out.
+        $response = Craft::$app->getResponse();
+        $response->format = Response::FORMAT_RAW;
+        header('Content-Type: text/event-stream; charset=UTF-8');
+        header('Cache-Control: no-cache, no-transform');
+        header('Connection: keep-alive');
+        // nginx and friends buffer proxied responses by default, which would
+        // hold the whole stream back until it finished and defeat the point.
+        header('X-Accel-Buffering: no');
+        $response->isSent = true;
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+
+        // Open the stream immediately with a comment frame. Retrieval and the
+        // model's own thinking can take several seconds before the first word,
+        // and an idle connection is one a proxy may decide to close.
+        echo ": open\n\n";
+        flush();
+
+        $emit = function (string $event, array $data): void {
+            echo 'event: ' . $event . "\n";
+            echo 'data: ' . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
+            flush();
+        };
+
+        try {
+            $result = Plugin::getInstance()->chat->ask(
+                $question,
+                is_string($token) ? $token : null,
+                is_string($pageUrl) ? $pageUrl : null,
+                fn(string $text) => $emit('delta', ['text' => $text]),
+            );
+            $emit('done', ['success' => true] + $result);
+        } catch (Throwable $e) {
+            Craft::error($e->getMessage(), __METHOD__);
+            $emit('done', ['success' => false, 'error' => 'Chat error: ' . $e->getMessage()]);
+        }
+
+        Craft::$app->end();
+        return $response;
     }
 
     public function actionRate(): Response

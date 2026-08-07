@@ -24,6 +24,13 @@
   },
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Stream replies',
+  instructions: 'Show the answer as it is written instead of when it is finished. Turn off if a proxy or CDN in front of the site buffers responses.',
+  name: 'settings[streamingEnabled]',
+  on: settings.streamingEnabled,
+}) }}
+
 {{ forms.selectField({
   label: 'Helper Model',
   instructions: 'Used for the internal steps that are not the answer itself — rewriting follow-up questions into search queries, reranking results, and translating Q&A pairs. Keep it cheap; it runs on most turns.',
