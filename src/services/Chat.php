@@ -82,7 +82,7 @@ class Chat extends Component
                 ->select(['role', 'dateCreated'])
                 ->from('{{%chatbot_messages}}')
                 ->where(['sessionId' => $session->id])
-                ->andWhere(['in', 'role', ['user', 'bot']])
+                ->andWhere(['in', 'role', ['user', 'bot', 'admin']])
                 ->orderBy(['id' => SORT_DESC])
                 ->limit(1)
                 ->one();
@@ -311,7 +311,9 @@ class Chat extends Component
             }
         }
         foreach ($history as $h) {
-            $messages[] = ['role' => $h['role'] === 'bot' ? 'assistant' : 'user', 'content' => $h['content']];
+            // A human agent's turn reached the visitor as the assistant speaking.
+            $isAssistant = in_array($h['role'], ['bot', 'admin'], true);
+            $messages[] = ['role' => $isAssistant ? 'assistant' : 'user', 'content' => $h['content']];
         }
         $messages[] = ['role' => 'user', 'content' => $question];
 
@@ -608,6 +610,18 @@ class Chat extends Component
     /**
      * @param array<int, array{role:string, content:string}> $messages
      */
+    /**
+     * Record a turn this service did not log itself — a live-chat agent's reply —
+     * so the model still sees it when transcript logging is off and history
+     * therefore comes from the cache rather than the database.
+     */
+    public function rememberForContext(ChatSessionRecord $session, string $role, string $content): void
+    {
+        if (!Plugin::getInstance()->getSettings()->loggingEnabled) {
+            $this->pushContextCache((int)$session->id, $role, $content);
+        }
+    }
+
     private function pushContextCache(int $sessionId, string $role, string $content): void
     {
         $cache = Craft::$app->getCache();
@@ -635,7 +649,7 @@ class Chat extends Component
                 ->select(['role', 'content'])
                 ->from('{{%chatbot_messages}}')
                 ->where(['sessionId' => $sessionId])
-                ->andWhere(['in', 'role', ['user', 'bot']])
+                ->andWhere(['in', 'role', ['user', 'bot', 'admin']])
                 ->orderBy(['id' => SORT_DESC])
                 ->limit($limit + 1)
                 ->all());
