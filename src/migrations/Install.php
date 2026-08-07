@@ -50,6 +50,8 @@ class Install extends Migration
 
         $this->createTable('{{%chatbot_training_files}}', [
             'id' => $this->primaryKey(),
+            // null = all sites
+            'siteId' => $this->integer()->null(),
             'filename' => $this->string(255)->notNull(),
             'originalName' => $this->string(255)->notNull(),
             'size' => $this->integer()->notNull()->defaultValue(0),
@@ -64,6 +66,8 @@ class Install extends Migration
 
         $this->createTable('{{%chatbot_training_urls}}', [
             'id' => $this->primaryKey(),
+            // null = all sites
+            'siteId' => $this->integer()->null(),
             'url' => $this->string(2048)->notNull(),
             'source' => $this->string(20)->notNull()->defaultValue('manual'),
             'status' => $this->string(20)->notNull()->defaultValue('pending'),
@@ -77,6 +81,10 @@ class Install extends Migration
 
         $this->createTable('{{%chatbot_training_qa}}', [
             'id' => $this->primaryKey(),
+            // null = all sites
+            'siteId' => $this->integer()->null(),
+            // Embed a translated copy per site instead of one shared copy.
+            'translate' => $this->boolean()->notNull()->defaultValue(false),
             'question' => $this->text()->notNull(),
             'answer' => $this->text()->notNull(),
             'source' => $this->string(20)->notNull()->defaultValue('manual'),

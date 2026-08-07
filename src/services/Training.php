@@ -625,6 +625,8 @@ class Training extends Component
             }
             $raw = file_get_contents($absolutePath) ?: '';
             $count = Plugin::getInstance()->embeddings->reindexSource('file', (int)$rec->id, $raw, [
+                'siteId' => $rec->siteId ? (int)$rec->siteId : null,
+                'language' => $this->siteLanguage($rec->siteId ? (int)$rec->siteId : null),
                 'title' => (string)($rec->originalName ?: pathinfo((string)$rec->filename, PATHINFO_FILENAME)),
             ]);
             $rec->chunkCount = $count;
@@ -671,6 +673,8 @@ class Training extends Component
                 : (string)$rec->url;
             $text = $this->htmlToText($html);
             $count = Plugin::getInstance()->embeddings->reindexSource('url', (int)$rec->id, $text, [
+                'siteId' => $rec->siteId ? (int)$rec->siteId : null,
+                'language' => $this->siteLanguage($rec->siteId ? (int)$rec->siteId : null),
                 'title' => $pageTitle,
             ]);
             $rec->chunkCount = $count;
@@ -696,12 +700,32 @@ class Training extends Component
     }
 
     /**
-     * @return string[] URLs discovered
+     * Most URLs one sitemap import will take on.
+     *
+     * Every discovered URL becomes an HTTP fetch and an embedding call, so a
+     * large sitemap can spend real money and hammer the target site before
+     * anyone notices. Importing the first slice and saying so is recoverable;
+     * queuing ten thousand crawls from one click is not.
      */
-    public function importSitemap(string $sitemapUrl): array
+    public const SITEMAP_URL_LIMIT = 500;
+
+    /**
+     * @param int|null $siteId site the discovered URLs belong to; null = all sites
+     * @return string[] URLs imported
+     */
+    public function importSitemap(string $sitemapUrl, ?int $siteId = null): array
     {
         $xml = $this->fetch($sitemapUrl);
         $urls = $this->parseSitemap($xml);
+        $discovered = count($urls);
+        $urls = array_slice($urls, 0, self::SITEMAP_URL_LIMIT);
+        if ($discovered > count($urls)) {
+            Craft::warning(
+                "Sitemap {$sitemapUrl} listed {$discovered} URLs; importing the first "
+                . self::SITEMAP_URL_LIMIT . '.',
+                __METHOD__,
+            );
+        }
         foreach ($urls as $u) {
             $existing = TrainingUrlRecord::find()
                 ->where(['url' => $u])
@@ -711,6 +735,7 @@ class Training extends Component
             }
             $rec = new TrainingUrlRecord();
             $rec->url = $u;
+            $rec->siteId = $siteId;
             $rec->source = 'sitemap';
             $rec->status = 'pending';
             $rec->save(false);
@@ -799,12 +824,106 @@ class Training extends Component
             Plugin::getInstance()->embeddings->deleteChunks('qa', (int)$rec->id);
             return;
         }
-        $text = "Q: {$rec->question}\nA: {$rec->answer}";
-        $count = Plugin::getInstance()->embeddings->reindexSource('qa', (int)$rec->id, $text, [
-            'title' => mb_substr((string)$rec->question, 0, 200),
-        ]);
+
+        $question = (string)$rec->question;
+        $answer = (string)$rec->answer;
+        $title = mb_substr($question, 0, 200);
+        $variants = [];
+
+        if ($rec->siteId) {
+            // Pinned to one site.
+            $variants[] = [
+                'text' => "Q: {$question}\nA: {$answer}",
+                'siteId' => (int)$rec->siteId,
+                'language' => $this->siteLanguage((int)$rec->siteId),
+                'title' => $title,
+            ];
+        } elseif ($rec->translate) {
+            // One authored pair, indexed once per site in that site's language.
+            // Retrieval is an embedding match against how the visitor phrased
+            // the question, so a Hungarian visitor needs a Hungarian embedding
+            // however good the Slovak answer is.
+            foreach (Craft::$app->sites->getAllSites() as $site) {
+                $language = (string)$site->language;
+                [$q, $a] = $this->translateQa($question, $answer, $language);
+                $variants[] = [
+                    'text' => "Q: {$q}\nA: {$a}",
+                    'siteId' => (int)$site->id,
+                    'language' => $language,
+                    'title' => mb_substr($q, 0, 200),
+                ];
+            }
+        } else {
+            // Shared across every site, exactly as written.
+            $variants[] = [
+                'text' => "Q: {$question}\nA: {$answer}",
+                'siteId' => null,
+                'language' => null,
+                'title' => $title,
+            ];
+        }
+
+        Plugin::getInstance()->embeddings->reindexSourceVariants('qa', (int)$rec->id, $variants);
         $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
         $rec->save(false);
+    }
+
+    /**
+     * Translate a Q&A pair into $language, cached on the source text so a
+     * retrain does not pay for the same translation twice.
+     *
+     * Falls back to the original on any failure: an untranslated pair still
+     * answers the question, a missing one does not.
+     *
+     * @return array{0:string, 1:string} [question, answer]
+     */
+    private function translateQa(string $question, string $answer, string $language): array
+    {
+        $cache = Craft::$app->getCache();
+        $key = 'cs-chatbot:qa-translation:' . md5($language . "\x00" . $question . "\x00" . $answer);
+        $cached = $cache->get($key);
+        if (is_array($cached) && count($cached) === 2) {
+            return $cached;
+        }
+        try {
+            $settings = Plugin::getInstance()->getSettings();
+            $message = Plugin::getInstance()->openAi->chatRaw(
+                [
+                    [
+                        'role' => 'system',
+                        'content' => "Translate the question and answer into the locale {$language}. "
+                            . 'Keep the meaning exact and the tone natural for a website visitor. '
+                            . 'Leave proper nouns, product names, addresses, phone numbers, prices and URLs as they are. '
+                            . 'Respond with ONLY compact JSON: {"question": string, "answer": string}.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => json_encode(['question' => $question, 'answer' => $answer], JSON_UNESCAPED_UNICODE),
+                    ],
+                ],
+                ['model' => $settings->helperModel, 'temperature' => 0.0],
+            );
+            $data = json_decode($this->stripJsonFence((string)($message['content'] ?? '')), true);
+            $q = trim((string)($data['question'] ?? ''));
+            $a = trim((string)($data['answer'] ?? ''));
+            if ($q !== '' && $a !== '') {
+                $cache->set($key, [$q, $a], 60 * 60 * 24 * 30);
+                return [$q, $a];
+            }
+        } catch (Throwable $e) {
+            Craft::warning("Q&A translation to {$language} failed: " . $e->getMessage(), __METHOD__);
+        }
+        return [$question, $answer];
+    }
+
+    private function stripJsonFence(string $s): string
+    {
+        $s = trim($s);
+        if (str_starts_with($s, '```')) {
+            $s = (string)preg_replace('/^```[a-zA-Z]*\s*/', '', $s);
+            $s = (string)preg_replace('/\s*```$/', '', $s);
+        }
+        return trim($s);
     }
 
     public function removeQa(int $qaId): void

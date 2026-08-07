@@ -26,38 +26,64 @@ class Embeddings extends Component
      */
     public function reindexSource(string $sourceType, int $sourceId, string $text, array $meta = []): int
     {
+        return $this->reindexSourceVariants($sourceType, $sourceId, [['text' => $text] + $meta]);
+    }
+
+    /**
+     * Replace a source's chunks with the chunks of several site-scoped variants
+     * of the same source.
+     *
+     * One authored Q&A can be indexed once per site in that site's language:
+     * a Hungarian visitor asks in Hungarian, and an embedding of the Slovak
+     * original matches that poorly however good the answer is. Each variant is
+     * chunked separately but they are embedded in one batched call and swapped
+     * in together, so a partial failure cannot leave a source half-indexed.
+     *
+     * @param array<int, array{text:string, siteId?:?int, language?:?string, title?:?string}> $variants
+     * @return int total chunk count
+     */
+    public function reindexSourceVariants(string $sourceType, int $sourceId, array $variants): int
+    {
         $settings = Plugin::getInstance()->getSettings();
         $this->chunkSize = max(300, (int)($settings->chunkSize ?: 1200));
         $this->chunkOverlap = max(0, min((int)($settings->chunkOverlap ?: 150), (int)floor($this->chunkSize / 2)));
-
-        $text = $this->normalize($text);
-        if ($text === '') {
-            $this->deleteChunks($sourceType, $sourceId);
-            return 0;
-        }
-        $pieces = $this->chunk($text);
-        if (empty($pieces)) {
-            $this->deleteChunks($sourceType, $sourceId);
-            return 0;
-        }
-
-        $title = trim((string)($meta['title'] ?? ''));
         $usePrefix = (bool)$settings->contextualPrefixEnabled;
-        $siteId = array_key_exists('siteId', $meta) && $meta['siteId'] !== null ? (int)$meta['siteId'] : null;
-        $language = isset($meta['language']) && $meta['language'] !== '' ? (string)$meta['language'] : null;
 
-        // Build stored content — prepend a breadcrumb so both the embedding and
-        // the generator see what document/section each chunk belongs to.
+        // Flatten every variant's chunks into one list so a single embedding
+        // pass covers them all.
+        $rows = [];
         $contents = [];
-        foreach ($pieces as $p) {
-            $prefix = '';
-            if ($usePrefix) {
-                $crumb = array_values(array_filter([$title, $p['section'] ?? null], fn($s) => (string)$s !== ''));
-                if (!empty($crumb)) {
-                    $prefix = implode(' > ', $crumb) . "\n\n";
-                }
+        foreach ($variants as $variant) {
+            $text = $this->normalize((string)($variant['text'] ?? ''));
+            if ($text === '') {
+                continue;
             }
-            $contents[] = $prefix . $p['content'];
+            $pieces = $this->chunk($text);
+            $title = trim((string)($variant['title'] ?? ''));
+            $siteId = isset($variant['siteId']) && $variant['siteId'] !== null ? (int)$variant['siteId'] : null;
+            $language = isset($variant['language']) && $variant['language'] !== '' ? (string)$variant['language'] : null;
+
+            foreach ($pieces as $position => $piece) {
+                $prefix = '';
+                if ($usePrefix) {
+                    $crumb = array_values(array_filter([$title, $piece['section'] ?? null], fn($s) => (string)$s !== ''));
+                    if (!empty($crumb)) {
+                        $prefix = implode(' > ', $crumb) . "\n\n";
+                    }
+                }
+                $contents[] = $prefix . $piece['content'];
+                $rows[] = [
+                    'siteId' => $siteId,
+                    'language' => $language,
+                    'position' => $position,
+                    'section' => ($piece['section'] ?? null) !== null ? mb_substr((string)$piece['section'], 0, 500) : null,
+                ];
+            }
+        }
+
+        if (empty($rows)) {
+            $this->deleteChunks($sourceType, $sourceId);
+            return 0;
         }
 
         // Embed before touching what is already indexed. Replacing a source used
@@ -69,15 +95,15 @@ class Embeddings extends Component
         $transaction = Craft::$app->db->beginTransaction();
         try {
             $this->deleteChunks($sourceType, $sourceId);
-            foreach ($pieces as $i => $p) {
+            foreach ($rows as $i => $row) {
                 $content = $contents[$i];
                 $rec = new ChunkRecord();
                 $rec->sourceType = $sourceType;
                 $rec->sourceId = $sourceId;
-                $rec->siteId = $siteId;
-                $rec->language = $language;
-                $rec->position = $i;
-                $rec->section = ($p['section'] ?? null) !== null ? mb_substr((string)$p['section'], 0, 500) : null;
+                $rec->siteId = $row['siteId'];
+                $rec->language = $row['language'];
+                $rec->position = $row['position'];
+                $rec->section = $row['section'];
                 $rec->content = $content;
                 $rec->embedding = isset($vectors[$i]) ? json_encode($vectors[$i]) : null;
                 $rec->tokens = (int)ceil(mb_strlen($content) / 4);
@@ -88,7 +114,7 @@ class Embeddings extends Component
             $transaction?->rollBack();
             throw $e;
         }
-        return count($pieces);
+        return count($rows);
     }
 
     public function deleteChunks(string $sourceType, int $sourceId): void

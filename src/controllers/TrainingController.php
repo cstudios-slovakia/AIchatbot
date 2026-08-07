@@ -309,6 +309,7 @@ class TrainingController extends Controller
         $rows = TrainingFileRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/files', [
             'rows' => $rows,
+            'sites' => Craft::$app->sites->getAllSites(),
         ]);
     }
 
@@ -333,7 +334,9 @@ class TrainingController extends Controller
         $path = $dir . DIRECTORY_SEPARATOR . $filename;
         $upload->saveAs($path);
 
+        $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
         $rec = new TrainingFileRecord();
+        $rec->siteId = $siteId > 0 ? $siteId : null;
         $rec->filename = $filename;
         $rec->originalName = $upload->name;
         $rec->size = $upload->size;
@@ -376,6 +379,7 @@ class TrainingController extends Controller
         $rows = TrainingUrlRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/urls', [
             'rows' => $rows,
+            'sites' => Craft::$app->sites->getAllSites(),
         ]);
     }
 
@@ -383,6 +387,7 @@ class TrainingController extends Controller
     {
         $this->requirePostRequest();
         $raw = (string)Craft::$app->request->getBodyParam('urls', '');
+        $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
         $urls = array_filter(array_map('trim', preg_split('/\r?\n/', $raw) ?: []));
         $added = 0;
         foreach ($urls as $u) {
@@ -395,6 +400,7 @@ class TrainingController extends Controller
             }
             $rec = new TrainingUrlRecord();
             $rec->url = $u;
+            $rec->siteId = $siteId > 0 ? $siteId : null;
             $rec->source = 'manual';
             $rec->status = 'pending';
             $rec->save(false);
@@ -414,7 +420,12 @@ class TrainingController extends Controller
             Craft::$app->session->setError('Invalid sitemap URL.');
             return $this->redirectToPostedUrl();
         }
-        Craft::$app->queue->push(new CrawlSitemapJob(['sitemapUrl' => $url, 'autoIndex' => true]));
+        $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
+        Craft::$app->queue->push(new CrawlSitemapJob([
+            'sitemapUrl' => $url,
+            'autoIndex' => true,
+            'siteId' => $siteId > 0 ? $siteId : null,
+        ]));
         Craft::$app->session->setNotice('Sitemap import queued.');
         return $this->redirectToPostedUrl();
     }
@@ -576,6 +587,7 @@ class TrainingController extends Controller
         $rows = TrainingQaRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/qa', [
             'rows' => $rows,
+            'sites' => Craft::$app->sites->getAllSites(),
         ]);
     }
 
@@ -594,6 +606,12 @@ class TrainingController extends Controller
             $rec->source = 'manual';
         }
         $rec->active = (bool)$req->getBodyParam('active', true);
+        // 0 (or absent) means every site — the default, and the only meaningful
+        // value on a single-site install.
+        $siteId = (int)$req->getBodyParam('siteId', 0);
+        $rec->siteId = $siteId > 0 ? $siteId : null;
+        // Translating only makes sense for a pair shared across sites.
+        $rec->translate = $rec->siteId === null && (bool)$req->getBodyParam('translate', false);
         if (!$rec->save()) {
             Craft::$app->session->setError('Could not save Q&A.');
             return $this->redirectToPostedUrl();
