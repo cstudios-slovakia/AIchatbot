@@ -8,6 +8,7 @@ use craft\elements\Entry;
 use craft\elements\GlobalSet;
 use craft\helpers\Db;
 use cstudiossro\craftcschatbot\helpers\CraftCompat;
+use cstudiossro\craftcschatbot\helpers\HtmlRegion;
 use cstudiossro\craftcschatbot\jobs\IndexCategoryJob;
 use cstudiossro\craftcschatbot\jobs\IndexEntryJob;
 use cstudiossro\craftcschatbot\jobs\IndexFileJob;
@@ -111,10 +112,129 @@ class Training extends Component
         } catch (Throwable) {
             // entry type without a section (Craft 5 nested entries)
         }
-        return $this->buildElementText($entry, [
+        $header = [
             'Section' => $section,
             'Published' => $entry->postDate?->format('Y-m-d'),
-        ]);
+        ];
+
+        if ($this->rendersAsPage($entry)) {
+            $page = $this->extractEntryPageText($entry, $header);
+            if ($page !== null) {
+                return $page;
+            }
+            // Fetch failed. Indexing the fields is worse than the page but far
+            // better than dropping the entry out of the index entirely.
+        }
+
+        return $this->buildElementText($entry, $header);
+    }
+
+    /**
+     * Reasons page mode will not work as configured, in plain words.
+     *
+     * The failure this catches is quiet by design: a page that cannot be
+     * fetched falls back to field indexing, so nothing errors and nothing looks
+     * wrong — the assistant just never learns anything the templates print. The
+     * usual cause is a site whose baseUrl is the `@web` alias, which resolves
+     * from the current request and so resolves to nothing in the queue worker
+     * that does the indexing.
+     *
+     * @return string[]
+     */
+    public function pageRenderProblems(): array
+    {
+        $uids = Plugin::getInstance()->getSettings()->pageRenderSections;
+        if (!$uids) {
+            return [];
+        }
+        // An empty section list is not a misconfiguration: it means entries get
+        // trained one at a time from the Entries screen, which works fine. Only
+        // a section list that exists and omits this section is worth flagging.
+        $trained = Plugin::getInstance()->getSettings()->trainingSections;
+
+        $problems = [];
+        foreach ($uids as $uid) {
+            $section = CraftCompat::getSectionByUid($uid);
+            if (!$section) {
+                $problems[] = "a selected section no longer exists (uid {$uid}).";
+                continue;
+            }
+            if ($trained && !in_array($uid, $trained, true)) {
+                $problems[] = "'{$section->name}' is set to index from its page but is not selected for training, so nothing indexes it.";
+            }
+            $entry = Entry::find()->section($section->handle)->status(Entry::STATUS_LIVE)->one();
+            if (!$entry) {
+                continue;
+            }
+            if ($this->absoluteUrl($entry) === null) {
+                $problems[] = "'{$section->name}' entries have no absolute URL, so they fall back to field indexing. "
+                    . 'Set the site baseUrl to a real URL (e.g. $PRIMARY_SITE_URL in .env) instead of @web.';
+            }
+        }
+        return $problems;
+    }
+
+    /** Whether this entry's section is configured to index from its rendered page. */
+    private function rendersAsPage(Entry $entry): bool
+    {
+        $uid = $this->scopeUid($entry);
+        return $uid !== null
+            && in_array($uid, Plugin::getInstance()->getSettings()->pageRenderSections, true);
+    }
+
+    /**
+     * An entry as its visitors see it: the metadata header, then the readable
+     * region of the page the entry renders to.
+     *
+     * The field values are deliberately left out. The template already printed
+     * them, so including both indexes the same sentence twice — which costs
+     * chunks and skews the lexical scores that treat document frequency as a
+     * signal about how common a term is.
+     *
+     * Fetched over HTTP rather than rendered in-process on purpose. Templates
+     * reach for request state — segments, query params, CSRF, the current user
+     * — and a console-side render breaks on them in ways that differ per
+     * project. A real request returns exactly what the visitor gets.
+     *
+     * @param array<string, string|null> $header
+     * @return string|null null when the page could not be fetched
+     */
+    private function extractEntryPageText(Entry $entry, array $header): ?string
+    {
+        $url = $this->absoluteUrl($entry);
+        if ($url === null) {
+            Craft::warning(
+                "Entry {$entry->id} is in a page-rendered section but has no absolute URL; indexing its fields instead.",
+                __METHOD__,
+            );
+            return null;
+        }
+
+        try {
+            $html = $this->fetch($url);
+        } catch (Throwable $e) {
+            Craft::warning(
+                "Page fetch failed for entry {$entry->id} ({$url}): {$e->getMessage()}; indexing its fields instead.",
+                __METHOD__,
+            );
+            return null;
+        }
+
+        $settings = Plugin::getInstance()->getSettings();
+        $body = $this->htmlToText(HtmlRegion::extract($html, $settings->contentSelector, $settings->stripPageChrome));
+        if (trim($body) === '') {
+            return null;
+        }
+
+        $lines = [];
+        foreach (['Title' => (string)$entry->title, 'URL' => $url] + $header as $label => $value) {
+            $value = trim((string)$value);
+            if ($value !== '') {
+                $lines[] = $label . ': ' . $value;
+            }
+        }
+
+        return Plugin::getInstance()->embeddings->normalize(implode("\n", $lines) . "\n\n" . $body);
     }
 
     /**
@@ -674,6 +794,19 @@ class Training extends Component
         if (!$rec) {
             return;
         }
+        // A page-rendered entry already indexes this exact page. Crawling it as
+        // a URL too would put every sentence in the index twice, which doubles
+        // the chunks and makes the same passage win two of the top slots.
+        if ($this->coveredByPageRenderedEntry((string)$rec->url)) {
+            Plugin::getInstance()->embeddings->deleteChunks('url', (int)$rec->id);
+            $rec->chunkCount = 0;
+            $rec->status = 'skipped';
+            $rec->errorMessage = 'Not crawled: an entry in a page-rendered section already indexes this URL.';
+            $rec->lastTrainedAt = Db::prepareDateForDb(new \DateTime());
+            $rec->save(false);
+            return;
+        }
+
         $rec->status = 'crawling';
         $rec->errorMessage = null;
         $rec->save(false);
@@ -698,6 +831,32 @@ class Training extends Component
             $rec->save(false);
             throw $e;
         }
+    }
+
+    /**
+     * True when a live entry in a page-rendered section resolves to this URL.
+     *
+     * Matched on the URI rather than the whole URL so a record pointing at a
+     * staging host still lines up with the entry it duplicates — the reason a
+     * URL record exists at all is usually that it predates page mode.
+     */
+    private function coveredByPageRenderedEntry(string $url): bool
+    {
+        $sectionUids = Plugin::getInstance()->getSettings()->pageRenderSections;
+        if (!$sectionUids) {
+            return false;
+        }
+        $path = trim((string)parse_url($url, PHP_URL_PATH), '/');
+        $entry = Entry::find()
+            ->uri($path === '' ? '__home__' : $path)
+            ->siteId('*')
+            ->unique()
+            ->status(Entry::STATUS_LIVE)
+            ->one();
+        if (!$entry) {
+            return false;
+        }
+        return in_array((string)$this->scopeUid($entry), $sectionUids, true);
     }
 
     public function removeUrl(int $urlRecId): void

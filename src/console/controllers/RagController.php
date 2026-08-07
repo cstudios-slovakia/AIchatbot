@@ -131,6 +131,10 @@ class RagController extends Controller
             $this->stdout("\n");
         };
 
+        foreach ($training->pageRenderProblems() as $problem) {
+            $this->stderr("Page mode: {$problem}\n");
+        }
+
         $describe($health['stale'], 'Changed since last indexed', fn($i) => "{$i['kind']} #{$i['id']}");
         $describe($health['failed'], 'Failed to index', fn($i) => "{$i['kind']} #{$i['id']}: {$i['message']}");
         $describe($health['blank'], 'Indexed to nothing (no text extracted)', fn($i) => "{$i['kind']} #{$i['id']}");

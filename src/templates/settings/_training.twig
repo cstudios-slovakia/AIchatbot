@@ -26,6 +26,45 @@
 
 <hr>
 
+<h2>Index from the rendered page</h2>
+<p class="light" style="max-width:52em;">
+  Checked sections are indexed by fetching each entry's own URL, not by reading its fields. Use
+  this on older sites where much of what a visitor reads is printed by the template and never
+  reaches a field — security classes, dimensions, standards. Fetching gets exactly what the
+  visitor gets, in the right language per site. Field values are left out in this mode because the
+  template already printed them; indexing both would store the same sentence twice.
+</p>
+<p class="light" style="max-width:52em;">
+  Costs an HTTP request per entry, so indexing takes longer. If a page can't be fetched, that
+  entry falls back to its fields rather than dropping out of the index.
+</p>
+
+{{ forms.checkboxSelectField({
+  label: 'Sections to index from their page',
+  name: 'settings[pageRenderSections]',
+  values: settings.pageRenderSections,
+  options: sections|map(s => { label: s.name, value: s.uid }),
+  showAllOption: false,
+  instructions: 'Only sections whose entries have URLs. Sections listed here must also be selected above.',
+}) }}
+
+{{ forms.textField({
+  label: 'Content selector',
+  name: 'settings[contentSelector]',
+  value: settings.contentSelector,
+  placeholder: 'main',
+  instructions: 'CSS selector for the readable part of a page — `main`, `#content`, `article.post`. Comma-separated, first match wins. Leave empty to try <main>, [role=main], <article>, #content, #main, then the whole body. Setting this is the single biggest thing you can do for page-mode quality.',
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Strip page chrome',
+  name: 'settings[stripPageChrome]',
+  on: settings.stripPageChrome,
+  instructions: 'Remove nav, header, footer, cookie bars and similar from fetched pages. Chrome repeats on every page, so left in it becomes the most common text in the index and matches every question a little. Skipped inside an explicit content selector, and automatically undone if it would empty the page.',
+}) }}
+
+<hr>
+
 <h2>Fields to keep out of the index</h2>
 <p class="light" style="max-width:52em;">
   Checked fields are skipped when content is indexed. They stay untouched on the site — this only

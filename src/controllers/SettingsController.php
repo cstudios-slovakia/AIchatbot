@@ -137,8 +137,13 @@ class SettingsController extends Controller
             $parts = preg_split('/(?:\A|\r?\n)---+[ \t]*(?:\r?\n|\z)/', $data['chatTemplates']) ?: [];
             $data['chatTemplates'] = array_values(array_filter(array_map('trim', $parts), fn($v) => $v !== ''));
         }
-        if (isset($data['trainingSections']) && !is_array($data['trainingSections'])) {
-            $data['trainingSections'] = [$data['trainingSections']];
+        foreach (['trainingSections', 'pageRenderSections'] as $list) {
+            if (isset($data[$list]) && !is_array($data[$list])) {
+                $data[$list] = [$data[$list]];
+            }
+            if (isset($data[$list])) {
+                $data[$list] = array_values(array_filter(array_map('trim', (array)$data[$list]), fn($v) => $v !== ''));
+            }
         }
         // checkboxSelect posts '' for a scope with nothing ticked; keep only the
         // scopes that actually exclude something so the setting stays readable.

@@ -36,6 +36,56 @@ Then open **AI Assistant → Settings** in the control panel and add your OpenAI
 - **Live Chat** — human-handoff master switch, canned responses, admin name display.
 - **Filter** / **Logging** — moderation and retention controls.
 
+## What gets indexed
+
+By default an entry is indexed from its **fields**: a metadata header, then one
+`Field label: value` block per non-empty field. The labels matter — a bare `649`
+embeds as noise, `Cena: 649` is a retrievable fact.
+
+Two settings under **Settings → Training** change what that includes.
+
+**Fields to keep out of the index.** Per section, category group and global set,
+plus a `*` list that applies everywhere. The field stays untouched on the site;
+it just stops reaching the assistant. Use it for values that are real but
+incomplete — a price only some entries carry makes the assistant quote a figure
+for one product and nothing for the next, which reads as inconsistency rather
+than as a gap.
+
+**Index from the rendered page.** On an older site much of what a visitor reads
+never reaches a field:
+
+```twig
+{{ 'RC2'|t }}
+{{ '36dB'|t }}
+```
+
+Field indexing cannot see any of that. Sections listed here are indexed by
+fetching each entry's own URL instead, which returns exactly what the visitor
+gets, in the right language per site. Field values are left out in this mode
+because the template already printed them — indexing both stores the same
+sentence twice and skews the lexical scores.
+
+It fetches over HTTP rather than rendering in-process on purpose: templates
+reach for request state (segments, query params, CSRF, the current user) and a
+console-side render breaks on them differently in every project.
+
+Two things it needs:
+
+- **A site `baseUrl` that is a real URL.** The Craft default is the `@web` alias,
+  which resolves from the current request and so resolves to nothing in the queue
+  worker that does the indexing. Point it at `$PRIMARY_SITE_URL` from `.env`.
+  Without this every entry quietly falls back to field indexing; `rag/doctor`
+  says so.
+- **A content selector**, e.g. `main` or `#content, article`. Nav, cookie bar and
+  footer repeat on every page, so left in they become the most common text in the
+  whole index and match every question a little. With no selector the plugin
+  tries `<main>`, `[role=main]`, `<article>`, `#content`, `#main`, then falls back
+  to stripping chrome structurally — and undoes that automatically if it would
+  empty the page.
+
+A URL training record pointing at a page that a page-rendered entry already
+covers is skipped rather than crawled twice.
+
 ## Keeping the assistant right
 
 An assistant answers confidently from whatever it was trained on, so the failures

@@ -162,6 +162,35 @@ class Settings extends Model
     /** Reserved scope key: applies to every section, group and set. */
     public const EXCLUDE_ALL_SCOPES = '*';
 
+    /**
+     * Section UIDs indexed from their rendered page instead of their fields.
+     *
+     * On an older site much of what a visitor reads never reaches a field —
+     * security classes, dimensions and standards get printed straight from the
+     * template. Field indexing cannot see any of it. Fetching the entry's own
+     * URL gets exactly what the visitor gets, translations included.
+     *
+     * Off by default: field indexing is cheaper, needs no HTTP, and is right
+     * whenever the content really does live in the CMS.
+     *
+     * @var string[]
+     */
+    public array $pageRenderSections = [];
+
+    /**
+     * CSS selector for the readable region of a rendered page, e.g. `main` or
+     * `#content, article`. First match wins. Empty falls back to <main>,
+     * [role=main], <article>, #content, #main, then the whole body.
+     */
+    public string $contentSelector = '';
+
+    /**
+     * Drop nav / header / footer / cookie-bar elements from fetched pages.
+     * Chrome repeats on every page, so left in it becomes the most common text
+     * in the index and matches every query a little.
+     */
+    public bool $stripPageChrome = true;
+
     // Suggestions
     public bool $suggestionsEnabled = true;
     /** @var string[] */
@@ -244,7 +273,8 @@ class Settings extends Model
             [['humanHandoffMode'], 'in', 'range' => ['always', 'ai']],
             [['humanHandoffMode'], 'string'],
             [['logoText'], 'string', 'max' => 3],
-            [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite', 'excludedFields'], 'safe'],
+            [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite', 'excludedFields', 'pageRenderSections'], 'safe'],
+            [['contentSelector'], 'string'],
             [['companyName'], 'required'],
         ];
     }
