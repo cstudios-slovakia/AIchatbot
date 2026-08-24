@@ -37,6 +37,7 @@ use cstudiossro\craftcschatbot\services\OpenAi;
 use cstudiossro\craftcschatbot\services\Sources;
 use cstudiossro\craftcschatbot\services\Stats;
 use cstudiossro\craftcschatbot\services\Training;
+use cstudiossro\craftcschatbot\services\Transfer;
 use cstudiossro\craftcschatbot\services\VectorSearch;
 use cstudiossro\craftcschatbot\web\assets\cpnav\CpNavAsset;
 use cstudiossro\craftcschatbot\web\assets\WidgetAsset;
@@ -61,6 +62,7 @@ use yii\base\Event;
  * @property-read Forms $forms
  * @property-read Gaps $gaps
  * @property-read Sources $sources
+ * @property-read Transfer $transfer
  */
 class Plugin extends BasePlugin
 {
@@ -86,6 +88,7 @@ class Plugin extends BasePlugin
                 'forms' => Forms::class,
                 'gaps' => Gaps::class,
                 'sources' => Sources::class,
+                'transfer' => Transfer::class,
             ],
         ];
     }
@@ -226,6 +229,7 @@ class Plugin extends BasePlugin
                 'interactive-ai-assistant/training/urls' => 'interactive-ai-assistant/training/urls',
                 'interactive-ai-assistant/training/qa' => 'interactive-ai-assistant/training/qa',
                 'interactive-ai-assistant/training/sources' => 'interactive-ai-assistant/training/sources',
+                'interactive-ai-assistant/training/transfer' => 'interactive-ai-assistant/training/transfer',
                 'interactive-ai-assistant/training/gaps' => 'interactive-ai-assistant/gaps/index',
                 'interactive-ai-assistant/training/entry-chunks/<id:\d+>' => 'interactive-ai-assistant/training/entry-chunks',
                 'interactive-ai-assistant/training/source-chunks/<id:\d+>' => 'interactive-ai-assistant/training/source-chunks',

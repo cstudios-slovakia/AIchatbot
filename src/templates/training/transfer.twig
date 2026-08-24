@@ -1,0 +1,143 @@
+{% extends 'interactive-ai-assistant/_layout' %}
+{% set title = 'Training · Transfer' %}
+{% set selectedSubnavItem = 'training' %}
+{% set tabs = {
+  entries:    { label: 'Craft Entries', url: cpUrl('interactive-ai-assistant/training/entries') },
+  categories: { label: 'Categories',   url: cpUrl('interactive-ai-assistant/training/categories') },
+  globals:    { label: 'Globals',      url: cpUrl('interactive-ai-assistant/training/globals') },
+  files:   { label: 'File Upload',   url: cpUrl('interactive-ai-assistant/training/files') },
+  urls:    { label: 'URL / Sitemap', url: cpUrl('interactive-ai-assistant/training/urls') },
+  qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
+  gaps:    { label: 'Gaps',          url: cpUrl('interactive-ai-assistant/training/gaps') },
+  plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
+  transfer: { label: 'Transfer',     url: cpUrl('interactive-ai-assistant/training/transfer') },
+} %}
+{% set selectedTab = 'transfer' %}
+
+{% set kinds = {
+  entries:    'Craft entries',
+  categories: 'Categories',
+  globals:    'Global sets',
+  files:      'Uploaded documents',
+  urls:       'Crawled URLs',
+  qa:         'Q&A pairs',
+  sources:    'Plugin sources',
+} %}
+
+{% block content %}
+  <p class="light readable" style="margin-bottom:16px;">
+    Train on a copy of the site where a bad crawl costs nothing, then carry the
+    finished index here instead of paying for every embedding twice and waiting
+    out the queue on a site that is already serving visitors.
+  </p>
+
+  <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+
+    <form method="post" accept-charset="UTF-8" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+      {{ csrfInput() }}
+      {{ actionInput('interactive-ai-assistant/training/export-bundle') }}
+      {{ redirectInput('interactive-ai-assistant/training/transfer') }}
+      <h2>Export</h2>
+      <p class="light" style="font-size:12px;margin:-4px 0 10px;">
+        {{ chunkCount }} chunk{{ chunkCount == 1 ? '' : 's' }} embedded with
+        <code>{{ embeddingModel }}</code>{% if embeddingDimensions %} at {{ embeddingDimensions }} dimensions{% endif %}.
+      </p>
+
+      <div class="field">
+        <div class="heading"><label>What to include</label></div>
+        <div class="input">
+          {# so clearing every box means "nothing", not "everything" #}
+          <input type="hidden" name="kinds[]" value="">
+          {% for kind, label in kinds %}
+            <label style="display:block;margin-bottom:4px;{{ counts[kind] ? '' : 'opacity:.5;' }}">
+              <input type="checkbox" name="kinds[]" value="{{ kind }}" checked>
+              {{ label }} <span class="light">({{ counts[kind] }})</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <label style="display:block;margin:10px 0;">
+        <input type="checkbox" name="includeFiles" value="1" checked>
+        Include the uploaded document files
+      </label>
+
+      <button type="submit" class="btn submit">Download bundle</button>
+      <p class="light" style="font-size:12px;margin-top:8px;">
+        A gzipped <code>.ndjson.gz</code> file: every trained source, its vectors,
+        and the documents behind them.
+      </p>
+    </form>
+
+    <form method="post" accept-charset="UTF-8" enctype="multipart/form-data" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+      {{ csrfInput() }}
+      {{ actionInput('interactive-ai-assistant/training/import-bundle') }}
+      {{ redirectInput('interactive-ai-assistant/training/transfer') }}
+      <h2>Import</h2>
+      <p class="light" style="font-size:12px;margin:-4px 0 10px;">
+        Content is matched by element UID and site handle, never by the ids it
+        had where it was trained. Anything this site does not have is reported,
+        not guessed at.
+      </p>
+
+      <input type="file" name="bundle" accept=".gz,application/gzip" required>
+
+      <div class="field" style="margin-top:12px;">
+        <div class="heading"><label>What to import</label></div>
+        <div class="input">
+          {# so clearing every box means "nothing", not "everything" #}
+          <input type="hidden" name="kinds[]" value="">
+          {% for kind, label in kinds %}
+            <label style="display:block;margin-bottom:4px;">
+              <input type="checkbox" name="kinds[]" value="{{ kind }}" checked> {{ label }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <label style="display:block;margin-bottom:4px;">
+        <input type="checkbox" name="dryRun" value="1"> Dry run — report what would happen, write nothing
+      </label>
+      <label style="display:block;margin-bottom:4px;">
+        <input type="checkbox" name="reembed" value="1"> Re-embed here instead of reusing the bundle's vectors
+      </label>
+      <label style="display:block;margin-bottom:10px;">
+        <input type="checkbox" name="overwriteFiles" value="1"> Replace documents that already exist here
+      </label>
+
+      {% if sites|length > 1 %}
+        <div class="field">
+          <div class="heading"><label>Site handle mapping</label></div>
+          <div class="input">
+            <input type="text" name="siteMap" class="text fullwidth" placeholder="sk=en, hu=de">
+          </div>
+          <div class="instructions"><p>
+            Only needed when the two installs set their sites up under different
+            handles. This site has:
+            {% for site in sites %}<code>{{ site.handle }}</code>{{ not loop.last ? ', ' }}{% endfor %}.
+          </p></div>
+        </div>
+      {% endif %}
+
+      <button type="submit" class="btn submit">Import bundle</button>
+      <p class="light" style="font-size:12px;margin-top:8px;">
+        The bundle must come from the same embedding model this site is set to,
+        or the import will say so — vectors from different models cannot be
+        compared. Use <strong>re-embed</strong> to import the content and embed
+        it here instead.
+      </p>
+    </form>
+
+  </div>
+
+  <div class="readable" style="margin-top:20px;padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+    <h2>From the shell</h2>
+    <p class="light" style="font-size:12px;">
+      A large index moves faster over SSH than through a browser upload, and the
+      console reports every source it could not place:
+    </p>
+<pre style="margin:8px 0 0;font-size:12px;overflow-x:auto;">php craft interactive-ai-assistant/rag/export
+php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --dry-run
+php craft interactive-ai-assistant/rag/import bundle.ndjson.gz</pre>
+  </div>
+{% endblock %}

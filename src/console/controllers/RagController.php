@@ -2,6 +2,7 @@
 
 namespace cstudiossro\craftcschatbot\console\controllers;
 
+use Craft;
 use craft\console\Controller;
 use cstudiossro\craftcschatbot\Plugin;
 use yii\console\ExitCode;
@@ -45,14 +46,39 @@ class RagController extends Controller
     public ?string $pageUrl = null;
 
     /**
-     * Comma-separated source kinds to retrain: entries, categories, globals,
+     * Comma-separated source kinds to act on: entries, categories, globals,
      * files, urls, sources, qa. Omit for everything. Lets you re-embed local
-     * content without re-crawling remote URLs.
+     * content without re-crawling remote URLs, or move only the Q&A pairs.
      */
     public ?string $only = null;
 
     /** Re-queue the sources whose content changed since they were indexed. */
     public bool $fix = false;
+
+    /** Where to write an export. Defaults to storage/cs-chatbot/exports/. */
+    public ?string $out = null;
+
+    /** Export the training rows and their vectors without the uploaded documents. */
+    public bool $noFiles = false;
+
+    /**
+     * Import the sources but embed their content here rather than reusing the
+     * bundle's vectors. Needed when the two sites use different embedding
+     * models, and useful when the target's content has moved on.
+     */
+    public bool $reembed = false;
+
+    /** Report what an import would do without writing anything. */
+    public bool $dryRun = false;
+
+    /**
+     * Bundle site handle => local site handle, e.g. `--site-map=sk=en,hu=de`,
+     * for installs whose sites were set up under different handles.
+     */
+    public ?string $siteMap = null;
+
+    /** Replace uploaded documents that already exist on this site. */
+    public bool $overwriteFiles = false;
 
     public function options($actionID): array
     {
@@ -66,6 +92,18 @@ class RagController extends Controller
         }
         if ($actionID === 'doctor') {
             $options[] = 'fix';
+        }
+        if ($actionID === 'export') {
+            $options[] = 'only';
+            $options[] = 'out';
+            $options[] = 'noFiles';
+        }
+        if ($actionID === 'import') {
+            $options[] = 'only';
+            $options[] = 'reembed';
+            $options[] = 'dryRun';
+            $options[] = 'siteMap';
+            $options[] = 'overwriteFiles';
         }
         return $options;
     }
@@ -266,5 +304,157 @@ class RagController extends Controller
             ));
         }
         return ExitCode::OK;
+    }
+
+    /**
+     * Write every trained source, its chunks and its uploaded documents to a
+     * portable bundle.
+     *
+     * Train on a local copy where a bad crawl costs nothing, then carry the
+     * result to the live site instead of paying for every embedding twice.
+     *
+     * Usage: php craft interactive-ai-assistant/rag/export
+     *        php craft interactive-ai-assistant/rag/export /path/to/bundle.ndjson.gz
+     *        php craft interactive-ai-assistant/rag/export --only=files,urls,qa --no-files
+     */
+    public function actionExport(?string $path = null): int
+    {
+        $path = $path ?? $this->out ?? sprintf(
+            '%s/cs-chatbot/exports/training-%s.ndjson.gz',
+            Craft::$app->getPath()->getStoragePath(),
+            date('Ymd-His'),
+        );
+
+        $this->stdout("Writing bundle…\n");
+        $result = Plugin::getInstance()->transfer->export($path, [
+            'only' => $this->kinds(),
+            'includeFiles' => !$this->noFiles,
+        ]);
+
+        foreach ($result['counts'] as $kind => $count) {
+            if ($count > 0) {
+                $this->stdout(sprintf("  %-11s %d\n", $kind, $count));
+            }
+        }
+        $this->stdout(sprintf(
+            "\n%d chunk(s) · %s\n%s\n",
+            $result['chunks'],
+            $this->formatBytes((int)$result['bytes']),
+            $result['path'],
+        ));
+        $this->warnings($result['warnings']);
+        return ExitCode::OK;
+    }
+
+    /**
+     * Reproduce a bundle's trained state on this site.
+     *
+     * Content is matched by element UID and site handle, not by the ids it had
+     * where it was trained, so anything the target does not have is reported
+     * rather than silently attached to the wrong page.
+     *
+     * Usage: php craft interactive-ai-assistant/rag/import bundle.ndjson.gz
+     *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --dry-run
+     *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --reembed
+     *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --site-map=sk=en,hu=de
+     */
+    public function actionImport(string $path): int
+    {
+        $result = Plugin::getInstance()->transfer->import($path, [
+            'only' => $this->kinds(),
+            'reembed' => $this->reembed,
+            'dryRun' => $this->dryRun,
+            'siteMap' => $this->siteMapping(),
+            'overwriteFiles' => $this->overwriteFiles,
+        ]);
+
+        $header = $result['header'];
+        $this->stdout(sprintf(
+            "Bundle from %s (plugin %s, %s, %s)\n\n",
+            (string)($header['exportedAt'] ?? '?'),
+            (string)($header['pluginVersion'] ?? '?'),
+            (string)($header['embedding']['model'] ?? '?'),
+            ((int)($header['embedding']['vectorLength'] ?? 0)) . '-dim vectors',
+        ));
+
+        foreach ($result['imported'] as $kind => $count) {
+            $missed = $result['skipped'][$kind] ?? 0;
+            if ($count === 0 && $missed === 0) {
+                continue;
+            }
+            $this->stdout(sprintf("  %-11s %d imported%s\n", $kind, $count, $missed ? ", {$missed} skipped" : ''));
+        }
+
+        $this->stdout("\n");
+        if ($result['dryRun']) {
+            $this->stdout(sprintf("Dry run — nothing written. %d chunk(s) would be imported.\n", $result['chunks']));
+        } elseif ($this->reembed) {
+            $this->stdout(sprintf(
+                "%d source(s) queued for embedding here. Run: php craft queue/run\n",
+                $result['queued'],
+            ));
+        } else {
+            $this->stdout(sprintf(
+                "%d chunk(s) imported, %d document(s) written.\n",
+                $result['chunks'],
+                $result['files'],
+            ));
+        }
+        $this->warnings($result['warnings']);
+        return ExitCode::OK;
+    }
+
+    /**
+     * @return string[]|null
+     */
+    private function kinds(): ?array
+    {
+        if ($this->only === null) {
+            return null;
+        }
+        return array_values(array_filter(array_map('trim', explode(',', $this->only))));
+    }
+
+    /**
+     * `--site-map=sk=en,hu=de`: bundle site handle => local site handle, for
+     * installs whose sites were set up under different handles.
+     *
+     * @return array<string, string>
+     */
+    private function siteMapping(): array
+    {
+        $map = [];
+        foreach (explode(',', (string)$this->siteMap) as $pair) {
+            $parts = array_map('trim', explode('=', $pair, 2));
+            if (count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '') {
+                $map[$parts[0]] = $parts[1];
+            }
+        }
+        return $map;
+    }
+
+    /**
+     * @param string[] $warnings
+     */
+    private function warnings(array $warnings): void
+    {
+        if (!$warnings) {
+            return;
+        }
+        $this->stdout("\n" . count($warnings) . " note(s):\n");
+        foreach ($warnings as $warning) {
+            $this->stdout('  - ' . $warning . "\n");
+        }
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1048576) {
+            return round($bytes / 1048576, 1) . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return round($bytes / 1024) . ' KB';
+        }
+        return $bytes . ' B';
     }
 }

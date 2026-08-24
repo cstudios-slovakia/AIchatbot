@@ -10,6 +10,7 @@
   qa:      { label: 'Q&A Pairs',     url: cpUrl('interactive-ai-assistant/training/qa') },
   gaps:    { label: 'Gaps',          url: cpUrl('interactive-ai-assistant/training/gaps') },
   plugins: { label: 'Plugins',       url: cpUrl('interactive-ai-assistant/training/sources') },
+  transfer: { label: 'Transfer',     url: cpUrl('interactive-ai-assistant/training/transfer') },
 } %}
 {% set selectedTab = 'files' %}
 
@@ -17,7 +18,7 @@
   <div id="chatbot-drop" style="border:2px dashed #c9d3dc;border-radius:8px;padding:24px;text-align:center;margin-bottom:16px;background:#fafbfc;">
     <p><strong>Drop .txt, .md, .pdf or .docx files here</strong> or
       <button class="btn submit" id="chatbot-file-pick">Browse</button></p>
-    <p class="light" style="font-size:12px;">Max 5 MB each. Scanned PDFs need OCR first — there is no text in them to read.</p>
+    <p class="light" style="font-size:12px;">Max {{ (maxUploadBytes / 1024 / 1024)|number_format(1) }} MB each. Scanned PDFs need OCR first — there is no text in them to read.</p>
     <input type="file" id="chatbot-file-input" accept=".txt,.md,.pdf,.docx" multiple style="display:none;">
     {% if sites|length > 1 %}
       <div style="margin-top:10px;">
@@ -34,6 +35,7 @@
       </div>
     {% endif %}
     <div id="chatbot-upload-status" style="margin-top:8px;color:#596673;"></div>
+    <div id="chatbot-upload-errors" style="margin-top:8px;text-align:left;display:none;"></div>
   </div>
 
   <h2>Files</h2>
@@ -69,6 +71,32 @@
       var input = document.getElementById('chatbot-file-input');
       var pick = document.getElementById('chatbot-file-pick');
       var status = document.getElementById('chatbot-upload-status');
+      var errorBox = document.getElementById('chatbot-upload-errors');
+      var maxBytes = {{ maxUploadBytes }};
+
+      function human(bytes) {
+        return bytes >= 1048576
+          ? (Math.round(bytes / 104857.6) / 10) + ' MB'
+          : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+      }
+
+      // Errors stay on the page until the next upload run replaces them.
+      // Nothing here reloads while one is showing: a reload is what used to
+      // wipe the message before it could be read.
+      function showErrors(failures) {
+        errorBox.innerHTML = '';
+        if (!failures.length) { errorBox.style.display = 'none'; return; }
+        var list = document.createElement('ul');
+        list.className = 'errors';
+        list.style.margin = '0';
+        failures.forEach(function (f) {
+          var item = document.createElement('li');
+          item.textContent = f;
+          list.appendChild(item);
+        });
+        errorBox.appendChild(list);
+        errorBox.style.display = '';
+      }
 
       pick.addEventListener('click', function(e){ e.preventDefault(); input.click(); });
       input.addEventListener('change', function(){ upload(input.files); });
@@ -79,19 +107,77 @@
       function upload(files){
         if (!files || !files.length) return;
         var queue = Array.from(files);
-        status.textContent = 'Uploading…';
+        var total = queue.length;
+        var uploaded = 0;
+        var failures = [];
+        showErrors([]);
+
+        function done(){
+          if (!failures.length) {
+            // Everything landed — reload so the new rows and their training
+            // status appear.
+            location.reload();
+            return;
+          }
+          status.textContent = uploaded
+            ? (uploaded + ' of ' + total + ' uploaded. The rest failed:')
+            : (total === 1 ? 'Upload failed:' : 'All ' + total + ' uploads failed:');
+          showErrors(failures);
+          if (uploaded) {
+            var refresh = document.createElement('p');
+            refresh.style.margin = '8px 0 0';
+            var link = document.createElement('a');
+            link.href = window.location.href;
+            link.className = 'btn small';
+            link.textContent = 'Refresh the list';
+            refresh.appendChild(link);
+            errorBox.appendChild(refresh);
+          }
+          // The same file can be re-picked after a failure only if the input
+          // is cleared; the change event does not fire for an identical value.
+          input.value = '';
+        }
+
         function next(){
-          if (!queue.length) { location.reload(); return; }
+          if (!queue.length) { done(); return; }
           var f = queue.shift();
+          status.textContent = 'Uploading ' + f.name + '…';
+
+          // Checked here as well as on the server, so an oversized file fails
+          // instantly instead of after a long upload the server then discards
+          // — and so a body over post_max_size never reaches PHP at all.
+          if (f.size > maxBytes) {
+            failures.push(f.name + ' is ' + human(f.size) + '. The limit is ' + human(maxBytes) + ' per file.');
+            next();
+            return;
+          }
+
           var data = new FormData();
           data.append(Craft.csrfTokenName, Craft.csrfTokenValue);
           data.append('file', f);
           var siteSelect = document.getElementById('chatbot-file-site');
           data.append('siteId', siteSelect ? siteSelect.value : 0);
           fetch(Craft.getActionUrl('interactive-ai-assistant/training/upload-file'), {method:'POST', body:data, credentials:'same-origin'})
-            .then(function(r){return r.json();})
+            .then(function(r){
+              // A web server that rejects the body itself (413) answers with
+              // HTML, and so does a PHP fatal — r.json() would throw and the
+              // queue would stall on "Uploading…" forever.
+              return r.text().then(function(body){
+                var parsed = null;
+                try { parsed = JSON.parse(body); } catch (e) { /* not JSON */ }
+                if (parsed) { return parsed; }
+                if (r.status === 413) {
+                  return { success: false, error: 'The web server rejected ' + f.name + ' as too large (413). Raise client_max_body_size / LimitRequestBody, or upload a smaller file.' };
+                }
+                return { success: false, error: 'The server answered ' + r.status + ' with something that is not JSON.' };
+              });
+            })
             .then(function(j){
-              status.textContent = j.success ? ('Uploaded: ' + f.name) : ('Error: ' + (j.error||'unknown'));
+              if (j.success) { uploaded++; } else { failures.push(j.error || (f.name + ': unknown error')); }
+              next();
+            })
+            .catch(function(err){
+              failures.push(f.name + ': ' + (err && err.message ? err.message : 'the request failed'));
               next();
             });
         }

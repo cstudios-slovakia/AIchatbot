@@ -6,6 +6,8 @@ use Craft;
 use craft\elements\Category;
 use craft\elements\Entry;
 use craft\elements\GlobalSet;
+use craft\helpers\App;
+use craft\helpers\ConfigHelper;
 use craft\helpers\FileHelper;
 use craft\helpers\StringHelper;
 use craft\web\Controller;
@@ -28,6 +30,7 @@ use cstudiossro\craftcschatbot\records\TrainingGlobalSetRecord;
 use cstudiossro\craftcschatbot\records\TrainingQaRecord;
 use cstudiossro\craftcschatbot\records\TrainingSourceRecord;
 use cstudiossro\craftcschatbot\records\TrainingUrlRecord;
+use cstudiossro\craftcschatbot\services\Transfer;
 use yii\web\Response;
 
 class TrainingController extends Controller
@@ -305,37 +308,102 @@ class TrainingController extends Controller
 
     // ---------- FILES ----------
 
+    /**
+     * Largest upload this accepts, before PHP's own limits are considered.
+     * {@see self::maxUploadBytes()} is what anything should actually test
+     * against — a server configured below this never sees the file at all.
+     */
+    public const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+    /**
+     * The real ceiling on this server: our own cap, or PHP's, whichever bites
+     * first. Quoting our number when php.ini is stricter tells an admin their
+     * 4 MB file should have worked, and leaves them with nowhere to look.
+     */
+    public static function maxUploadBytes(): int
+    {
+        $limit = self::MAX_UPLOAD_BYTES;
+        foreach (['upload_max_filesize', 'post_max_size'] as $directive) {
+            $bytes = ConfigHelper::sizeInBytes((string)ini_get($directive));
+            if ($bytes > 0) {
+                $limit = min($limit, (int)$bytes);
+            }
+        }
+        return $limit;
+    }
+
     public function actionFiles(): Response
     {
         $rows = TrainingFileRecord::find()->orderBy(['dateUpdated' => SORT_DESC])->all();
         return $this->renderTemplate('interactive-ai-assistant/training/files', [
             'rows' => $rows,
             'sites' => Craft::$app->sites->getAllSites(),
+            'maxUploadBytes' => self::maxUploadBytes(),
         ]);
     }
 
     public function actionUploadFile(): Response
     {
         $this->requirePostRequest();
+        $limit = self::maxUploadBytes();
         $upload = UploadedFile::getInstanceByName('file');
         if (!$upload) {
-            return $this->asJson(['success' => false, 'error' => 'No file uploaded']);
+            // A body over post_max_size is discarded whole before PHP populates
+            // $_FILES, so "no file" and "far too big" arrive here identically.
+            // An empty $_POST alongside a non-zero Content-Length is the tell.
+            $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+            if (empty($_POST) && $contentLength > 0) {
+                return $this->asJson([
+                    'success' => false,
+                    'error' => sprintf(
+                        'That upload (%s) was dropped by the server before it arrived — it is over the '
+                        . 'post_max_size limit of %s. Upload a smaller file, or raise post_max_size and '
+                        . 'upload_max_filesize in php.ini.',
+                        self::formatBytes($contentLength),
+                        ini_get('post_max_size') ?: '?',
+                    ),
+                ]);
+            }
+            return $this->asJson(['success' => false, 'error' => 'No file uploaded.']);
+        }
+        if ($upload->hasError) {
+            return $this->asJson(['success' => false, 'error' => self::uploadErrorMessage($upload->error, $limit)]);
         }
         $ext = strtolower($upload->getExtension());
         if (!DocumentText::isSupported($ext)) {
             return $this->asJson([
                 'success' => false,
-                'error' => 'Supported file types: .' . implode(', .', DocumentText::SUPPORTED),
+                'error' => sprintf(
+                    '“%s” is a .%s file. Supported types: .%s',
+                    $upload->name,
+                    $ext !== '' ? $ext : '?',
+                    implode(', .', DocumentText::SUPPORTED),
+                ),
             ]);
         }
-        if ($upload->size > 5 * 1024 * 1024) {
-            return $this->asJson(['success' => false, 'error' => 'File exceeds 5 MB']);
+        if ($upload->size > $limit) {
+            return $this->asJson([
+                'success' => false,
+                'error' => sprintf(
+                    '“%s” is %s. The limit is %s per file.',
+                    $upload->name,
+                    self::formatBytes((int)$upload->size),
+                    self::formatBytes($limit),
+                ),
+            ]);
         }
         $dir = Plugin::getInstance()->getUploadPath();
         FileHelper::createDirectory($dir);
         $filename = StringHelper::randomString(12) . '.' . $ext;
         $path = $dir . DIRECTORY_SEPARATOR . $filename;
-        $upload->saveAs($path);
+        if (!$upload->saveAs($path)) {
+            // Without this the record saves, the job runs, and the failure only
+            // shows up later as a training error about a file that is not there.
+            return $this->asJson([
+                'success' => false,
+                'error' => sprintf('Could not write “%s” to %s. Check the directory is writable.', $upload->name, $dir),
+            ]);
+        }
 
         $siteId = (int)Craft::$app->request->getBodyParam('siteId', 0);
         $rec = new TrainingFileRecord();
@@ -352,6 +420,35 @@ class TrainingController extends Controller
         ]));
 
         return $this->asJson(['success' => true, 'id' => (int)$rec->id]);
+    }
+
+    /**
+     * Turn PHP's upload error constant into something an admin can act on.
+     */
+    private static function uploadErrorMessage(int $code, int $limit): string
+    {
+        return match ($code) {
+            UPLOAD_ERR_INI_SIZE => sprintf(
+                'That file is larger than PHP allows (upload_max_filesize = %s). The limit here is %s.',
+                ini_get('upload_max_filesize') ?: '?',
+                self::formatBytes($limit),
+            ),
+            UPLOAD_ERR_FORM_SIZE => 'That file is larger than the form allows.',
+            UPLOAD_ERR_PARTIAL => 'That file only uploaded partially. Try again.',
+            UPLOAD_ERR_NO_FILE => 'No file uploaded.',
+            UPLOAD_ERR_NO_TMP_DIR => 'PHP has no temporary directory to receive uploads (upload_tmp_dir).',
+            UPLOAD_ERR_CANT_WRITE => 'PHP could not write the upload to disk.',
+            UPLOAD_ERR_EXTENSION => 'A PHP extension blocked this upload.',
+            default => 'The upload failed (error code ' . $code . ').',
+        };
+    }
+
+    private static function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1024 * 1024) {
+            return rtrim(rtrim(number_format($bytes / 1024 / 1024, 1), '0'), '.') . ' MB';
+        }
+        return max(1, (int)round($bytes / 1024)) . ' KB';
     }
 
     public function actionReindexFile(): Response
@@ -644,5 +741,156 @@ class TrainingController extends Controller
         $id = (int)Craft::$app->request->getRequiredBodyParam('id');
         Plugin::getInstance()->training->removeQa($id);
         return $this->asJson(['success' => true]);
+    }
+
+    // ---------- TRANSFER ----------
+
+    public function actionTransfer(): Response
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $counts = [
+            'entries' => (int)TrainingEntryRecord::find()->count(),
+            'categories' => (int)TrainingCategoryRecord::find()->count(),
+            'globals' => (int)TrainingGlobalSetRecord::find()->count(),
+            'files' => (int)TrainingFileRecord::find()->count(),
+            'urls' => (int)TrainingUrlRecord::find()->count(),
+            'qa' => (int)TrainingQaRecord::find()->count(),
+            'sources' => (int)TrainingSourceRecord::find()->count(),
+        ];
+        return $this->renderTemplate('interactive-ai-assistant/training/transfer', [
+            'counts' => $counts,
+            'chunkCount' => (int)ChunkRecord::find()->count(),
+            'embeddingModel' => (string)$settings->embeddingModel,
+            'embeddingDimensions' => (int)$settings->embeddingDimensions,
+            'sites' => Craft::$app->getSites()->getAllSites(),
+        ]);
+    }
+
+    /**
+     * Build a bundle and hand it straight back as a download, so moving a
+     * trained index does not depend on shell access to either site.
+     */
+    public function actionExportBundle(): Response
+    {
+        $this->requirePostRequest();
+        App::maxPowerCaptain();
+
+        $kinds = $this->postedKinds();
+        $path = sprintf(
+            '%s/cs-chatbot/exports/training-%s.ndjson.gz',
+            Craft::$app->getPath()->getStoragePath(),
+            date('Ymd-His'),
+        );
+
+        try {
+            $result = Plugin::getInstance()->transfer->export($path, [
+                'only' => $kinds,
+                'includeFiles' => (bool)Craft::$app->request->getBodyParam('includeFiles', true),
+            ]);
+        } catch (\Throwable $e) {
+            Craft::$app->session->setError('Export failed: ' . $e->getMessage());
+            return $this->redirectToPostedUrl();
+        }
+
+        // The bundle is written to storage first so it can be streamed without
+        // holding it in memory; it is only ever this one download.
+        $response = Craft::$app->getResponse()->sendFile($result['path'], basename($result['path']), [
+            'mimeType' => 'application/gzip',
+            'inline' => false,
+        ]);
+        $response->on(\yii\web\Response::EVENT_AFTER_SEND, function () use ($result) {
+            @unlink($result['path']);
+        });
+        return $response;
+    }
+
+    public function actionImportBundle(): Response
+    {
+        $this->requirePostRequest();
+        App::maxPowerCaptain();
+
+        $upload = UploadedFile::getInstanceByName('bundle');
+        if (!$upload) {
+            Craft::$app->session->setError('Choose a bundle to import.');
+            return $this->redirectToPostedUrl();
+        }
+
+        $temp = Craft::$app->getPath()->getTempPath() . DIRECTORY_SEPARATOR
+            . 'cs-chatbot-import-' . StringHelper::randomString(8) . '.ndjson.gz';
+        if (!$upload->saveAs($temp)) {
+            Craft::$app->session->setError('The upload could not be saved — check the temp directory is writable.');
+            return $this->redirectToPostedUrl();
+        }
+
+        $request = Craft::$app->request;
+        try {
+            $result = Plugin::getInstance()->transfer->import($temp, [
+                'only' => $this->postedKinds(),
+                'reembed' => (bool)$request->getBodyParam('reembed'),
+                'dryRun' => (bool)$request->getBodyParam('dryRun'),
+                'overwriteFiles' => (bool)$request->getBodyParam('overwriteFiles'),
+                'siteMap' => $this->postedSiteMap(),
+            ]);
+        } catch (\Throwable $e) {
+            @unlink($temp);
+            Craft::$app->session->setError('Import failed: ' . $e->getMessage());
+            return $this->redirectToPostedUrl();
+        }
+        @unlink($temp);
+
+        $imported = array_sum($result['imported']);
+        $skipped = array_sum($result['skipped']);
+        if ($result['dryRun']) {
+            $message = "Dry run: {$imported} source(s) would be imported ({$result['chunks']} chunks)";
+        } elseif ($result['queued'] > 0) {
+            $message = "{$imported} source(s) imported and queued for embedding — run the queue";
+        } else {
+            $message = "{$imported} source(s) imported, {$result['chunks']} chunk(s) indexed";
+        }
+        if ($skipped > 0) {
+            $message .= ", {$skipped} skipped";
+        }
+        Craft::$app->session->setNotice($message . '.');
+        if ($result['warnings']) {
+            // One flash holds one message, and what was skipped is the whole
+            // point of the report — so say it in a single line rather than
+            // letting each note overwrite the last.
+            $notes = array_slice($result['warnings'], 0, 3);
+            $rest = count($result['warnings']) - count($notes);
+            Craft::$app->session->setError(
+                implode(' ', $notes) . ($rest > 0 ? " (+{$rest} more — run rag/import for the full report.)" : '')
+            );
+        }
+        return $this->redirectToPostedUrl();
+    }
+
+    /**
+     * @return string[]|null null when every kind is selected
+     */
+    private function postedKinds(): ?array
+    {
+        $kinds = Craft::$app->request->getBodyParam('kinds');
+        if (!is_array($kinds)) {
+            return null;
+        }
+        $kinds = array_values(array_intersect(Transfer::KINDS, $kinds));
+        return count($kinds) === count(Transfer::KINDS) ? null : $kinds;
+    }
+
+    /**
+     * `sk=en, hu=de` — bundle site handle to local site handle.
+     *
+     * @return array<string, string>
+     */
+    private function postedSiteMap(): array
+    {
+        $map = [];
+        foreach (explode(',', (string)Craft::$app->request->getBodyParam('siteMap', '')) as $pair) {
+            $parts = array_map('trim', explode('=', $pair, 2));
+            if (count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '') {
+                $map[$parts[0]] = $parts[1];
+            }
+        }
+        return $map;
     }
 }
