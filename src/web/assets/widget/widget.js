@@ -40,6 +40,7 @@
     theAgent: 'the agent',
     messageReachAgent: 'Message will reach the agent once connected…',
     hello: 'Hello!',
+    disclaimer: 'AI assistant — answers can be inaccurate. Please verify important information.',
     agent: 'Agent',
     howWasChat: 'How was this chat?',
     notFinding: 'Not finding what you need?',
@@ -719,7 +720,13 @@
     var newChatBtn = el('button', { class: 'cs-chatbot__new-chat', type: 'button' }, [T('startNewConversation')]);
     newChatBtn.style.display = 'none';
 
-    var panel = el('div', { class: 'cs-chatbot__panel' }, [header, banner, messages, suggestionsBar, humanBtn, ratingBar, newChatBtn, form]);
+    // Standing note under the input: the answers are generated and can be wrong.
+    // Sits below the composer so it stays visible without pushing the header
+    // banner (handoff/ended status) around.
+    var disclaimer = el('div', { class: 'cs-chatbot__disclaimer' }, [config.disclaimerText || T('disclaimer')]);
+    if (!config.disclaimerEnabled) disclaimer.style.display = 'none';
+
+    var panel = el('div', { class: 'cs-chatbot__panel' }, [header, banner, messages, suggestionsBar, humanBtn, ratingBar, newChatBtn, form, disclaimer]);
     var launcher = el('button', { class: 'cs-chatbot__launcher', type: 'button', 'aria-label': T('openChat'), html: '💬' });
     var launcherDot = el('span', { class: 'cs-chatbot__launcher-dot' });
     launcherDot.style.display = 'none';
@@ -1308,7 +1315,11 @@
         } else if (f.type === 'select') {
           input = el('select', { class: 'cs-chatbot__contact-input' });
           input.appendChild(el('option', { value: '' }, [T('formSelectPrompt')]));
-          (f.options || []).forEach(function (o) { input.appendChild(el('option', { value: o }, [o])); });
+          // Option values stay canonical; optionLabels carries the site-language
+          // text, and is absent on a form persisted before this shipped.
+          (f.options || []).forEach(function (o, i) {
+            input.appendChild(el('option', { value: o }, [(f.optionLabels && f.optionLabels[i]) || o]));
+          });
         } else {
           var t = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : (f.type === 'number' ? 'number' : 'text'));
           input = el('input', { class: 'cs-chatbot__contact-input', type: t });

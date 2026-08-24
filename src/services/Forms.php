@@ -5,7 +5,9 @@ namespace cstudiossro\craftcschatbot\services;
 use Craft;
 use craft\db\Query;
 use craft\helpers\App;
+use craft\helpers\Db;
 use cstudiossro\craftcschatbot\jobs\SendFormJob;
+use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\ChatSessionRecord;
 use cstudiossro\craftcschatbot\records\FormSubmissionRecord;
@@ -76,25 +78,43 @@ class Forms extends Component
      */
     private function publicSchema(array $form): array
     {
+        $language = Settings::resolveSiteFromUrl($this->currentSession?->pageUrl)?->language;
         $fields = [];
         foreach ($form['fields'] as $field) {
             // Predefined fields are sent automatically, not shown to the visitor.
             if ((string)($field['type'] ?? '') === 'hidden') {
                 continue;
             }
+            $options = is_array($field['options'] ?? null) ? array_values(array_map('strval', $field['options'])) : [];
             $fields[] = [
                 'name' => (string)($field['name'] ?? ''),
-                'label' => (string)($field['label'] ?? ''),
+                'label' => $this->tSite((string)($field['label'] ?? ''), $language),
                 'type' => (string)($field['type'] ?? 'text'),
                 'required' => !empty($field['required']),
-                'options' => is_array($field['options'] ?? null) ? array_values(array_map('strval', $field['options'])) : [],
+                // Values stay as configured — they are what gets stored and
+                // delivered. Only the text beside them is translated.
+                'options' => $options,
+                'optionLabels' => array_map(fn(string $o) => $this->tSite($o, $language), $options),
             ];
         }
         return [
             'name' => (string)($form['name'] ?? ''),
-            'label' => (string)($form['label'] ?? ''),
+            'label' => $this->tSite((string)($form['label'] ?? ''), $language),
             'fields' => $fields,
         ];
+    }
+
+    /**
+     * Translate an admin-entered label for a visitor. These strings are typed in
+     * the CP, so they can't live in the plugin's own translation files; they go
+     * through Craft's `site` category, the same place Craft puts field and
+     * section labels. A project translates them in `translations/<lang>/site.php`,
+     * and an untranslated string passes through unchanged.
+     */
+    private function tSite(string $text, ?string $language): string
+    {
+        $text = trim($text);
+        return $text === '' ? '' : Craft::t('site', $text, [], $language);
     }
 
     /**
@@ -442,6 +462,29 @@ class Forms extends Component
     }
 
     /**
+     * Submissions no admin has looked at yet. Delivery status says nothing about
+     * this: a webhook can succeed and the lead still never be followed up.
+     */
+    public function unreadCount(): int
+    {
+        return (int)(new Query())
+            ->from('{{%chatbot_form_submissions}}')
+            ->where(['readAt' => null])
+            ->count();
+    }
+
+    /**
+     * Mark every submission seen. Called when an admin opens the list — the same
+     * bargain the live-chat screen makes: opening it is what clears the badge.
+     */
+    public function markAllRead(): int
+    {
+        return (int)Craft::$app->db->createCommand()
+            ->update('{{%chatbot_form_submissions}}', ['readAt' => Db::prepareDateForDb(new \DateTime())], ['readAt' => null])
+            ->execute();
+    }
+
+    /**
      * @return array{rows: array<int, array<string, mixed>>, total: int}
      */
     public function listForAdmin(string $formName = '', string $status = '', int $page = 1, int $perPage = 25): array
@@ -460,7 +503,7 @@ class Forms extends Component
         $total = (int)(clone $query)->count();
 
         $rows = $query
-            ->select(['f.id', 'f.sessionId', 'f.formName', 'f.payload', 'f.status', 'f.deliveryLog', 'f.dateCreated'])
+            ->select(['f.id', 'f.sessionId', 'f.formName', 'f.payload', 'f.status', 'f.deliveryLog', 'f.readAt', 'f.dateCreated'])
             ->orderBy(['f.id' => SORT_DESC])
             ->offset(($page - 1) * $perPage)
             ->limit($perPage)

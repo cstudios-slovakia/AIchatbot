@@ -74,6 +74,9 @@ class ChatController extends Controller
             'agentPanelWidth' => (int)$s->agentPanelWidth ?: 420,
             'widgetPosition' => in_array($s->widgetPosition, ['bottom-right', 'bottom-left', 'top-right', 'top-left'], true) ? $s->widgetPosition : 'bottom-right',
             'initialMessage' => $s->getInitialMessageForSite($siteUid),
+            'disclaimerEnabled' => (bool)$s->disclaimerEnabled,
+            // Empty = widget falls back to the translated default in strings.disclaimer.
+            'disclaimerText' => $s->getDisclaimerTextForSite($siteUid),
             'suggestionsEnabled' => $s->suggestionsEnabled,
             'suggestions' => $s->getSuggestionsForSite($siteUid),
             'ratingsEnabled' => $s->ratingsEnabled,
@@ -131,6 +134,7 @@ class ChatController extends Controller
             'theAgent' => 'the agent',
             'messageReachAgent' => 'Message will reach the agent once connected…',
             'hello' => 'Hello!',
+            'disclaimer' => 'AI assistant — answers can be inaccurate. Please verify important information.',
             'agent' => 'Agent',
             'howWasChat' => 'How was this chat?',
             'notFinding' => 'Not finding what you need?',

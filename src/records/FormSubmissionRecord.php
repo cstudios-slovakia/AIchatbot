@@ -15,6 +15,7 @@ use craft\db\ActiveRecord;
  * @property string $payload      JSON-encoded field => value map
  * @property string $status       pending|sent|failed
  * @property string|null $deliveryLog
+ * @property string|null $readAt   When an admin first saw it; null = a new lead
  * @property string $dateCreated
  * @property string $dateUpdated
  */

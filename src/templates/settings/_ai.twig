@@ -64,6 +64,24 @@
   value: settings.initialMessage,
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'AI Disclaimer',
+  instructions: 'Shows a small note under the chat input warning that answers are AI-generated and can be wrong.',
+  name: 'settings[disclaimerEnabled]',
+  on: settings.disclaimerEnabled ?? false,
+  toggle: 'cs-disclaimer-text',
+}) }}
+
+<div id="cs-disclaimer-text" class="{{ (settings.disclaimerEnabled ?? false) ? '' : 'hidden' }}">
+  {{ forms.textField({
+    label: 'Disclaimer Text (default)',
+    instructions: 'Leave empty to use the plugin\'s own wording, translated into each site\'s language.',
+    name: 'settings[disclaimerText]',
+    value: settings.disclaimerText ?? '',
+    placeholder: 'AI assistant — answers can be inaccurate. Please verify important information.',
+  }) }}
+</div>
+
 {{ forms.textareaField({
   label: 'System Prompt (default)',
   name: 'settings[systemPrompt]',
@@ -96,6 +114,13 @@
         name: 'settings[initialMessages][' ~ site.uid ~ ']',
         value: settings.initialMessages[site.uid] ?? '',
         placeholder: settings.initialMessage,
+      }) }}
+
+      {{ forms.textField({
+        label: 'Disclaimer Text',
+        name: 'settings[disclaimerTexts][' ~ site.uid ~ ']',
+        value: settings.disclaimerTexts[site.uid] ?? '',
+        placeholder: settings.disclaimerText ?: 'Plugin default, translated',
       }) }}
 
       {{ forms.textareaField({

@@ -3,6 +3,7 @@
 namespace cstudiossro\craftcschatbot\controllers;
 
 use Craft;
+use craft\helpers\Db;
 use craft\web\Controller;
 use cstudiossro\craftcschatbot\Plugin;
 use cstudiossro\craftcschatbot\records\FormSubmissionRecord;
@@ -44,9 +45,15 @@ class FormSubmissionsController extends Controller
         }
         unset($row);
 
+        // Rows were read before this, so unseen ones still render with a New
+        // marker on the very visit that clears the badge.
+        $unread = $forms->unreadCount();
+        $forms->markAllRead();
+
         return $this->renderTemplate('interactive-ai-assistant/submissions/index', [
             'rows' => $result['rows'],
             'total' => $result['total'],
+            'unread' => $unread,
             'formName' => $formName,
             'status' => $status,
             'page' => $page,
@@ -60,6 +67,11 @@ class FormSubmissionsController extends Controller
         $rec = FormSubmissionRecord::findOne($id);
         if (!$rec) {
             throw new NotFoundHttpException('Submission not found.');
+        }
+        // Reached straight from a link (email, bookmark) without passing the list.
+        if ($rec->readAt === null) {
+            $rec->readAt = Db::prepareDateForDb(new \DateTime());
+            $rec->save(false);
         }
         return $this->renderTemplate('interactive-ai-assistant/submissions/view', [
             'submission' => $rec,

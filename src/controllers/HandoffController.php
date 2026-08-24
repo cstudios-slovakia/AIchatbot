@@ -43,7 +43,15 @@ class HandoffController extends Controller
         $userId = (int)(Craft::$app->user->id ?? 0);
         $counts = Plugin::getInstance()->handoff->badgeCount($userId);
         $counts['sessions'] = Plugin::getInstance()->handoff->unreadBySessionForBadge();
-        $counts['leads'] = Plugin::getInstance()->contacts->newCount();
+        // Leads = anything a human still has to act on: missed chats awaiting
+        // follow-up plus form submissions nobody has opened yet.
+        $missed = Plugin::getInstance()->contacts->newCount();
+        $submissions = Plugin::getInstance()->getSettings()->formsEnabled
+            ? Plugin::getInstance()->forms->unreadCount()
+            : 0;
+        $counts['leadsMissed'] = $missed;
+        $counts['leadsSubmissions'] = $submissions;
+        $counts['leads'] = $missed + $submissions;
         return $this->asJson(['success' => true] + $counts);
     }
 

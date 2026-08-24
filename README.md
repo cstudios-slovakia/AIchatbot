@@ -30,7 +30,9 @@ Then open **AI Assistant → Settings** in the control panel and add your OpenAI
 ## Configuration
 
 - **General** — enable/disable, branding, theme, operation mode (Chat bubble vs Agent side panel).
-- **AI Configuration** — API key, chat & embedding models, system prompt, per-site overrides.
+- **AI Configuration** — API key, chat & embedding models, system prompt, per-site overrides,
+  AI disclaimer (a small note under the input saying answers can be wrong; off by
+  default, wording translated per site unless overridden).
 - **Training** — choose which sections, category groups and global sets to index; optional auto-train on save.
 - **Suggestions** — starter prompts (global and per-site).
 - **Live Chat** — human-handoff master switch, canned responses, admin name display.
@@ -101,6 +103,11 @@ nobody ever trained, a question nothing in the index could answer.
 - **Dashboard** warns when indexed content has changed since it was indexed, when
   a source failed or indexed to nothing, and when a section selected for training
   still has entries that were never indexed. One button re-indexes the changed ones.
+- **New leads announce themselves.** A missed chat awaiting follow-up or a form
+  submission nobody has opened yet shows as a purple badge on the AI Assistant
+  nav item on every CP page, in the browser tab title, and as a banner on the
+  dashboard; the poll that finds one plays a short chime and a CP notice. Missed
+  chats clear when resolved, submissions when the list is opened.
 - **Training → Gaps** lists the questions the assistant handled badly: retrieval
   found nothing, the match was weak, the visitor rated it down, or it offered a
   human. Answer one there and it becomes a Q&A pair, indexed immediately.
@@ -132,9 +139,18 @@ With **agent mode** enabled (Settings → AI Configuration), the assistant can c
 registered *skills* — server-side tools that fetch live data or perform actions —
 during a conversation, in addition to answering from trained content.
 
+Form labels and choice options are typed in the CP, so they can't ship in the
+plugin's translation files. They are translated through Craft's `site` category:
+add them to `translations/<language>/site.php` and each site's visitors see their
+own language, exactly as Craft handles field and section labels. Untranslated
+strings are shown as typed. Choice *values* are never translated — they are what
+gets stored and delivered, so only the text beside them changes.
+
 Each skill's availability is set per skill in the control panel: **Off**,
 **Enabled (everyone)**, or **Admins only (testing)** — the last exposes it only to
-logged-in CP users so you can test it on the live site first.
+logged-in CP users so you can test it on the live site first. A newly created
+conversational form starts at **Admins only**, so it can be tried on the live
+site before visitors can reach it.
 
 Plugins and Craft modules add their own skills by implementing
 `CapabilityInterface` and registering on the `Capabilities` event:

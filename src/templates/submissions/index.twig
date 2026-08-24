@@ -15,7 +15,7 @@
       <select name="form" class="" onchange="this.form.submit()">
         <option value="">All forms</option>
         {% for f in formOptions %}
-          <option value="{{ f.name }}" {{ formName == f.name ? 'selected' }}>{{ f.label ?: f.name }}</option>
+          <option value="{{ f.name }}" {{ formName == f.name ? 'selected' }}>{{ (f.label ?: f.name)|t('site') }}</option>
         {% endfor %}
       </select>
       <select name="status" onchange="this.form.submit()">
@@ -26,6 +26,9 @@
       </select>
     </form>
     <span class="light">{{ total }} submission{{ total == 1 ? '' : 's' }}</span>
+    {% if unread ?? 0 %}
+      <span style="color:#7c3aed;font-weight:600;">{{ unread }} new</span>
+    {% endif %}
   </div>
 
   {% if not rows|length %}
@@ -38,7 +41,12 @@
       <tbody>
         {% for r in rows %}
           <tr data-sub-id="{{ r.id }}">
-            <td>{{ r.dateCreated ? r.dateCreated|date('Y-m-d H:i') : '' }}</td>
+            <td>
+              {% if not r.readAt %}
+                <span title="Not seen yet" style="display:inline-block;background:#7c3aed;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-right:6px;">NEW</span>
+              {% endif %}
+              {{ r.dateCreated ? r.dateCreated|date('Y-m-d H:i') : '' }}
+            </td>
             <td><code>{{ r.formName }}</code></td>
             <td class="light">
               {%- set parts = [] -%}

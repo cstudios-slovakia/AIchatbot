@@ -385,6 +385,12 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 }
 .cs-chatbot__send:disabled { opacity: .5; cursor: not-allowed; }
 
+.cs-chatbot__disclaimer {
+  flex: none;
+  padding: 0 12px 8px; text-align: center;
+  font-size: 11px; line-height: 1.35; color: var(--cb-muted);
+}
+
 .cs-chatbot__typing {
   display: inline-flex; gap: 3px; padding: 8px 12px;
   background: var(--cb-bubble-bot); border-radius: 14px;

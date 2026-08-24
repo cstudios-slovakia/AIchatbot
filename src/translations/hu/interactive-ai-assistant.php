@@ -48,6 +48,7 @@ return [
     'Agent' => 'Munkatárs',
     'How was this chat?' => 'Milyen volt ez a beszélgetés?',
     'Not finding what you need?' => 'Nem találja, amit keres?',
+    'AI assistant — answers can be inaccurate. Please verify important information.' => 'AI asszisztens — a válaszok pontatlanok lehetnek. Kérjük, ellenőrizze a fontos információkat.',
 
     // Widget — errors
     'Message rejected.' => 'Az üzenet elutasítva.',

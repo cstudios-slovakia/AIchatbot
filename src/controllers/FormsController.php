@@ -50,7 +50,10 @@ class FormsController extends Controller
             'form' => $form,
             'isNew' => $form === null,
             'agentModeEnabled' => $settings->agentModeEnabled,
-            'availability' => $form ? $settings->capabilityState((string)$form['name']) : 'on',
+            // A new form starts admins-only: it goes live on the site the moment
+            // it is saved, and an untested form the model can call is worse than
+            // one nobody sees yet.
+            'availability' => $form ? $settings->capabilityState((string)$form['name']) : 'admins',
             'contactFormInstalled' => Craft::$app->plugins->isPluginEnabled('contact-form'),
         ]);
     }
@@ -80,7 +83,7 @@ class FormsController extends Controller
         $settings->forms = $forms;
 
         // Availability (off/on/admins) is shared with the skills UI via capabilityStates.
-        $availability = (string)$req->getBodyParam('availability', 'on');
+        $availability = (string)$req->getBodyParam('availability', 'admins');
         if (in_array($availability, ['off', 'on', 'admins'], true) && $form['name'] !== '') {
             $states = $settings->capabilityStates;
             $states[$form['name']] = $availability;

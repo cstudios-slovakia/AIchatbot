@@ -74,7 +74,7 @@
 
     {{ forms.textField({
       label: 'Label',
-      instructions: 'Human-friendly name shown in the control panel and emails.',
+      instructions: 'Human-friendly name shown in the control panel, in emails, and as the title of an inline form. Shown to visitors in their site’s language if it is translated in `translations/<language>/site.php`.',
       name: 'form[label]',
       value: form.label ?? '',
     }) }}
@@ -99,13 +99,14 @@
       label: 'Availability',
       instructions: 'Same per-skill control as the Agent & skills list. “Admins only” lets you test on the live site first.',
       name: 'availability',
-      value: availability ?? 'on',
+      value: availability ?? 'admins',
       options: { off: 'Off', on: 'Enabled (everyone)', admins: 'Admins only (testing)' },
     }) }}
 
     <hr>
     <h2>Fields</h2>
     <p class="instructions">The model asks for these in conversation (or the user fills them inline) and the answers are passed verbatim. Mark required fields so it won’t submit without them. <strong>Choice</strong> fields use the comma-separated options; <strong>Predefined</strong> fields are not asked — their value is always sent as-is.</p>
+    <p class="instructions">Labels and choice options are shown to visitors, so on a multi-site install they are translated per site: add them to <code>translations/&lt;language&gt;/site.php</code>. An untranslated one is shown as typed. Choice <em>values</em> are stored and delivered as configured — only the text beside them changes.</p>
     <table class="data fullwidth" id="cs-fields-table">
       <thead>
         <tr>

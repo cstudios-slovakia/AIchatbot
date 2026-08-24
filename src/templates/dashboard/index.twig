@@ -4,6 +4,27 @@
 
 {% block content %}
   <div id="chatbot-dashboard">
+    {# Leads first: a person is waiting on the other end of these, and unlike a
+       stale index they go stale by themselves if nobody looks. #}
+    {% set newLeads = (missedChatsNew ?? 0) + (newSubmissions ?? 0) %}
+    {% if newLeads %}
+      <div class="readable" style="padding:14px;border:1px solid #7c3aed;border-left-width:4px;border-radius:6px;background:#f7f4ff;margin-bottom:24px;">
+        <h2 style="margin-top:0;">{{ newLeads }} new lead{{ newLeads == 1 ? '' : 's' }} waiting</h2>
+        <ul style="margin:0 0 10px;padding-left:18px;">
+          {% if missedChatsNew ?? 0 %}
+            <li><strong>{{ missedChatsNew }}</strong> missed chat{{ missedChatsNew == 1 ? '' : 's' }} — a visitor left contact details and nobody has followed up yet.</li>
+          {% endif %}
+          {% if newSubmissions ?? 0 %}
+            <li><strong>{{ newSubmissions }}</strong> form submission{{ newSubmissions == 1 ? '' : 's' }} nobody has opened yet.</li>
+          {% endif %}
+        </ul>
+        <a class="btn submit" href="{{ url('interactive-ai-assistant/missed-chats', { status: 'new' }) }}">Missed chats</a>
+        {% if newSubmissions ?? 0 %}
+          <a class="btn" href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">Form submissions</a>
+        {% endif %}
+      </div>
+    {% endif %}
+
     {% set staleCount = health.stale|length %}
     {% set failedCount = health.failed|length %}
     {% set blankCount = health.blank|length %}
@@ -73,13 +94,20 @@
       {% set kpis = [
         { label: 'Active now', value: stats.activeNow ?? 0, href: url('interactive-ai-assistant/logs', { active: 1 }), color: '#2563eb' },
         { label: 'Missed chats', value: missedChatsNew ?? 0, href: url('interactive-ai-assistant/missed-chats', { status: 'new' }), color: '#7c3aed' },
+      ] %}
+      {% if formsEnabled ?? false %}
+        {% set kpis = kpis|merge([
+          { label: 'New submissions', value: newSubmissions ?? 0, href: url('interactive-ai-assistant/missed-chats/submissions'), color: '#7c3aed' },
+        ]) %}
+      {% endif %}
+      {% set kpis = kpis|merge([
         { label: 'Conversations', value: stats.totalConversations, href: null },
         { label: 'Messages', value: stats.totalMessages, href: null },
         { label: 'Avg response (s)', value: stats.avgResponseTime, href: null },
         { label: 'Avg / day', value: stats.avgPerDay, href: null },
         { label: 'Positive', value: stats.positive, href: url('interactive-ai-assistant/logs', { rating: 'pos' }), color: '#27ab46' },
         { label: 'Negative', value: stats.negative, href: url('interactive-ai-assistant/logs', { rating: 'neg' }), color: '#cf1124' },
-      ] %}
+      ]) %}
       {% for k in kpis %}
         {% if k.href %}
           <a href="{{ k.href }}" class="readable" style="display:block;text-decoration:none;color:inherit;padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;transition:border-color .15s, transform .15s;" onmouseover="this.style.borderColor='{{ k.color ?? '#2563eb' }}';" onmouseout="this.style.borderColor='#d8dde2';">

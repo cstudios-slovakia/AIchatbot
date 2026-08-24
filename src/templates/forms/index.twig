@@ -36,7 +36,7 @@
           {% set editUrl = url('interactive-ai-assistant/forms/edit/' ~ form.name) %}
           <tr data-form-name="{{ form.name }}">
             <td><a href="{{ editUrl }}"><code>{{ form.name }}</code></a></td>
-            <td><a href="{{ editUrl }}">{{ form.label ?: '—' }}</a></td>
+            <td><a href="{{ editUrl }}">{{ form.label ? form.label|t('site') : '—' }}</a></td>
             <td>{{ form.fields|length }}</td>
             <td class="light">
               {%- set channels = [] -%}

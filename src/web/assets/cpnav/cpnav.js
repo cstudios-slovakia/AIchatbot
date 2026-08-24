@@ -38,6 +38,9 @@
     } catch (e) {}
   }
   function playChime() { playTones([880, 1320]); }
+  // Rising three-note figure, deliberately unlike the chat tones: a lead is a
+  // thing to follow up later, not a visitor waiting on a reply right now.
+  function playLeadChime() { playTones([523.25, 659.25, 783.99]); }
   function playToneForSession(id) { var f = sessionTone(id); playTones([f, f * 1.5]); }
   window.csChatbotPlayChime = playChime;
   window.csChatbotPlayToneForSession = playToneForSession;
@@ -66,13 +69,33 @@
     prevUnreadById = curr;
   }
 
+  // Leads are counted across page loads, so a lead that arrives while the admin
+  // is on some other CP screen still announces itself exactly once.
+  var prevLeads = null;
+  function pingNewLeads(counts) {
+    var n = counts.leads | 0;
+    if (prevLeads !== null && n > prevLeads) {
+      playLeadChime();
+      try {
+        var d = n - prevLeads;
+        if (window.Craft && Craft.cp && Craft.cp.displayNotice) {
+          Craft.cp.displayNotice(d === 1 ? 'New lead captured.' : d + ' new leads captured.');
+        }
+      } catch (e) {}
+    }
+    prevLeads = n;
+  }
+
   function readCached() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       var c = JSON.parse(raw);
       if (typeof c !== 'object' || c === null) return null;
-      return { waiting: c.waiting|0, active: c.active|0, unread: c.unread|0, leads: c.leads|0 };
+      return {
+        waiting: c.waiting|0, active: c.active|0, unread: c.unread|0,
+        leads: c.leads|0, leadsMissed: c.leadsMissed|0, leadsSubmissions: c.leadsSubmissions|0,
+      };
     } catch (e) { return null; }
   }
   function writeCached(counts) {
@@ -132,6 +155,17 @@
     return wrap;
   }
 
+  function leadTitle(counts) {
+    var bits = [];
+    if (counts.leadsMissed > 0) bits.push(counts.leadsMissed + ' missed chat' + (counts.leadsMissed === 1 ? '' : 's'));
+    if (counts.leadsSubmissions > 0) bits.push(counts.leadsSubmissions + ' form submission' + (counts.leadsSubmissions === 1 ? '' : 's'));
+    return bits.length ? 'New leads: ' + bits.join(', ') : 'New leads';
+  }
+
+  function leadBadge(counts) {
+    return '<span class="cs-bot-badge cs-bot-badge--lead" title="' + leadTitle(counts) + '">' + counts.leads + '</span>';
+  }
+
   function setBadges(el, counts, includeLeads) {
     if (!el) return;
     var wrap = badgeWrap(el);
@@ -139,16 +173,16 @@
     if (counts.waiting > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--waiting" title="Waiting for an agent">' + counts.waiting + '</span>');
     if (counts.active > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--active" title="Active conversations">' + counts.active + '</span>');
     if (counts.unread > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--unread" title="Unread messages">' + counts.unread + '</span>');
-    if (includeLeads && counts.leads > 0) parts.push('<span class="cs-bot-badge cs-bot-badge--lead" title="New missed chats">' + counts.leads + '</span>');
+    if (includeLeads && counts.leads > 0) parts.push(leadBadge(counts));
     wrap.innerHTML = parts.join('');
     if (!parts.length) wrap.remove();
   }
 
-  function setLeadBadge(el, n) {
+  function setLeadBadge(el, counts) {
     if (!el) return;
     var wrap = badgeWrap(el);
-    wrap.innerHTML = n > 0 ? '<span class="cs-bot-badge cs-bot-badge--lead" title="New missed chats">' + n + '</span>' : '';
-    if (n <= 0) wrap.remove();
+    wrap.innerHTML = counts.leads > 0 ? leadBadge(counts) : '';
+    if (counts.leads <= 0) wrap.remove();
   }
 
   function refreshTitle(total) {
@@ -184,8 +218,10 @@
     lastTotal = total;
     setBadges(targets.top, counts, true);
     setBadges(targets.sub, counts, false);
-    setLeadBadge(targets.lead, leads);
-    refreshTitle(total);
+    setLeadBadge(targets.lead, counts);
+    // Leads count towards the tab title too — that is the one indicator visible
+    // when the admin is working in another browser tab entirely.
+    refreshTitle(total + leads);
     // Audio is handled per-chat by pingNewMessages() (distinct tone per conversation).
   }
 
@@ -194,10 +230,14 @@
       .then(function (r) { return r.json(); })
       .then(function (r) {
         if (!r.success) return;
-        var counts = { waiting: (r.waiting|0), active: (r.active|0), unread: (r.unread|0), leads: (r.leads|0) };
+        var counts = {
+          waiting: (r.waiting|0), active: (r.active|0), unread: (r.unread|0),
+          leads: (r.leads|0), leadsMissed: (r.leadsMissed|0), leadsSubmissions: (r.leadsSubmissions|0),
+        };
         writeCached(counts);
         applyCounts(counts);
         pingNewMessages(r.sessions);
+        pingNewLeads(counts);
       })
       .catch(function () {});
   }
@@ -205,7 +245,11 @@
   function start() {
     // Instant render from cache to avoid flash on page nav
     var cached = readCached();
-    if (cached) applyCounts(cached);
+    if (cached) {
+      applyCounts(cached);
+      // Seed, don't announce: these were already chimed on the page that saw them.
+      prevLeads = cached.leads | 0;
+    }
     poll();
     setInterval(poll, INTERVAL);
     window.addEventListener('cs-chatbot:read', function () { lastSig = ''; poll(); });

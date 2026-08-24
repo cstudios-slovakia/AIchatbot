@@ -48,6 +48,7 @@ return [
     'Agent' => 'Operátor',
     'How was this chat?' => 'Aký bol tento rozhovor?',
     'Not finding what you need?' => 'Nenašli ste, čo potrebujete?',
+    'AI assistant — answers can be inaccurate. Please verify important information.' => 'AI asistent — odpovede môžu byť nepresné. Dôležité informácie si prosím overte.',
 
     // Widget — errors
     'Message rejected.' => 'Správa bola zamietnutá.',

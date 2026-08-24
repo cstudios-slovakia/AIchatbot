@@ -20,6 +20,7 @@ class DashboardController extends Controller
         $fromDt = $from ? new DateTime($from) : (new DateTime())->modify('-30 days');
         $toDt = $to ? new DateTime($to) : new DateTime();
 
+        $formsEnabled = Plugin::getInstance()->getSettings()->formsEnabled;
         $stats = Plugin::getInstance()->stats->summary($fromDt, $toDt);
         $suggestions = Plugin::getInstance()->stats->suggestionStats();
         $training = Plugin::getInstance()->stats->trainingSummary();
@@ -31,6 +32,8 @@ class DashboardController extends Controller
             'health' => Plugin::getInstance()->training->indexHealth(),
             'openGaps' => Plugin::getInstance()->gaps->openCount(),
             'missedChatsNew' => Plugin::getInstance()->contacts->newCount(),
+            'formsEnabled' => $formsEnabled,
+            'newSubmissions' => $formsEnabled ? Plugin::getInstance()->forms->unreadCount() : 0,
             'from' => $fromDt->format('Y-m-d'),
             'to' => $toDt->format('Y-m-d'),
         ]);

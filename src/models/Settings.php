@@ -44,6 +44,15 @@ class Settings extends Model
     public string $initialMessage = 'Hi! How can I help you today?';
     /** @var array<string, string> Craft site UID => override initial message. Empty/missing => use $initialMessage. */
     public array $initialMessages = [];
+    // A small standing note in the widget telling the visitor the answers come
+    // from an AI and can be wrong. Off by default so an upgrade never changes a
+    // live widget on its own; sites that need the notice turn it on.
+    public bool $disclaimerEnabled = false;
+    // Empty = use the plugin's own wording, translated into the site's language
+    // like every other widget string. Set it to override that wording globally.
+    public string $disclaimerText = '';
+    /** @var array<string, string> Craft site UID => override disclaimer text. */
+    public array $disclaimerTexts = [];
     public string $systemPrompt = 'You are a helpful assistant for this website. Answer using only the provided context. If the context does not contain the answer, say you do not know and suggest contacting the team. Keep answers concise and accurate.';
     /** @var array<string, string> Craft site UID => override system prompt. */
     public array $systemPrompts = [];
@@ -238,8 +247,8 @@ class Settings extends Model
     {
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
-            [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled', 'streamingEnabled'], 'boolean'],
+            [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt', 'disclaimerText'], 'string'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled', 'streamingEnabled', 'disclaimerEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'historyMessages', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
@@ -273,7 +282,7 @@ class Settings extends Model
             [['humanHandoffMode'], 'in', 'range' => ['always', 'ai']],
             [['humanHandoffMode'], 'string'],
             [['logoText'], 'string', 'max' => 3],
-            [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite', 'excludedFields', 'pageRenderSections'], 'safe'],
+            [['trainingSections', 'trainingCategoryGroups', 'trainingGlobalSets', 'suggestions', 'chatTemplates', 'initialMessages', 'companyNames', 'systemPrompts', 'suggestionsBySite', 'excludedFields', 'pageRenderSections', 'disclaimerTexts'], 'safe'],
             [['contentSelector'], 'string'],
             [['companyName'], 'required'],
         ];
@@ -426,6 +435,23 @@ class Settings extends Model
             }
         }
         return $this->initialMessage;
+    }
+
+    /**
+     * Disclaimer wording for a site: its own override, else the global one, else
+     * '' — which tells the widget to use its own translated default rather than
+     * hard-coding English here.
+     */
+    public function getDisclaimerTextForSite(?string $siteUid = null): string
+    {
+        $uid = $this->resolveSiteUid($siteUid);
+        if ($uid !== null && isset($this->disclaimerTexts[$uid])) {
+            $override = trim((string)$this->disclaimerTexts[$uid]);
+            if ($override !== '') {
+                return $override;
+            }
+        }
+        return trim($this->disclaimerText);
     }
 
     public function getCompanyNameForSite(?string $siteUid = null): string
