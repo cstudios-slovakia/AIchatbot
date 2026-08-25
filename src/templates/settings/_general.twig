@@ -87,6 +87,43 @@
   unit: 'px',
 }) }}
 
+{{ forms.textField({
+  label: 'Chat Window Width',
+  instructions: 'Width in pixels of the floating chat panel (Chat mode only). 280–720. It never grows past the viewport.',
+  name: 'settings[widgetWidth]',
+  value: settings.widgetWidth ?? 360,
+  size: 6,
+  type: 'number',
+  unit: 'px',
+}) }}
+
+{{ forms.textField({
+  label: 'Chat Window Height',
+  instructions: 'Height in pixels of the floating chat panel (Chat mode only). 360–1000.',
+  name: 'settings[widgetHeight]',
+  value: settings.widgetHeight ?? 540,
+  size: 6,
+  type: 'number',
+  unit: 'px',
+}) }}
+
+{{ forms.textField({
+  label: 'Text Size',
+  instructions: 'Base text size inside the widget, 11–22. Every other size — bubbles, labels, timestamps — is a ratio of it, so this scales the whole widget’s text.',
+  name: 'settings[widgetFontSize]',
+  value: settings.widgetFontSize ?? 13,
+  size: 6,
+  type: 'number',
+  unit: 'px',
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Let Visitors Resize',
+  instructions: 'Adds “Enlarge window” and “Text size” to the widget’s ⋯ menu, so a visitor can make the chat bigger for themselves. Their choice is remembered on their device.',
+  name: 'settings[widgetResizeEnabled]',
+  on: settings.widgetResizeEnabled ?? true,
+}) }}
+
 <hr>
 <h3>Bubble Colors (frontend)</h3>
 <p class="instructions">Leave empty to use the default. Text color is auto-picked from luminance.</p>

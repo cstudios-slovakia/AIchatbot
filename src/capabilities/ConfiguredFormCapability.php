@@ -61,18 +61,31 @@ class ConfiguredFormCapability extends BaseCapability
             if ($type === 'hidden') {
                 continue;
             }
-            $schema = ['type' => $type === 'number' ? 'number' : 'string'];
+            // Options may be a typed list or pulled from a section / Craft field —
+            // the Forms service is the one place that resolves which.
+            $options = array_column(Plugin::getInstance()->forms->fieldOptions($field), 'value');
+            $schema = match ($type) {
+                'number' => ['type' => 'number'],
+                // Checkbox group: any number of the offered options.
+                'checkboxes' => ['type' => 'array', 'items' => ['type' => 'string'] + ($options ? ['enum' => $options] : [])],
+                // Consent: a yes/no the user has to actually give.
+                'consent' => ['type' => 'boolean'],
+                default => ['type' => 'string'],
+            };
 
             $describe = trim((string)($field['description'] ?? ''));
-            $label = trim((string)($field['label'] ?? ''));
+            // A consent label carries its link as `[text](url)` for the widget
+            // to render; the model only needs the words.
+            $label = preg_replace('/\[([^\]]+)\]\([^)\s]*\)/', '$1', trim((string)($field['label'] ?? '')));
             $schema['description'] = ($describe !== '' ? $describe : $label)
-                . ' Use the user\'s exact wording.';
+                . match ($type) {
+                    'checkboxes' => ' Pass only the options the user actually chose; leave the list empty if they chose none.',
+                    'consent' => ' Only true if the user explicitly agreed after you told them what they are agreeing to — never assume it.',
+                    default => ' Use the user\'s exact wording.',
+                };
 
-            if ($type === 'select') {
-                $options = is_array($field['options'] ?? null) ? array_values(array_filter(array_map('strval', $field['options']))) : [];
-                if ($options) {
-                    $schema['enum'] = $options;
-                }
+            if ($type === 'select' && $options) {
+                $schema['enum'] = $options;
             }
             $properties[$fname] = $schema;
             if (!empty($field['required'])) {

@@ -3,7 +3,9 @@
 namespace cstudiossro\craftcschatbot\controllers;
 
 use Craft;
+use craft\fields\BaseOptionsField;
 use craft\web\Controller;
+use cstudiossro\craftcschatbot\helpers\CraftCompat;
 use cstudiossro\craftcschatbot\Plugin;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
@@ -55,6 +57,8 @@ class FormsController extends Controller
             // one nobody sees yet.
             'availability' => $form ? $settings->capabilityState((string)$form['name']) : 'admins',
             'contactFormInstalled' => Craft::$app->plugins->isPluginEnabled('contact-form'),
+            'optionSections' => $this->optionSections(),
+            'optionFields' => $this->optionFields(),
         ]);
     }
 
@@ -104,6 +108,8 @@ class FormsController extends Controller
                 'agentModeEnabled' => $settings->agentModeEnabled,
                 'availability' => $availability,
                 'contactFormInstalled' => Craft::$app->plugins->isPluginEnabled('contact-form'),
+                'optionSections' => $this->optionSections(),
+                'optionFields' => $this->optionFields(),
             ]);
         }
 
@@ -133,6 +139,37 @@ class FormsController extends Controller
     }
 
     /**
+     * Sections a choice field can draw its options from, uid => name.
+     *
+     * @return array<string, string>
+     */
+    private function optionSections(): array
+    {
+        $out = ['' => '— select a section —'];
+        foreach (CraftCompat::getAllSections() as $section) {
+            $out[$section->uid] = $section->name;
+        }
+        return $out;
+    }
+
+    /**
+     * Craft dropdown / radio / checkboxes / multi-select fields, handle => name.
+     * Those are the only field types that carry a list of choices of their own.
+     *
+     * @return array<string, string>
+     */
+    private function optionFields(): array
+    {
+        $out = ['' => '— select a field —'];
+        foreach (Craft::$app->fields->getAllFields() as $field) {
+            if ($field instanceof BaseOptionsField) {
+                $out[$field->handle] = $field->name . ' (' . $field->handle . ')';
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Turn the posted editable-table shape into a clean form definition.
      *
      * @param array<string, mixed> $posted
@@ -149,15 +186,26 @@ class FormsController extends Controller
             $field = [
                 'name' => trim((string)$row['name']),
                 'label' => trim((string)($row['label'] ?? '')),
-                'type' => in_array($type, ['text', 'email', 'tel', 'number', 'textarea', 'select', 'hidden'], true) ? $type : 'text',
+                'type' => in_array($type, ['text', 'email', 'tel', 'number', 'textarea', 'select', 'checkboxes', 'consent', 'hidden'], true) ? $type : 'text',
                 'required' => !empty($row['required']),
                 'description' => trim((string)($row['description'] ?? '')),
             ];
-            if ($field['type'] === 'select') {
-                $field['options'] = array_values(array_filter(array_map(
-                    'trim',
-                    explode(',', (string)($row['options'] ?? ''))
-                ), fn($v) => $v !== ''));
+            if (in_array($field['type'], ['select', 'checkboxes'], true)) {
+                // Choices are either typed here or pulled from site content, in
+                // which case only the pointer is stored — the list is resolved at
+                // ask time so it follows the content and the visitor's site.
+                $source = (string)($row['optionsSource'] ?? 'manual');
+                $field['optionsSource'] = in_array($source, ['manual', 'section', 'field'], true) ? $source : 'manual';
+                if ($field['optionsSource'] === 'section') {
+                    $field['optionsSection'] = trim((string)($row['optionsSection'] ?? ''));
+                } elseif ($field['optionsSource'] === 'field') {
+                    $field['optionsField'] = trim((string)($row['optionsField'] ?? ''));
+                } else {
+                    $field['options'] = array_values(array_filter(array_map(
+                        'trim',
+                        explode(',', (string)($row['options'] ?? ''))
+                    ), fn($v) => $v !== ''));
+                }
             }
             if ($field['type'] === 'hidden') {
                 // Predefined value, never asked from the user.

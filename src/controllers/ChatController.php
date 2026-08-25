@@ -43,6 +43,29 @@ class ChatController extends Controller
         return null;
     }
 
+    /**
+     * Resolve the current identity, then let go of the PHP session lock.
+     *
+     * PHP holds an exclusive lock on the session file for the whole request.
+     * A chat turn spends tens of seconds inside the model call, and every
+     * other request carrying the same session cookie — a control panel page,
+     * another tab, this widget's own poll — sits in session_start() until it
+     * finishes, which reads as the entire backend having hung. Touching the
+     * identity first leaves it cached on the user component, so the checks
+     * further down (skill availability, permissions) never reopen the session.
+     *
+     * Nothing on the visitor-facing chat path writes to the session, so there
+     * is nothing to lose by closing it early.
+     */
+    private function releaseSessionLock(): void
+    {
+        Craft::$app->getUser()->getIdentity();
+        $session = Craft::$app->getSession();
+        if ($session->getIsActive()) {
+            $session->close();
+        }
+    }
+
     public function actionConfig(): Response
     {
         if ($blocked = $this->blockIfBanned()) return $blocked;
@@ -72,6 +95,10 @@ class ChatController extends Controller
             'defaultTheme' => $s->defaultTheme,
             'operationMode' => in_array($s->operationMode, ['chat', 'agent'], true) ? $s->operationMode : 'chat',
             'agentPanelWidth' => (int)$s->agentPanelWidth ?: 420,
+            'widgetWidth' => (int)$s->widgetWidth ?: 360,
+            'widgetHeight' => (int)$s->widgetHeight ?: 540,
+            'widgetFontSize' => (int)$s->widgetFontSize ?: 13,
+            'widgetResizeEnabled' => (bool)$s->widgetResizeEnabled,
             'widgetPosition' => in_array($s->widgetPosition, ['bottom-right', 'bottom-left', 'top-right', 'top-left'], true) ? $s->widgetPosition : 'bottom-right',
             'initialMessage' => $s->getInitialMessageForSite($siteUid),
             'disclaimerEnabled' => (bool)$s->disclaimerEnabled,
@@ -161,6 +188,14 @@ class ChatController extends Controller
             'formThanks' => 'Thanks! Your form has been submitted.',
             'formError' => 'Could not submit the form. Please try again.',
             'formSelectPrompt' => 'Choose…',
+            'formChooseOne' => 'Please choose at least one option.',
+            'formConsentRequired' => 'Please tick this box to continue.',
+            'enlargeWindow' => 'Enlarge window',
+            'shrinkWindow' => 'Shrink window',
+            'textSize' => 'Text size',
+            'textNormal' => 'Normal',
+            'textLarge' => 'Large',
+            'textLargest' => 'Largest',
         ];
         $out = [];
         foreach ($sources as $key => $source) {
@@ -176,6 +211,7 @@ class ChatController extends Controller
         if (!Plugin::getInstance()->widgetVisibleForCurrentUser()) {
             return $this->asJson(['success' => false, 'error' => 'Chatbot disabled']);
         }
+        $this->releaseSessionLock();
         $req = Craft::$app->request;
         $question = trim((string)$req->getBodyParam('message', ''));
         if ($question === '') {
@@ -204,7 +240,26 @@ class ChatController extends Controller
             Craft::error($e->getMessage(), __METHOD__);
             return $this->asJson(['success' => false, 'error' => 'Chat error: ' . $e->getMessage()]);
         }
-        return $this->asJson(['success' => true] + $result);
+        return $this->asJson(['success' => true] + $this->publicResult($result));
+    }
+
+    /**
+     * Strip what a visitor has no business seeing from a turn's result. The
+     * timing breakdown describes the site's own retrieval setup, so it goes to
+     * logged-in CP users (who are the ones debugging a slow widget) and nobody
+     * else.
+     *
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function publicResult(array $result): array
+    {
+        $user = Craft::$app->getUser();
+        if (!$user->getIsGuest() && $user->checkPermission('accessCp')) {
+            return $result;
+        }
+        unset($result['timings']);
+        return $result;
     }
 
     /**
@@ -224,6 +279,7 @@ class ChatController extends Controller
         if (!Plugin::getInstance()->widgetVisibleForCurrentUser()) {
             return $this->asJson(['success' => false, 'error' => 'Chatbot disabled']);
         }
+        $this->releaseSessionLock();
         $req = Craft::$app->request;
         $question = trim((string)$req->getBodyParam('message', ''));
         if ($question === '') {
@@ -278,7 +334,7 @@ class ChatController extends Controller
                 is_string($pageUrl) ? $pageUrl : null,
                 fn(string $text) => $emit('delta', ['text' => $text]),
             );
-            $emit('done', ['success' => true] + $result);
+            $emit('done', ['success' => true] + $this->publicResult($result));
         } catch (Throwable $e) {
             Craft::error($e->getMessage(), __METHOD__);
             $emit('done', ['success' => false, 'error' => 'Chat error: ' . $e->getMessage()]);
@@ -308,6 +364,7 @@ class ChatController extends Controller
     public function actionPoll(): Response
     {
         if ($blocked = $this->blockIfBanned()) return $blocked;
+        $this->releaseSessionLock();
         $this->maybeSweep();
         $req = Craft::$app->request;
         $token = (string)$req->getQueryParam('sessionToken', $req->getBodyParam('sessionToken', ''));
@@ -459,6 +516,7 @@ class ChatController extends Controller
         if (!Plugin::getInstance()->widgetVisibleForCurrentUser()) {
             return $this->asJson(['success' => false, 'error' => 'Chatbot disabled']);
         }
+        $this->releaseSessionLock();
         if (!Plugin::getInstance()->getSettings()->formsEnabled) {
             return $this->asJson(['success' => false, 'error' => 'Forms are disabled.']);
         }

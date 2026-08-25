@@ -6,6 +6,8 @@
   var STORAGE_THEME = 'csChatbotTheme';
   var STORAGE_MINIMIZED = 'csChatbotMinimized';
   var STORAGE_FORM = 'csChatbotForm';
+  var STORAGE_ENLARGED = 'csChatbotEnlarged';
+  var STORAGE_TEXTSIZE = 'csChatbotTextSize';
 
   // English fallbacks for all widget UI strings. The server sends localized
   // overrides (per the current site's language) in config.strings; T() reads
@@ -66,7 +68,15 @@
     formInvalidEmail: 'Please enter a valid email address.',
     formThanks: 'Thanks! Your form has been submitted.',
     formError: 'Could not submit the form. Please try again.',
-    formSelectPrompt: 'Choose…'
+    formSelectPrompt: 'Choose…',
+    formChooseOne: 'Please choose at least one option.',
+    formConsentRequired: 'Please tick this box to continue.',
+    enlargeWindow: 'Enlarge window',
+    shrinkWindow: 'Shrink window',
+    textSize: 'Text size',
+    textNormal: 'Normal',
+    textLarge: 'Large',
+    textLargest: 'Largest'
   };
   function T(key) {
     var s = (window.csChatbot && window.csChatbot.strings) || {};
@@ -85,6 +95,27 @@
       else if (c) n.appendChild(c);
     });
     return n;
+  }
+
+  // Turn `[text](url)` inside an admin-written label into real links. Anything
+  // else stays a text node, so a label can never inject markup, and only http(s),
+  // root-relative and mailto targets are linked.
+  function linkify(text) {
+    var out = [];
+    var re = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+    var last = 0;
+    var m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      if (/^(https?:\/\/|\/|mailto:)/i.test(m[2])) {
+        out.push(el('a', { href: m[2], target: '_blank', rel: 'noopener noreferrer' }, [m[1]]));
+      } else {
+        out.push(m[1]);
+      }
+      last = re.lastIndex;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
   }
 
   function post(url, body) {
@@ -638,12 +669,50 @@
     var position = POSITIONS.indexOf(config.widgetPosition) !== -1 ? config.widgetPosition : 'bottom-right';
     root.dataset.position = position;
     var dockLeft = position.indexOf('-left') !== -1;
+    var agentWidth = Math.max(280, Math.min(900, parseInt(config.agentPanelWidth, 10) || 420));
     if (agentMode) {
-      var agentWidth = Math.max(280, Math.min(900, parseInt(config.agentPanelWidth, 10) || 420));
-      document.documentElement.style.setProperty('--cb-agent-width', agentWidth + 'px');
+      // The width itself is set by applyAgentWidth() below, once the visitor's
+      // own size choice is known.
       document.documentElement.classList.add('cs-chatbot-agent');
       if (dockLeft) document.documentElement.classList.add('cs-chatbot-agent-left');
     }
+    // Configured panel size and base text size. Everything inside the widget is
+    // sized off these two, so raising either scales the whole thing.
+    var clamp = function (v, lo, hi, dflt) {
+      var n = parseInt(v, 10);
+      return isNaN(n) ? dflt : Math.max(lo, Math.min(hi, n));
+    };
+    root.style.setProperty('--cb-panel-w', clamp(config.widgetWidth, 280, 720, 360) + 'px');
+    root.style.setProperty('--cb-panel-h', clamp(config.widgetHeight, 360, 1000, 540) + 'px');
+    root.style.setProperty('--cb-fs-base', clamp(config.widgetFontSize, 11, 22, 13) + 'px');
+
+    // The visitor's own size choices, remembered per device. Off when the site
+    // hasn't enabled them — then the configured size is simply what they get.
+    var resizable = config.widgetResizeEnabled !== false;
+    var TEXT_SIZES = ['normal', 'large', 'largest'];
+    var textSize = 'normal';
+    var enlarged = false;
+    if (resizable) {
+      try {
+        var storedText = localStorage.getItem(STORAGE_TEXTSIZE);
+        if (TEXT_SIZES.indexOf(storedText) !== -1) textSize = storedText;
+        enlarged = localStorage.getItem(STORAGE_ENLARGED) === '1';
+      } catch (e) {}
+    }
+    root.dataset.textsize = textSize;
+    if (enlarged) root.classList.add('is-enlarged');
+
+    // Agent mode docks the panel and pushes the page over by --cb-agent-width,
+    // so an enlarged panel has to move that same variable or the page would end
+    // up underneath it.
+    var ENLARGE_SCALE = 1.35;
+    function applyAgentWidth() {
+      if (!agentMode) return;
+      var w = root.classList.contains('is-enlarged') ? Math.round(agentWidth * ENLARGE_SCALE) : agentWidth;
+      document.documentElement.style.setProperty('--cb-agent-width', w + 'px');
+    }
+    applyAgentWidth();
+
     root.style.setProperty('--cb-primary', config.primaryColor || '#2563eb');
     root.style.setProperty('--cb-logo-bg', config.logoBgColor || '#1f2937');
 
@@ -685,7 +754,13 @@
     endMenuItem.dataset.role = 'end';
     var themeMenuItem = el('button', { class: 'cs-chatbot__menu-item', type: 'button', html: '<span class="cs-chatbot__menu-icon cs-chatbot__theme-icon">☾</span>' + T('toggleTheme') });
     themeMenuItem.dataset.role = 'theme';
-    var menu = el('div', { class: 'cs-chatbot__menu' }, [endMenuItem, themeMenuItem]);
+    var sizeMenuItem = el('button', { class: 'cs-chatbot__menu-item', type: 'button' });
+    sizeMenuItem.dataset.role = 'size';
+    var textMenuItem = el('button', { class: 'cs-chatbot__menu-item', type: 'button' });
+    textMenuItem.dataset.role = 'textsize';
+    var menuItems = [endMenuItem, themeMenuItem];
+    if (resizable) menuItems.push(sizeMenuItem, textMenuItem);
+    var menu = el('div', { class: 'cs-chatbot__menu' }, menuItems);
     var menuBtn = el('button', { class: 'cs-chatbot__icon-btn', title: T('more'), type: 'button', html: '⋯', 'aria-haspopup': 'true' });
     var menuWrap = el('div', { class: 'cs-chatbot__menu-wrap' }, [menuBtn, menu]);
     // Compatibility shims so existing code referring to endBtn/themeBtn keeps working.
@@ -748,18 +823,34 @@
       shortId: null,
       unread: false,
       botPending: false,
+      stickToBottom: true,
       contactShown: false,
       contactCaptured: false
     };
 
     function isCont(sender) { return state.lastSender === sender; }
 
-    function scrollMessagesToBottom() { messages.scrollTop = messages.scrollHeight; }
+    // Auto-scroll follows the newest message only while the visitor is already
+    // at the bottom. A streamed reply appends on every delta, and yanking the
+    // view down each time made it impossible to scroll up and read what had
+    // already arrived. Scrolling away detaches; scrolling back re-attaches.
+    var STICK_SLACK = 48; // px of slack that still counts as "at the bottom"
+    function isAtBottom() {
+      return messages.scrollHeight - messages.scrollTop - messages.clientHeight <= STICK_SLACK;
+    }
+    // force: for things the visitor just did (opened the panel, sent a message),
+    // where following the bottom is the expected outcome regardless.
+    function scrollMessagesToBottom(force) {
+      if (!force && !state.stickToBottom) return;
+      messages.scrollTop = messages.scrollHeight;
+      state.stickToBottom = true;
+    }
+    messages.addEventListener('scroll', function () { state.stickToBottom = isAtBottom(); });
     function open() {
       root.classList.add('is-open');
       if (agentMode) document.documentElement.classList.add('cs-chatbot-agent-open');
       input.focus();
-      scrollMessagesToBottom();
+      scrollMessagesToBottom(true);
       state.unread = false;
       localStorage.removeItem(STORAGE_MINIMIZED);
       refreshLauncherDot();
@@ -789,6 +880,37 @@
     });
     setThemeIcon();
 
+    // Visitor-side window and text size. Both only change CSS variables, so the
+    // panel keeps its own max-width/height and can never outgrow the viewport.
+    function textSizeLabel(size) {
+      return T(size === 'largest' ? 'textLargest' : (size === 'large' ? 'textLarge' : 'textNormal'));
+    }
+    function refreshSizeMenu() {
+      sizeMenuItem.innerHTML = '<span class="cs-chatbot__menu-icon">'
+        + (root.classList.contains('is-enlarged') ? '⤡' : '⤢') + '</span>'
+        + (root.classList.contains('is-enlarged') ? T('shrinkWindow') : T('enlargeWindow'));
+      textMenuItem.innerHTML = '<span class="cs-chatbot__menu-icon">A</span>'
+        + T('textSize') + ' · ' + textSizeLabel(root.dataset.textsize);
+    }
+    if (resizable) {
+      sizeMenuItem.addEventListener('click', function () {
+        var on = !root.classList.contains('is-enlarged');
+        root.classList.toggle('is-enlarged', on);
+        applyAgentWidth();
+        try { localStorage.setItem(STORAGE_ENLARGED, on ? '1' : '0'); } catch (e) {}
+        refreshSizeMenu();
+        scrollMessagesToBottom();
+      });
+      textMenuItem.addEventListener('click', function () {
+        var next = TEXT_SIZES[(TEXT_SIZES.indexOf(root.dataset.textsize) + 1) % TEXT_SIZES.length];
+        root.dataset.textsize = next;
+        try { localStorage.setItem(STORAGE_TEXTSIZE, next); } catch (e) {}
+        refreshSizeMenu();
+        scrollMessagesToBottom();
+      });
+      refreshSizeMenu();
+    }
+
     function startNewConversation(confirmFirst) {
       if (confirmFirst && !confirm(T('startNewConfirm'))) return;
       // Abandon any in-progress handoff server-side so it stops showing in admin's waiting/active lists.
@@ -814,6 +936,7 @@
       state.contactShown = false;
       state.contactCaptured = false;
       messages.innerHTML = '';
+      state.stickToBottom = true;
       ratingBar.style.display = 'none';
       shortIdBadge.style.display = 'none';
       updateBanner();
@@ -1028,7 +1151,7 @@
       messages.appendChild(bubble);
       state.lastSender = 'user';
       stampTime(bubble, timeOrDate, fullDate);
-      scrollMessagesToBottom();
+      scrollMessagesToBottom(true);
     }
 
     function addAdmin(text, timeOrDate, fullDate) {
@@ -1088,11 +1211,14 @@
       });
     }
 
+    // Throttle: when chatting with the bot, block sending another question until the previous bot reply lands.
+    // No throttle for admin/handoff chats — humans can be slow, user may want to add context.
+    function isBotChatMode() { return state.handoffStatus !== 'active' && state.handoffStatus !== 'requested'; }
+    function botBusy() { return isBotChatMode() && state.botPending; }
+
     function ask(question) {
       if (state.chatEnded) return;
-      // Throttle: when chatting with the bot, block sending another question until the previous bot reply lands.
-      // No throttle for admin/handoff chats — humans can be slow, user may want to add context.
-      var isBotChat = (state.handoffStatus !== 'active' && state.handoffStatus !== 'requested');
+      var isBotChat = isBotChatMode();
       if (isBotChat && state.botPending) {
         return;
       }
@@ -1108,9 +1234,11 @@
       var showTyping = isBotChat;
       var typing = showTyping ? addTyping() : null;
       if (isBotChat) {
+        // Only the send button locks: the visitor can keep typing (or paste) the
+        // next question while the model writes. ask() re-checks botPending, so a
+        // stray Enter can't queue a second turn.
         state.botPending = true;
         send.disabled = true;
-        input.disabled = true;
       }
       var data = new FormData();
       data.append('message', question);
@@ -1120,10 +1248,7 @@
       function clearPending() {
         state.botPending = false;
         send.disabled = false;
-        if (!state.chatEnded) {
-          input.disabled = false;
-          input.focus();
-        }
+        if (!state.chatEnded) input.focus();
       }
       // While streaming, the reply lands in a bubble that grows; the final
       // event replaces it with the processed text (hallucinated links removed,
@@ -1306,29 +1431,61 @@
       var inputs = {};
       (form.fields || []).forEach(function (f) {
         var wrap = el('div', { class: 'cs-chatbot__form-field' });
-        var label = el('label', { class: 'cs-chatbot__form-label' }, [f.label || f.name]);
-        if (f.required) label.appendChild(el('span', { class: 'cs-chatbot__form-req' }, ['*']));
-        wrap.appendChild(label);
-        var input;
-        if (f.type === 'textarea') {
-          input = el('textarea', { class: 'cs-chatbot__contact-input', rows: '2' });
-        } else if (f.type === 'select') {
-          input = el('select', { class: 'cs-chatbot__contact-input' });
-          input.appendChild(el('option', { value: '' }, [T('formSelectPrompt')]));
-          // Option values stay canonical; optionLabels carries the site-language
-          // text, and is absent on a form persisted before this shipped.
-          (f.options || []).forEach(function (o, i) {
-            input.appendChild(el('option', { value: o }, [(f.optionLabels && f.optionLabels[i]) || o]));
-          });
-        } else {
-          var t = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : (f.type === 'number' ? 'number' : 'text'));
-          input = el('input', { class: 'cs-chatbot__contact-input', type: t });
-        }
-        wrap.appendChild(input);
         var err = el('div', { class: 'cs-chatbot__contact-err' });
         err.style.display = 'none';
+        var entry = { field: f, err: err };
+
+        if (f.type === 'consent') {
+          // One box the visitor ticks; its label carries the policy link.
+          var box = el('input', { class: 'cs-chatbot__form-check', type: 'checkbox' });
+          var text = el('span', {}, linkify(f.label || f.name));
+          if (f.required) text.appendChild(el('span', { class: 'cs-chatbot__form-req' }, ['*']));
+          var consentRow = el('label', { class: 'cs-chatbot__form-consent' }, [box, text]);
+          wrap.appendChild(consentRow);
+          entry.read = function () { return box.checked; };
+        } else if (f.type === 'checkboxes') {
+          // Fieldset of boxes — any number of the offered options.
+          var legend = el('div', { class: 'cs-chatbot__form-label' }, [f.label || f.name]);
+          if (f.required) legend.appendChild(el('span', { class: 'cs-chatbot__form-req' }, ['*']));
+          wrap.appendChild(legend);
+          var group = el('div', { class: 'cs-chatbot__form-checks' });
+          var boxes = [];
+          (f.options || []).forEach(function (o, i) {
+            var one = el('input', { class: 'cs-chatbot__form-check', type: 'checkbox', value: o });
+            group.appendChild(el('label', { class: 'cs-chatbot__form-check-row' }, [
+              one, el('span', {}, [(f.optionLabels && f.optionLabels[i]) || o]),
+            ]));
+            boxes.push(one);
+          });
+          wrap.appendChild(group);
+          entry.read = function () {
+            return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+          };
+        } else {
+          var label = el('label', { class: 'cs-chatbot__form-label' }, [f.label || f.name]);
+          if (f.required) label.appendChild(el('span', { class: 'cs-chatbot__form-req' }, ['*']));
+          wrap.appendChild(label);
+          var input;
+          if (f.type === 'textarea') {
+            input = el('textarea', { class: 'cs-chatbot__contact-input', rows: '2' });
+          } else if (f.type === 'select') {
+            input = el('select', { class: 'cs-chatbot__contact-input' });
+            input.appendChild(el('option', { value: '' }, [T('formSelectPrompt')]));
+            // Option values stay canonical; optionLabels carries the site-language
+            // text, and is absent on a form persisted before this shipped.
+            (f.options || []).forEach(function (o, i) {
+              input.appendChild(el('option', { value: o }, [(f.optionLabels && f.optionLabels[i]) || o]));
+            });
+          } else {
+            var t = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : (f.type === 'number' ? 'number' : 'text'));
+            input = el('input', { class: 'cs-chatbot__contact-input', type: t });
+          }
+          wrap.appendChild(input);
+          entry.read = function () { return (input.value || '').trim(); };
+        }
+
         wrap.appendChild(err);
-        inputs[f.name] = { el: input, field: f, err: err };
+        inputs[f.name] = entry;
         body.appendChild(wrap);
       });
       var generalErr = el('div', { class: 'cs-chatbot__contact-err' });
@@ -1346,16 +1503,24 @@
         generalErr.style.display = 'none';
       }
 
+      // The message for a field left empty depends on what it asks for.
+      function missingMsg(field) {
+        if (field.type === 'checkboxes') return T('formChooseOne');
+        if (field.type === 'consent') return T('formConsentRequired');
+        return T('formRequired');
+      }
+
       submit.addEventListener('click', function () {
         clearErrs();
         var values = {};
         var bad = false;
         Object.keys(inputs).forEach(function (name) {
           var it = inputs[name];
-          var v = (it.el.value || '').trim();
+          var v = it.read();
           values[name] = v;
-          if (it.field.required && v === '') { showErr(name, T('formRequired')); bad = true; }
-          else if (v !== '' && it.field.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { showErr(name, T('formInvalidEmail')); bad = true; }
+          var empty = Array.isArray(v) ? v.length === 0 : (v === false || v === '');
+          if (it.field.required && empty) { showErr(name, missingMsg(it.field)); bad = true; }
+          else if (typeof v === 'string' && v !== '' && it.field.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { showErr(name, T('formInvalidEmail')); bad = true; }
         });
         if (bad) { scrollMessagesToBottom(); return; }
         submit.disabled = true;
@@ -1364,13 +1529,19 @@
         data.append('pageUrl', location.href);
         var token = localStorage.getItem(STORAGE_TOKEN);
         if (token) data.append('sessionToken', token);
-        Object.keys(values).forEach(function (name) { data.append('fields[' + name + ']', values[name]); });
+        Object.keys(values).forEach(function (name) {
+          var v = values[name];
+          if (Array.isArray(v)) v.forEach(function (one) { data.append('fields[' + name + '][]', one); });
+          else if (typeof v === 'boolean') data.append('fields[' + name + ']', v ? '1' : '0');
+          else data.append('fields[' + name + ']', v);
+        });
         post(urls().submitForm, data).then(function (r) {
           if (!r || !r.success) {
             submit.disabled = false;
             if (r && r.errors) {
               Object.keys(r.errors).forEach(function (name) {
-                showErr(name, r.errors[name] === 'invalid' ? T('formInvalidEmail') : T('formRequired'));
+                var field = (inputs[name] || {}).field || {};
+                showErr(name, r.errors[name] === 'invalid' ? T('formInvalidEmail') : missingMsg(field));
               });
             }
             generalErr.textContent = (r && r.error) || T('formError');
@@ -1459,6 +1630,9 @@
       e.preventDefault();
       var q = input.value.trim();
       if (!q) return;
+      // Composer stays writable while the bot answers, so a premature Enter must
+      // leave the draft in place instead of swallowing it.
+      if (botBusy()) return;
       input.value = '';
       autoGrow();
       ask(q);

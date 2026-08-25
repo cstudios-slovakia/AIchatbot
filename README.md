@@ -2,6 +2,11 @@
 
 An AI-powered chat widget and live-chat console for Craft CMS, trained on your own content.
 
+Extending it from your own plugin or module — custom skills, training sources, extra
+prompt context, reply post-processing — is documented in
+[docs/EXTENDING.md](docs/EXTENDING.md). Working on the plugin itself: see
+[CLAUDE.md](CLAUDE.md).
+
 ## Features
 
 - **AI chat widget** — embeds a chat bubble (floating) or a docked side panel (Agent mode) on your site.
@@ -29,7 +34,8 @@ Then open **AI Assistant → Settings** in the control panel and add your OpenAI
 
 ## Configuration
 
-- **General** — enable/disable, branding, theme, operation mode (Chat bubble vs Agent side panel).
+- **General** — enable/disable, branding, theme, operation mode (Chat bubble vs Agent side panel),
+  chat window size and text size (see [Widget size and text size](#widget-size-and-text-size)).
 - **AI Configuration** — API key, chat & embedding models, system prompt, per-site overrides,
   AI disclaimer (a small note under the input saying answers can be wrong; off by
   default, wording translated per site unless overridden).
@@ -37,6 +43,22 @@ Then open **AI Assistant → Settings** in the control panel and add your OpenAI
 - **Suggestions** — starter prompts (global and per-site).
 - **Live Chat** — human-handoff master switch, canned responses, admin name display.
 - **Filter** / **Logging** — moderation and retention controls.
+
+## Widget size and text size
+
+The floating chat panel's **width** and **height** and the widget's base **text
+size** are set under Settings → General. Every text size inside the widget —
+bubbles, labels, buttons, timestamps — is a ratio of that base, so raising the
+one number scales the whole widget's text rather than leaving a mix of sizes
+behind. The panel never grows past the viewport whatever the numbers say, and in
+Agent mode the docked panel keeps using **Agent Panel Width**.
+
+**Let Visitors Resize** (on by default) adds two entries to the widget's own ⋯
+menu: *Enlarge window*, which grows the panel by about a third, and *Text size*,
+which cycles Normal → Large → Largest. Each visitor's choice is remembered on
+their own device and stacks with the configured size — someone who needs bigger
+text gets it without every other visitor being given a larger window. Turn the
+switch off and the configured size is simply what everyone gets.
 
 ## What gets indexed
 
@@ -156,15 +178,17 @@ Train on a local or staging copy, where a bad crawl costs nothing and the queue
 can run flat out, then carry the finished index to the live site instead of
 paying for every embedding twice.
 
-**Training → Transfer** exports every trained source, its vectors and the
-documents behind them as one gzipped bundle, and imports one back. The same
-thing from the shell, which is the better route for a large index:
+**Training → Transfer** exports every trained source, its vectors, the
+documents behind them and the conversational form definitions as one gzipped
+bundle, and imports one back. The same thing from the shell, which is the better
+route for a large index:
 
 ```bash
 ./craft interactive-ai-assistant/rag/export                       # storage/cs-chatbot/exports/
 ./craft interactive-ai-assistant/rag/export --only=files,urls,qa --no-files
 ./craft interactive-ai-assistant/rag/import bundle.ndjson.gz --dry-run
 ./craft interactive-ai-assistant/rag/import bundle.ndjson.gz
+./craft interactive-ai-assistant/rag/import bundle.ndjson.gz --only=forms --overwrite-forms
 ```
 
 This is not a table dump, and the difference matters. Every trained row points
@@ -186,10 +210,20 @@ different UID, and is listed as skipped so you can train it there.
 - `--site-map=sk=en` maps a bundle's site handles onto differently-named ones.
 - Plugin-contributed sources are matched by the id their own plugin gave them;
   re-train those on the target unless that content came from the same database.
+- **Conversational forms travel as definitions, not as submissions.** A form the
+  target already defines under the same name is kept as it is — its delivery
+  config is the live site's — unless you import with `--overwrite-forms`. A form
+  that is new to the target lands at **admins-only** however it was set where it
+  came from, so it can be tried against this site's own webhook or mailbox
+  before visitors can reach it; turn it on under **Skills**. Webhook header
+  values written literally rather than as `$ENV_VAR` are in the bundle in the
+  clear, so treat one that carries a token as a secret. Where
+  `allowAdminChanges` is off, the import reports the forms it could not write
+  rather than failing — deploy those through project config.
 
-Plugin settings — the system prompt, the model, the thresholds — travel with
-Craft's project config already, so they are not part of the bundle. Chat logs,
-leads and bans are deliberately left behind too.
+The rest of the plugin settings — the system prompt, the model, the thresholds —
+travel with Craft's project config already, so they are not part of the bundle.
+Chat logs, leads, form submissions and bans are deliberately left behind too.
 
 ## Multiple sites
 
@@ -207,6 +241,22 @@ the content is stored in.
 With **agent mode** enabled (Settings → AI Configuration), the assistant can call
 registered *skills* — server-side tools that fetch live data or perform actions —
 during a conversation, in addition to answering from trained content.
+
+A form's fields cover the usual types — text, long text, email, phone, number,
+**Choice** (one of a list) and **Predefined** (never asked, always sent as
+configured) — plus two multi-answer ones:
+
+- **Checkboxes** — a group the visitor ticks any number of, from the same
+  comma-separated options a Choice uses (*Extra services: rubble removal,
+  dismantling, …*). Stored and delivered as a list; email and Contact Form
+  delivery join it with commas, the webhook gets a JSON array.
+- **Consent checkbox** — a single box for GDPR or terms. Put the link straight
+  in the label with `[text](url)`, e.g.
+  `I agree to the [privacy policy](/privacy-policy)`; only `http(s)://`,
+  root-relative and `mailto:` targets are linked, everything else stays text.
+  Marked required, the form cannot be submitted unticked, and in a
+  conversational form the model has to get an explicit yes — it is stored as
+  Yes/No.
 
 Form labels and choice options are typed in the CP, so they can't ship in the
 plugin's translation files. They are translated through Craft's `site` category:
@@ -267,3 +317,6 @@ Event::on(
 
 The model decides when to call a skill, the result is fed back, and it may chain
 several calls (bounded by **Max tool iterations**) before answering.
+
+Full reference, including training sources and the prompt/reply events:
+[docs/EXTENDING.md](docs/EXTENDING.md).

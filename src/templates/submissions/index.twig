@@ -51,7 +51,8 @@
             <td class="light">
               {%- set parts = [] -%}
               {%- for k, v in r.data -%}
-                {%- set parts = parts|merge([k ~ ': ' ~ (v is iterable ? v|join(' ') : v)]) -%}
+                {%- set shown = v is iterable ? v|join(', ') : (v is same as(true) ? 'Yes' : (v is same as(false) ? 'No' : v)) -%}
+                {%- set parts = parts|merge([k ~ ': ' ~ shown]) -%}
               {%- endfor -%}
               {{ parts|join(' · ')|slice(0, 120) }}
             </td>

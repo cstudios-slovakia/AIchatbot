@@ -6,6 +6,10 @@ use Craft;
 use craft\db\Query;
 use craft\helpers\App;
 use craft\helpers\Db;
+use craft\elements\Entry;
+use craft\fields\BaseOptionsField;
+use craft\models\Site;
+use cstudiossro\craftcschatbot\helpers\CraftCompat;
 use cstudiossro\craftcschatbot\jobs\SendFormJob;
 use cstudiossro\craftcschatbot\models\Settings;
 use cstudiossro\craftcschatbot\Plugin;
@@ -21,6 +25,13 @@ use yii\base\Component;
  */
 class Forms extends Component
 {
+    /**
+     * Hard cap on how many choices a dynamic source may contribute. Every option
+     * ends up in the tool schema the model is sent, so an unbounded section would
+     * quietly eat the context window.
+     */
+    private const MAX_DYNAMIC_OPTIONS = 200;
+
     /**
      * The session the current chat turn belongs to, so submissions made during
      * the tool-calling loop can be linked back. Set by the Chat service before
@@ -85,7 +96,8 @@ class Forms extends Component
             if ((string)($field['type'] ?? '') === 'hidden') {
                 continue;
             }
-            $options = is_array($field['options'] ?? null) ? array_values(array_map('strval', $field['options'])) : [];
+            $choices = $this->fieldOptions($field);
+            $options = array_column($choices, 'value');
             $fields[] = [
                 'name' => (string)($field['name'] ?? ''),
                 'label' => $this->tSite((string)($field['label'] ?? ''), $language),
@@ -94,7 +106,7 @@ class Forms extends Component
                 // Values stay as configured — they are what gets stored and
                 // delivered. Only the text beside them is translated.
                 'options' => $options,
-                'optionLabels' => array_map(fn(string $o) => $this->tSite($o, $language), $options),
+                'optionLabels' => array_map(fn(array $c) => $this->tSite($c['label'], $language), $choices),
             ];
         }
         return [
@@ -115,6 +127,143 @@ class Forms extends Component
     {
         $text = trim($text);
         return $text === '' ? '' : Craft::t('site', $text, [], $language);
+    }
+
+    /**
+     * The choices a select/checkboxes field offers, resolved from whatever it
+     * draws them from: the typed list, the entries of a section, or a Craft
+     * dropdown-style field's own options.
+     *
+     * Everything downstream — the tool schema the model sees, the inline form the
+     * widget renders and the validation of what comes back — goes through here,
+     * so the three can never disagree about what a valid answer is.
+     *
+     * Dynamic sources are read per site (entry titles are site-specific: a Slovak
+     * visitor must not be offered English titles) and cached briefly, because a
+     * form is resolved several times per chat turn.
+     *
+     * @param array<string, mixed> $field
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function fieldOptions(array $field, ?Site $site = null): array
+    {
+        switch ((string)($field['optionsSource'] ?? 'manual')) {
+            case 'section':
+                return $this->sectionOptions(trim((string)($field['optionsSection'] ?? '')), $site ?? $this->optionsSite());
+            case 'field':
+                return $this->craftFieldOptions(trim((string)($field['optionsField'] ?? '')));
+            default:
+                $typed = is_array($field['options'] ?? null) ? $field['options'] : [];
+                $out = [];
+                foreach ($typed as $one) {
+                    $one = trim(is_scalar($one) ? (string)$one : '');
+                    if ($one !== '') {
+                        $out[] = ['value' => $one, 'label' => $one];
+                    }
+                }
+                return $out;
+        }
+    }
+
+    /**
+     * Live entries of a section, as value+label pairs. The title is both: it is
+     * what gets stored and delivered, so a submission stays readable in an email
+     * long after the entry it named was renamed or deleted.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function sectionOptions(string $sectionUid, ?Site $site): array
+    {
+        if ($sectionUid === '') {
+            return [];
+        }
+        $section = CraftCompat::getSectionByUid($sectionUid);
+        if (!$section) {
+            return [];
+        }
+        $siteId = $site?->id;
+        $key = "interactive-ai-assistant:formOptions:section:{$sectionUid}:" . ($siteId ?? 0);
+        $titles = Craft::$app->cache->getOrSet($key, function () use ($section, $siteId) {
+            $query = Entry::find()
+                ->sectionId($section->id)
+                ->limit(self::MAX_DYNAMIC_OPTIONS);
+            // A structure is ordered by the editor on purpose; anything else has
+            // no meaningful order of its own, so offer it alphabetically.
+            if ($section->type !== 'structure') {
+                $query->orderBy(['title' => SORT_ASC]);
+            }
+            if ($siteId !== null) {
+                $query->siteId($siteId);
+            }
+            $titles = [];
+            foreach ($query->all() as $entry) {
+                $title = trim((string)$entry->title);
+                if ($title !== '' && !in_array($title, $titles, true)) {
+                    $titles[] = $title;
+                }
+            }
+            return $titles;
+        }, 300);
+
+        $out = [];
+        foreach ((array)$titles as $title) {
+            if (is_string($title) && $title !== '') {
+                $out[] = ['value' => $title, 'label' => $title];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * The options configured on a Craft dropdown / radio / checkboxes / multi-select
+     * field. Values stay canonical, labels are what the visitor reads — the same
+     * split the CP uses, so a form and an entry record the same value.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function craftFieldOptions(string $handle): array
+    {
+        if ($handle === '') {
+            return [];
+        }
+        $field = Craft::$app->fields->getFieldByHandle($handle);
+        if (!$field instanceof BaseOptionsField) {
+            return [];
+        }
+        $out = [];
+        foreach ($field->options as $option) {
+            // Optgroup rows carry no value and are layout, not a choice.
+            if (!is_array($option) || !isset($option['value'])) {
+                continue;
+            }
+            $value = trim((string)$option['value']);
+            if ($value === '') {
+                continue;
+            }
+            $label = trim((string)($option['label'] ?? ''));
+            $out[] = ['value' => $value, 'label' => $label !== '' ? $label : $value];
+            if (count($out) >= self::MAX_DYNAMIC_OPTIONS) {
+                break;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Which site's content the options should come from: the site the visitor is
+     * on when there is a session, else whatever site this request resolved to.
+     */
+    private function optionsSite(): ?Site
+    {
+        $site = Settings::resolveSiteFromUrl($this->currentSession?->pageUrl);
+        if ($site) {
+            return $site;
+        }
+        try {
+            return Craft::$app->sites->getCurrentSite();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -227,8 +376,59 @@ class Forms extends Component
             }
             $required = !empty($field['required']);
             $raw = $args[$name] ?? null;
-            $present = $raw !== null && $raw !== '';
+            $type = (string)($field['type'] ?? 'text');
 
+            // Only a checkbox group takes a list; a list anywhere else is a
+            // malformed post, not an answer.
+            if (is_array($raw) && $type !== 'checkboxes') {
+                $invalid[] = $name;
+                continue;
+            }
+
+            // Checkbox group: a list of chosen options. The widget posts an
+            // array, the model may hand over one comma-separated string.
+            if ($type === 'checkboxes') {
+                $options = array_column($this->fieldOptions($field), 'value');
+                $chosen = [];
+                $unknown = false;
+                foreach (is_array($raw) ? $raw : explode(',', (string)$raw) as $one) {
+                    $one = trim(is_scalar($one) ? (string)$one : '');
+                    if ($one === '' || in_array($one, $chosen, true)) {
+                        continue;
+                    }
+                    if ($options && !in_array($one, $options, true)) {
+                        $unknown = true;
+                        continue;
+                    }
+                    $chosen[] = $one;
+                }
+                if ($unknown) {
+                    $invalid[] = $name;
+                } elseif (!$chosen) {
+                    if ($required) {
+                        $missing[] = $name;
+                    }
+                } else {
+                    $values[$name] = $chosen;
+                }
+                continue;
+            }
+
+            // Consent: a single box the visitor ticks (or an explicit yes from
+            // the model). Required means it has to actually be given.
+            if ($type === 'consent') {
+                $granted = is_bool($raw)
+                    ? $raw
+                    : in_array(strtolower(trim((string)$raw)), ['1', 'true', 'yes', 'on'], true);
+                if ($required && !$granted) {
+                    $missing[] = $name;
+                    continue;
+                }
+                $values[$name] = $granted;
+                continue;
+            }
+
+            $present = $raw !== null && $raw !== '';
             if (!$present) {
                 if ($required) {
                     $missing[] = $name;
@@ -236,7 +436,6 @@ class Forms extends Component
                 continue;
             }
 
-            $type = (string)($field['type'] ?? 'text');
             if ($type === 'email' && !filter_var((string)$raw, FILTER_VALIDATE_EMAIL)) {
                 $invalid[] = $name;
                 continue;
@@ -249,8 +448,8 @@ class Forms extends Component
                 $raw = $raw + 0;
             }
             if ($type === 'select') {
-                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
-                if ($options && !in_array((string)$raw, array_map('strval', $options), true)) {
+                $options = array_column($this->fieldOptions($field), 'value');
+                if ($options && !in_array((string)$raw, $options, true)) {
                     $invalid[] = $name;
                     continue;
                 }
@@ -370,7 +569,7 @@ class Forms extends Component
         }
         $lines = ["New \"{$label}\" submission from the chatbot:", ''];
         foreach ($payload as $key => $value) {
-            $lines[] = ($labels[$key] ?? $key) . ': ' . (is_scalar($value) ? (string)$value : json_encode($value));
+            $lines[] = ($labels[$key] ?? $key) . ': ' . $this->formatValue($value);
         }
         $lines[] = '';
         $lines[] = 'Submission #' . (int)$rec->id . ($rec->sessionId ? ' · session #' . (int)$rec->sessionId : '');
@@ -431,7 +630,7 @@ class Forms extends Component
             if ($key === $emailField || $key === $nameField) {
                 continue;
             }
-            $message[$labels[$key] ?? $key] = is_array($value) ? implode(', ', $value) : (string)$value;
+            $message[$labels[$key] ?? $key] = $this->formatValue($value);
         }
 
         $submission = new \craft\contactform\models\Submission();
@@ -444,6 +643,22 @@ class Forms extends Component
             $errs = $submission->getFirstErrors();
             throw new \RuntimeException('contact-form rejected the submission' . ($errs ? ': ' . implode('; ', $errs) : ''));
         }
+    }
+
+    /**
+     * Render one stored answer for the human-readable channels (email, Contact
+     * Form): checkbox groups come back as a list, consent as a boolean. The
+     * webhook keeps the raw JSON types instead.
+     */
+    private function formatValue(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+        if (is_array($value)) {
+            return implode(', ', array_map(fn($v) => $this->formatValue($v), $value));
+        }
+        return is_scalar($value) ? (string)$value : (string)json_encode($value);
     }
 
     private function mark(FormSubmissionRecord $rec, string $status, string $log): void

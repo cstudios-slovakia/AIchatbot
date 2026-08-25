@@ -115,6 +115,10 @@ class Embeddings extends Component
             $transaction?->rollBack();
             throw $e;
         }
+        // The corpus BM25 scores against has just changed. Dropped after the
+        // commit rather than before it, so a query landing mid-swap cannot cache
+        // statistics for a corpus that never existed.
+        VectorSearch::invalidateCorpusStats();
         return count($rows);
     }
 
@@ -126,6 +130,7 @@ class Embeddings extends Component
                 'sourceId' => $sourceId,
             ])
             ->execute();
+        VectorSearch::invalidateCorpusStats();
     }
 
     /**

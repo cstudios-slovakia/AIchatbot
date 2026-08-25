@@ -22,6 +22,7 @@
   urls:       'Crawled URLs',
   qa:         'Q&A pairs',
   sources:    'Plugin sources',
+  forms:      'Conversational forms',
 } %}
 
 {% block content %}
@@ -62,10 +63,16 @@
         Include the uploaded document files
       </label>
 
+      <p class="light" style="font-size:12px;margin:-4px 0 10px;">
+        Form definitions travel with their delivery config. A webhook header
+        typed in literally rather than as <code>$ENV_VAR</code> is in the bundle
+        in the clear — keep it out of version control.
+      </p>
+
       <button type="submit" class="btn submit">Download bundle</button>
       <p class="light" style="font-size:12px;margin-top:8px;">
         A gzipped <code>.ndjson.gz</code> file: every trained source, its vectors,
-        and the documents behind them.
+        the documents behind them, and the form definitions.
       </p>
     </form>
 
@@ -77,7 +84,8 @@
       <p class="light" style="font-size:12px;margin:-4px 0 10px;">
         Content is matched by element UID and site handle, never by the ids it
         had where it was trained. Anything this site does not have is reported,
-        not guessed at.
+        not guessed at. Forms this site already defines are kept as they are,
+        and an imported form waits at admins-only until you turn it on.
       </p>
 
       <input type="file" name="bundle" accept=".gz,application/gzip" required>
@@ -101,8 +109,11 @@
       <label style="display:block;margin-bottom:4px;">
         <input type="checkbox" name="reembed" value="1"> Re-embed here instead of reusing the bundle's vectors
       </label>
-      <label style="display:block;margin-bottom:10px;">
+      <label style="display:block;margin-bottom:4px;">
         <input type="checkbox" name="overwriteFiles" value="1"> Replace documents that already exist here
+      </label>
+      <label style="display:block;margin-bottom:10px;">
+        <input type="checkbox" name="overwriteForms" value="1"> Replace forms this site already defines under the same name
       </label>
 
       {% if sites|length > 1 %}

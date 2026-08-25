@@ -79,6 +79,16 @@ return [
     'Could not submit the form. Please try again.' => 'Nem sikerült beküldeni az űrlapot. Próbálja újra.',
     'Choose…' => 'Válasszon…',
 
+    // Widget — size controls
+    'Enlarge window' => 'Ablak nagyítása',
+    'Shrink window' => 'Ablak kicsinyítése',
+    'Text size' => 'Betűméret',
+    'Normal' => 'Normál',
+    'Large' => 'Nagy',
+    'Largest' => 'Legnagyobb',
+    'Please choose at least one option.' => 'Válasszon legalább egy lehetőséget.',
+    'Please tick this box to continue.' => 'A folytatáshoz pipálja ki ezt a jelölőnégyzetet.',
+
     // Queue jobs
     'Crawling URL #{id}' => 'URL feldolgozása #{id}',
     'Importing sitemap' => 'Webhelytérkép importálása',

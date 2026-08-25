@@ -47,8 +47,9 @@ class RagController extends Controller
 
     /**
      * Comma-separated source kinds to act on: entries, categories, globals,
-     * files, urls, sources, qa. Omit for everything. Lets you re-embed local
-     * content without re-crawling remote URLs, or move only the Q&A pairs.
+     * files, urls, sources, qa, and — for export/import — forms. Omit for
+     * everything. Lets you re-embed local content without re-crawling remote
+     * URLs, or move only the Q&A pairs.
      */
     public ?string $only = null;
 
@@ -80,6 +81,14 @@ class RagController extends Controller
     /** Replace uploaded documents that already exist on this site. */
     public bool $overwriteFiles = false;
 
+    /**
+     * Replace conversational forms this site already defines under the same
+     * name. Off by default: the delivery config here — recipient, endpoint,
+     * token — is this site's, and a definition from a copy would send real
+     * submissions somewhere else.
+     */
+    public bool $overwriteForms = false;
+
     public function options($actionID): array
     {
         $options = parent::options($actionID);
@@ -104,6 +113,7 @@ class RagController extends Controller
             $options[] = 'dryRun';
             $options[] = 'siteMap';
             $options[] = 'overwriteFiles';
+            $options[] = 'overwriteForms';
         }
         return $options;
     }
@@ -130,6 +140,18 @@ class RagController extends Controller
             !empty($result['offerHuman']) ? 'yes' : 'no',
             (string)($result['sessionToken'] ?? '?'),
         ));
+        // Where the seconds went. A turn is a chain of blocking steps and the
+        // slow one is rarely the one you would guess.
+        $timings = $result['timings'] ?? [];
+        if (is_array($timings) && $timings) {
+            $parts = [];
+            foreach ($timings as $label => $value) {
+                $parts[] = str_ends_with((string)$label, 'Calls')
+                    ? $label . ' ' . $value
+                    : $label . ' ' . $value . 'ms';
+            }
+            $this->stdout(implode(' · ', $parts) . "\n");
+        }
         return ExitCode::OK;
     }
 
@@ -280,12 +302,20 @@ class RagController extends Controller
     public function actionRetrieve(string $query, int $limit = 8): int
     {
         $plugin = Plugin::getInstance();
+        $embedStart = microtime(true);
         $vector = $plugin->openAi->embed([$query])[0] ?? [];
         if (!$vector) {
             $this->stderr("Could not embed the query.\n");
             return ExitCode::UNAVAILABLE;
         }
+        $embedMs = (microtime(true) - $embedStart) * 1000;
+        // Timed separately from the embedding: the search is the half that grows
+        // with how much the site has trained, and the half a slow answer is
+        // usually blamed on last.
+        $searchStart = microtime(true);
         $hits = $plugin->vectorSearch->topK($vector, $limit, 0.0, $query);
+        $searchMs = (microtime(true) - $searchStart) * 1000;
+        $this->stdout(sprintf("embed %.0fms · search %.0fms\n", $embedMs, $searchMs));
         if (!$hits) {
             $this->stdout("No chunks matched — is anything trained?\n");
             return ExitCode::OK;
@@ -307,8 +337,8 @@ class RagController extends Controller
     }
 
     /**
-     * Write every trained source, its chunks and its uploaded documents to a
-     * portable bundle.
+     * Write every trained source, its chunks, its uploaded documents and the
+     * conversational form definitions to a portable bundle.
      *
      * Train on a local copy where a bad crawl costs nothing, then carry the
      * result to the live site instead of paying for every embedding twice.
@@ -357,6 +387,7 @@ class RagController extends Controller
      *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --dry-run
      *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --reembed
      *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --site-map=sk=en,hu=de
+     *        php craft interactive-ai-assistant/rag/import bundle.ndjson.gz --only=forms --overwrite-forms
      */
     public function actionImport(string $path): int
     {
@@ -366,6 +397,7 @@ class RagController extends Controller
             'dryRun' => $this->dryRun,
             'siteMap' => $this->siteMapping(),
             'overwriteFiles' => $this->overwriteFiles,
+            'overwriteForms' => $this->overwriteForms,
         ]);
 
         $header = $result['header'];

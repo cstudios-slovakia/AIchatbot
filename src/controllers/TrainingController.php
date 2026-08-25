@@ -756,6 +756,7 @@ class TrainingController extends Controller
             'urls' => (int)TrainingUrlRecord::find()->count(),
             'qa' => (int)TrainingQaRecord::find()->count(),
             'sources' => (int)TrainingSourceRecord::find()->count(),
+            'forms' => count($settings->formDefinitions()),
         ];
         return $this->renderTemplate('interactive-ai-assistant/training/transfer', [
             'counts' => $counts,
@@ -829,6 +830,7 @@ class TrainingController extends Controller
                 'reembed' => (bool)$request->getBodyParam('reembed'),
                 'dryRun' => (bool)$request->getBodyParam('dryRun'),
                 'overwriteFiles' => (bool)$request->getBodyParam('overwriteFiles'),
+                'overwriteForms' => (bool)$request->getBodyParam('overwriteForms'),
                 'siteMap' => $this->postedSiteMap(),
             ]);
         } catch (\Throwable $e) {

@@ -168,10 +168,18 @@ class Chat extends Component
         $settings = Plugin::getInstance()->getSettings();
         $plugin = Plugin::getInstance();
         $start = microtime(true);
+        // Where the turn's seconds went. A turn is a chain of blocking calls —
+        // rewrite, embed, search, rerank, then one model call per tool round —
+        // and a single total tells you nothing about which of them was slow.
+        $timings = [];
 
         // Conversation so far (excludes the user message we just logged). Reused
         // for both building the retrieval query and generation further down.
-        $history = $this->recentHistory($session->id, max(2, (int)$settings->historyMessages));
+        $history = $this->timed(
+            $timings,
+            'history',
+            fn() => $this->recentHistory($session->id, max(2, (int)$settings->historyMessages)),
+        );
 
         // Resolve the site up front so retrieval can filter to it (a Slovak-site
         // query shouldn't pull English chunks). Reused for the system prompt below.
@@ -181,7 +189,11 @@ class Chat extends Component
 
         // Turn the (possibly elliptical) latest message into a standalone
         // retrieval query and decide whether this turn needs retrieval at all.
-        [$retrievalQuery, $needsRetrieval, $outOfScope] = $this->buildRetrievalQuery($history, $question);
+        [$retrievalQuery, $needsRetrieval, $outOfScope] = $this->timed(
+            $timings,
+            'rewrite',
+            fn() => $this->buildRetrievalQuery($history, $question),
+        );
         $guarded = !$needsRetrieval;
 
         $hits = [];
@@ -189,14 +201,18 @@ class Chat extends Component
         $confidence = 0.0;
         if (!$guarded) {
             // embed the standalone query, not the raw follow-up
-            $qVecArr = $plugin->openAi->embed([$retrievalQuery]);
+            $qVecArr = $this->timed($timings, 'embed', fn() => $plugin->openAi->embed([$retrievalQuery]));
             $qVec = $qVecArr[0] ?? [];
 
             // Retrieve a wider candidate pool, then rerank down to the context size.
             $pool = max((int)$settings->retrievalCandidatePool, (int)$settings->maxContextChunks);
             $needVectors = $settings->rerankMode === 'mmr';
-            $candidates = $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors, $siteId);
-            $hits = $this->rerank($candidates, $retrievalQuery);
+            $candidates = $this->timed(
+                $timings,
+                'search',
+                fn() => $plugin->vectorSearch->topK($qVec, $pool, 0.0, $retrievalQuery, $needVectors, $siteId),
+            );
+            $hits = $this->timed($timings, 'rerank', fn() => $this->rerank($candidates, $retrievalQuery));
 
             // Rows come back in fused rank order, so the best cosine isn't
             // necessarily first — take the maximum for both the confidence
@@ -324,12 +340,16 @@ class Chat extends Component
         }
         $messages[] = ['role' => 'user', 'content' => $question];
 
-        $tools = !empty($enabledCaps) ? $plugin->capabilities->toolSchemas($enabledCaps) : [];
         // Give form capabilities the session they were collected in, so a
-        // submission made during the tool loop links back to this chat.
+        // submission made during the tool loop links back to this chat — and so
+        // fields drawing their choices from site content resolve on the
+        // visitor's site. Both need the session before the schemas are built.
         $plugin->forms->setCurrentSession($session);
-        $reply = $this->complete($messages, $tools, $isCpUser, $onDelta);
+        $tools = !empty($enabledCaps) ? $plugin->capabilities->toolSchemas($enabledCaps) : [];
+        $reply = $this->complete($messages, $tools, $isCpUser, $onDelta, $timings);
         $responseTime = round(microtime(true) - $start, 3);
+        $timings['total'] = (int)round($responseTime * 1000);
+        $this->logTimings($timings, $retrievalQuery, $guarded);
 
         // Sentinel token from the model = language-agnostic "offer human" signal. Strip before showing.
         $hasHandoffToken = str_contains($reply, '[[HANDOFF_OFFER]]');
@@ -412,6 +432,9 @@ class Chat extends Component
             'shortId' => sprintf('%05d-%s', (int)$session->id, strtoupper(substr((string)$session->sessionToken, 0, 4))),
             'offerHuman' => $offerHuman,
             'form' => $formToShow,
+            // Internal diagnostics. ChatController strips this before it reaches
+            // a visitor; the console commands print it.
+            'timings' => $timings,
         ];
     }
 
@@ -634,23 +657,35 @@ class Chat extends Component
      * tool calls, we execute them via the Capabilities registry, feed the
      * results back, and repeat until it answers or the iteration cap is hit.
      *
+     * Every model call and every tool run is timed into $timings, because a
+     * turn that asks for a tool costs two full completions over the same long
+     * prompt and that is invisible in the turn's total.
+     *
      * @param array<int, array<string, mixed>> $messages
      * @param array<int, array<string, mixed>> $tools
+     * @param array<string, int> $timings
      */
-    private function complete(array $messages, array $tools, bool $isCpUser = false, ?callable $onDelta = null): string
-    {
+    private function complete(
+        array $messages,
+        array $tools,
+        bool $isCpUser = false,
+        ?callable $onDelta = null,
+        array &$timings = [],
+    ): string {
         $plugin = Plugin::getInstance();
         if (empty($tools)) {
-            return $onDelta === null
+            $this->bump($timings, 'modelCalls');
+            return $this->timed($timings, 'model', fn() => $onDelta === null
                 ? $plugin->openAi->chat($messages)
-                : (string)($plugin->openAi->chatStream($messages, [], $onDelta)['content'] ?? '');
+                : (string)($plugin->openAi->chatStream($messages, [], $onDelta)['content'] ?? ''));
         }
         $caps = $plugin->capabilities;
         $maxIter = max(1, (int)$plugin->getSettings()->maxToolIterations);
         for ($i = 0; $i < $maxIter; $i++) {
-            $message = $onDelta === null
+            $this->bump($timings, 'modelCalls');
+            $message = $this->timed($timings, 'model', fn() => $onDelta === null
                 ? $plugin->openAi->chatRaw($messages, ['tools' => $tools])
-                : $plugin->openAi->chatStream($messages, ['tools' => $tools], $onDelta);
+                : $plugin->openAi->chatStream($messages, ['tools' => $tools], $onDelta));
             $calls = $message['tool_calls'] ?? [];
             if (empty($calls)) {
                 return (string)($message['content'] ?? '');
@@ -661,7 +696,12 @@ class Chat extends Component
                 $fn = (string)($call['function']['name'] ?? '');
                 $argsRaw = $call['function']['arguments'] ?? '{}';
                 $args = json_decode(is_string($argsRaw) ? $argsRaw : '{}', true);
-                $result = $caps->run($fn, is_array($args) ? $args : [], $isCpUser);
+                $this->bump($timings, 'toolCalls');
+                $result = $this->timed(
+                    $timings,
+                    'tools',
+                    fn() => $caps->run($fn, is_array($args) ? $args : [], $isCpUser),
+                );
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => (string)($call['id'] ?? ''),
@@ -670,10 +710,65 @@ class Chat extends Component
             }
         }
         // Hit the iteration cap with calls still pending — force a final answer.
-        $message = $onDelta === null
+        $this->bump($timings, 'modelCalls');
+        $message = $this->timed($timings, 'model', fn() => $onDelta === null
             ? $plugin->openAi->chatRaw($messages)
-            : $plugin->openAi->chatStream($messages, [], $onDelta);
+            : $plugin->openAi->chatStream($messages, [], $onDelta));
         return (string)($message['content'] ?? '');
+    }
+
+    /**
+     * Run $fn, add how long it took to $timings under $label, hand back what it
+     * returned. Accumulates, so a label used more than once in a turn (the model
+     * call of each tool round) reports the total spent there.
+     *
+     * @template T
+     * @param array<string, int> $timings
+     * @param callable():T $fn
+     * @return T
+     */
+    private function timed(array &$timings, string $label, callable $fn)
+    {
+        $started = microtime(true);
+        try {
+            return $fn();
+        } finally {
+            $timings[$label] = ($timings[$label] ?? 0) + (int)round((microtime(true) - $started) * 1000);
+        }
+    }
+
+    /**
+     * Bump a counter kept alongside the durations — how many round trips a
+     * duration was spread over, which is the number that explains it.
+     *
+     * @param array<string, int> $timings
+     */
+    private function bump(array &$timings, string $label): void
+    {
+        $timings[$label] = ($timings[$label] ?? 0) + 1;
+    }
+
+    /**
+     * Write the turn's breakdown to the Craft log. One line per answer, at info
+     * level: enough to see which stage owns a slow turn without turning anything
+     * on first, and the reason a turn is slow is usually a stage that is only
+     * slow sometimes.
+     *
+     * @param array<string, int> $timings
+     */
+    private function logTimings(array $timings, string $retrievalQuery, bool $guarded): void
+    {
+        $parts = [];
+        foreach ($timings as $label => $value) {
+            $parts[] = str_ends_with($label, 'Calls')
+                ? $label . ' ' . $value
+                : $label . ' ' . $value . 'ms';
+        }
+        Craft::info(sprintf(
+            'chat turn: %s | query: %s',
+            implode(' · ', $parts),
+            $guarded ? '(guarded, no retrieval)' : mb_substr($retrievalQuery, 0, 120),
+        ), __METHOD__);
     }
 
     /**

@@ -6,6 +6,7 @@ use Craft;
 use cstudiossro\craftcschatbot\helpers\Vector;
 use cstudiossro\craftcschatbot\Plugin;
 use yii\base\Component;
+use yii\caching\TagDependency;
 
 class VectorSearch extends Component
 {
@@ -33,6 +34,21 @@ class VectorSearch extends Component
      * endings of Slavic languages.
      */
     private const STEM_LENGTH = 5;
+
+    /**
+     * How long BM25 corpus statistics stay cached.
+     *
+     * They describe the whole trained corpus — how many chunks there are, how
+     * long they are on average, and how many contain each term — so they only
+     * move when training does. Recomputing them on every query meant tokenizing
+     * every chunk of the site to answer one question. The TTL is a backstop for
+     * a write that forgot to invalidate; ranking weights an hour out of date
+     * shift nothing a visitor would notice.
+     */
+    private const STATS_CACHE_DURATION = 3600;
+
+    /** Cache tag dropped whenever the chunk table changes. */
+    public const CORPUS_CACHE_TAG = 'chatbot-chunks';
 
     /**
      * Retrieve the top-$k chunks for a query.
@@ -72,8 +88,12 @@ class VectorSearch extends Component
         $hybrid = $queryText !== null && trim($queryText) !== '' && $settings->hybridEnabled;
         $queryTerms = $hybrid ? array_values(array_unique($this->stemKeys($this->tokenize($queryText)))) : [];
         $poolSize = max($k, self::MIN_POOL, (int)$settings->retrievalCandidatePool);
+        // Resolved once, here: the scan filters on it and the corpus statistics
+        // are cached per filtered set, so the two have to agree on what "the
+        // corpus" means for this query.
+        $scopeSiteId = ($siteId !== null && $settings->siteFilterEnabled) ? $siteId : null;
 
-        $scan = $this->scan($query, $queryNorm, $minScore, $queryTerms, $poolSize, $includeVectors, $siteId);
+        $scan = $this->scan($query, $queryNorm, $minScore, $queryTerms, $poolSize, $includeVectors, $scopeSiteId);
         $byCosine = $scan['cosine'];
         if (empty($byCosine)) {
             return [];
@@ -84,25 +104,24 @@ class VectorSearch extends Component
             return array_slice(array_values($byCosine), 0, $k);
         }
 
-        return $this->fuse($byCosine, $scan, $k);
+        return $this->fuse($byCosine, $scan['lexical'], $this->corpusStats($scopeSiteId), $k);
     }
 
     /**
      * One streaming pass over the chunk table.
      *
      * Returns two bounded candidate pools — the best by cosine, and the best by
-     * lexical overlap — plus the corpus statistics BM25 needs. Keeping a lexical
-     * pool of its own is what lets an exact-term match survive that the
-     * embedding ranked poorly, which is the entire reason for hybrid search.
+     * lexical overlap. Keeping a lexical pool of its own is what lets an
+     * exact-term match survive that the embedding ranked poorly, which is the
+     * entire reason for hybrid search. The corpus statistics BM25 also needs are
+     * not gathered here — see {@see self::corpusStats()}.
      *
      * @param float[] $query
      * @param string[] $queryTerms
+     * @param int|null $siteId already-resolved site filter (null = whole corpus)
      * @return array{
      *   cosine: array<int, array<string, mixed>>,
-     *   lexical: array<int, array<string, mixed>>,
-     *   df: array<string, int>,
-     *   docs: int,
-     *   totalLength: int
+     *   lexical: array<int, array<string, mixed>>
      * }
      */
     private function scan(
@@ -114,14 +133,10 @@ class VectorSearch extends Component
         bool $includeVectors,
         ?int $siteId,
     ): array {
-        $siteFilter = $siteId !== null && Plugin::getInstance()->getSettings()->siteFilterEnabled;
         $termLookup = array_flip($queryTerms);
 
         $cosine = [];
         $lexical = [];
-        $df = [];
-        $docs = 0;
-        $totalLength = 0;
         $lastId = 0;
 
         while (true) {
@@ -136,7 +151,7 @@ class VectorSearch extends Component
                 ])
                 ->orderBy(['id' => SORT_ASC])
                 ->limit(self::SCAN_BATCH);
-            if ($siteFilter) {
+            if ($siteId !== null) {
                 // Match the requested site, plus site-agnostic chunks (siteId IS NULL).
                 $rowsQuery->andWhere(['or', ['siteId' => $siteId], ['siteId' => null]]);
             }
@@ -155,27 +170,33 @@ class VectorSearch extends Component
                 $score = $this->cosine($query, $queryNorm, $vector);
 
                 if ($queryTerms) {
-                    $tokens = $this->stemKeys($this->tokenize($content));
-                    $docs++;
-                    $totalLength += count($tokens);
-                    $counts = array_intersect_key(array_count_values($tokens), $termLookup);
-                    foreach (array_keys($counts) as $term) {
-                        $df[$term] = ($df[$term] ?? 0) + 1;
-                    }
-                    if ($counts) {
-                        $this->offer($lexical, $poolSize, [
-                            'id' => (int)$row['id'],
-                            'sourceType' => (string)$row['sourceType'],
-                            'sourceId' => (int)$row['sourceId'],
-                            'content' => $content,
-                            'score' => $score,
-                            'termFrequencies' => $counts,
-                            'length' => max(1, count($tokens)),
-                            // Pruning proxy: idf is unknown mid-scan, so rank by
-                            // how many query terms matched and how densely. Only
-                            // decides which weak lexical candidates get dropped.
-                            '_rank' => count($counts) + (array_sum($counts) / max(1, count($tokens))),
-                        ], '_rank');
+                    $folded = self::foldDiacritics(mb_strtolower($content, 'UTF-8'));
+                    // Prefilter before tokenizing. Splitting a chunk into words,
+                    // stemming them and counting them is the most expensive thing
+                    // this loop does, and on any real query the overwhelming
+                    // majority of chunks share no term with it at all. A plain
+                    // substring test over-approximates the stem match (the stem
+                    // may sit mid-word), so it costs the occasional wasted
+                    // tokenize and can never drop a genuine candidate.
+                    if ($this->mayContainTerm($folded, $queryTerms)) {
+                        $tokens = $this->stemKeys($this->tokenizeFolded($folded));
+                        $counts = array_intersect_key(array_count_values($tokens), $termLookup);
+                        if ($counts) {
+                            $this->offer($lexical, $poolSize, [
+                                'id' => (int)$row['id'],
+                                'sourceType' => (string)$row['sourceType'],
+                                'sourceId' => (int)$row['sourceId'],
+                                'content' => $content,
+                                'score' => $score,
+                                'termFrequencies' => $counts,
+                                'length' => max(1, count($tokens)),
+                                // Pruning proxy: idf is unknown mid-scan, so rank
+                                // by how many query terms matched and how densely.
+                                // Only decides which weak lexical candidates get
+                                // dropped.
+                                '_rank' => count($counts) + (array_sum($counts) / max(1, count($tokens))),
+                            ], '_rank');
+                        }
                     }
                 }
 
@@ -203,9 +224,6 @@ class VectorSearch extends Component
         return [
             'cosine' => $cosine,
             'lexical' => $lexical,
-            'df' => $df,
-            'docs' => $docs,
-            'totalLength' => $totalLength,
         ];
     }
 
@@ -239,10 +257,11 @@ class VectorSearch extends Component
      * Fuse the cosine and lexical rankings with Reciprocal Rank Fusion.
      *
      * @param array<int, array<string, mixed>> $byCosine
-     * @param array{lexical: array<int, array<string, mixed>>, df: array<string, int>, docs: int, totalLength: int} $scan
+     * @param array<int, array<string, mixed>> $lexical
+     * @param array{df: array<string, int>, docs: int, totalLength: int} $stats
      * @return array<int, array<string, mixed>>
      */
-    private function fuse(array $byCosine, array $scan, int $k): array
+    private function fuse(array $byCosine, array $lexical, array $stats, int $k): array
     {
         $rrfK = max(1, (int)Plugin::getInstance()->getSettings()->rrfK);
 
@@ -251,7 +270,7 @@ class VectorSearch extends Component
         foreach ($byCosine as $row) {
             $rows[$row['id']] = $row;
         }
-        foreach ($scan['lexical'] as $row) {
+        foreach ($lexical as $row) {
             if (!isset($rows[$row['id']])) {
                 $rows[$row['id']] = [
                     'id' => $row['id'],
@@ -263,14 +282,14 @@ class VectorSearch extends Component
             }
         }
 
-        $averageLength = $scan['docs'] > 0 ? $scan['totalLength'] / $scan['docs'] : 1.0;
+        $averageLength = $stats['docs'] > 0 ? $stats['totalLength'] / $stats['docs'] : 1.0;
         $bm25 = [];
-        foreach ($scan['lexical'] as $row) {
+        foreach ($lexical as $row) {
             $bm25[$row['id']] = $this->bm25(
                 $row['termFrequencies'],
                 $row['length'],
-                $scan['df'],
-                $scan['docs'],
+                $stats['df'],
+                $stats['docs'],
                 $averageLength,
             );
         }
@@ -294,6 +313,123 @@ class VectorSearch extends Component
             $out[] = $rows[$id];
         }
         return $out;
+    }
+
+    /**
+     * Corpus statistics BM25 needs: how many chunks there are, how long they are
+     * in total, and how many contain each stem.
+     *
+     * Cached per filtered corpus, because they are a property of what has been
+     * trained rather than of the query. Gathering them used to be folded into
+     * the per-query scan, which meant every question tokenized and stemmed every
+     * chunk on the site before it could be answered — the single most expensive
+     * step of retrieval, repeated for a result that had not changed since the
+     * last training run. The first query after a retrain rebuilds them (one pass
+     * over `content`, no vectors read); every query after that reads the cache.
+     *
+     * @param int|null $siteId already-resolved site filter (null = whole corpus)
+     * @return array{df: array<string, int>, docs: int, totalLength: int}
+     */
+    private function corpusStats(?int $siteId): array
+    {
+        $cache = Craft::$app->getCache();
+        $key = ['chatbot-bm25-corpus-stats', $siteId];
+        $stats = $cache->get($key);
+        if (is_array($stats) && isset($stats['df'], $stats['docs'], $stats['totalLength'])) {
+            return $stats;
+        }
+        $stats = $this->buildCorpusStats($siteId);
+        $cache->set(
+            $key,
+            $stats,
+            self::STATS_CACHE_DURATION,
+            new TagDependency(['tags' => self::CORPUS_CACHE_TAG]),
+        );
+        return $stats;
+    }
+
+    /**
+     * One pass over every indexed chunk's text, counting document frequency for
+     * the whole vocabulary. Stems are capped at {@see self::STEM_LENGTH}
+     * characters, so the vocabulary stays bounded however much content is
+     * trained. Deliberately selects no vectors — this pass is about words.
+     *
+     * @return array{df: array<string, int>, docs: int, totalLength: int}
+     */
+    private function buildCorpusStats(?int $siteId): array
+    {
+        $df = [];
+        $docs = 0;
+        $totalLength = 0;
+        $lastId = 0;
+
+        while (true) {
+            $rowsQuery = (new \craft\db\Query())
+                ->select(['id', 'content'])
+                ->from('{{%chatbot_chunks}}')
+                ->where(['>', 'id', $lastId])
+                // Same population the scan ranks over: a chunk with no vector is
+                // never retrieved, so it must not weigh on the statistics either.
+                ->andWhere([
+                    'or',
+                    ['not', ['embeddingBlob' => null]],
+                    ['not', ['embedding' => null]],
+                ])
+                ->orderBy(['id' => SORT_ASC])
+                ->limit(self::SCAN_BATCH);
+            if ($siteId !== null) {
+                $rowsQuery->andWhere(['or', ['siteId' => $siteId], ['siteId' => null]]);
+            }
+            $rows = $rowsQuery->all(Craft::$app->db);
+            if (empty($rows)) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                $lastId = (int)$row['id'];
+                $tokens = $this->stemKeys($this->tokenize((string)$row['content']));
+                $docs++;
+                $totalLength += count($tokens);
+                foreach (array_keys(array_count_values($tokens)) as $term) {
+                    $df[$term] = ($df[$term] ?? 0) + 1;
+                }
+            }
+
+            if (count($rows) < self::SCAN_BATCH) {
+                break;
+            }
+        }
+
+        return ['df' => $df, 'docs' => $docs, 'totalLength' => $totalLength];
+    }
+
+    /**
+     * Drop the cached corpus statistics. Called wherever the chunk table is
+     * written, so the next query rebuilds them from the new content.
+     */
+    public static function invalidateCorpusStats(): void
+    {
+        TagDependency::invalidate(Craft::$app->getCache(), self::CORPUS_CACHE_TAG);
+    }
+
+    /**
+     * Whether a chunk's folded text could contain any of the query stems.
+     *
+     * A substring test, not a token test: it answers "is it worth tokenizing
+     * this chunk" and nothing more. False positives are harmless, false
+     * negatives would silently lose lexical matches — so it must stay a
+     * superset of what the real stem comparison would accept.
+     *
+     * @param string[] $queryTerms
+     */
+    private function mayContainTerm(string $folded, array $queryTerms): bool
+    {
+        foreach ($queryTerms as $term) {
+            if ($term !== '' && str_contains($folded, $term)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -370,8 +506,18 @@ class VectorSearch extends Component
      */
     private function tokenize(string $text): array
     {
-        $text = self::foldDiacritics(mb_strtolower($text, 'UTF-8'));
-        $parts = preg_split('/[^\p{L}\p{N}]+/u', $text) ?: [];
+        return $this->tokenizeFolded(self::foldDiacritics(mb_strtolower($text, 'UTF-8')));
+    }
+
+    /**
+     * The splitting half of {@see self::tokenize()}, for callers that already
+     * hold the lowercased, diacritic-folded text and must not fold it twice.
+     *
+     * @return string[]
+     */
+    private function tokenizeFolded(string $folded): array
+    {
+        $parts = preg_split('/[^\p{L}\p{N}]+/u', $folded) ?: [];
         return array_values(array_filter($parts, fn($t) => mb_strlen($t) >= 2));
     }
 

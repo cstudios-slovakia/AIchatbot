@@ -26,6 +26,13 @@ class Settings extends Model
     // Operation mode: 'chat' = floating bubble (current behavior). 'agent' = docked full-height side panel that squeezes page content.
     public string $operationMode = 'chat'; // chat|agent
     public int $agentPanelWidth = 420; // px width of the docked agent panel
+    // Chat-mode panel size and the base text size inside the widget. Visitors can
+    // still enlarge both from the widget's own menu — these are the starting point.
+    public int $widgetWidth = 360;   // px width of the floating chat panel
+    public int $widgetHeight = 540;  // px height of the floating chat panel
+    public int $widgetFontSize = 13; // px base text size; every other size scales off it
+    // Whether the widget offers visitors its own size / text-size controls.
+    public bool $widgetResizeEnabled = true;
     // Corner the widget bubble/panel sits in (agent mode uses only the left/right part to pick the dock side).
     public string $widgetPosition = 'bottom-right'; // bottom-right|bottom-left|top-right|top-left
 
@@ -133,8 +140,13 @@ class Settings extends Model
      *   name        string  tool name, ^[a-zA-Z0-9_-]{1,64}$
      *   label       string  CP display label
      *   description string  shown to the model — when to use this form
-     *   fields      array   [{ name, label, type:text|email|tel|number|textarea|select,
-     *                           required:bool, description, options:string[] (select only) }]
+     *   fields      array   [{ name, label, type:text|email|tel|number|textarea|select|
+     *                              checkboxes|consent|hidden, required:bool, description,
+     *                           optionsSource:manual|section|field (choice fields),
+     *                           options:string[] (optionsSource=manual),
+     *                           optionsSection:string section UID (optionsSource=section),
+     *                           optionsField:string field handle (optionsSource=field),
+     *                           value:string (hidden) }]
      *   delivery    array   { webhook: {enabled,url,method,headers:[{key,value}]},
      *                          email:   {enabled,to,subject} }   (submissions are always stored)
      * @var array<int, array<string, mixed>>
@@ -248,7 +260,7 @@ class Settings extends Model
         return [
             [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
             [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt', 'disclaimerText'], 'string'],
-            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled', 'streamingEnabled', 'disclaimerEnabled'], 'boolean'],
+            [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled', 'streamingEnabled', 'disclaimerEnabled', 'widgetResizeEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'historyMessages', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],
             [['maxToolIterations'], 'integer', 'min' => 1, 'max' => 10],
@@ -279,6 +291,9 @@ class Settings extends Model
             [['widgetPosition'], 'string'],
             [['widgetPosition'], 'in', 'range' => ['bottom-right', 'bottom-left', 'top-right', 'top-left']],
             [['agentPanelWidth'], 'integer', 'min' => 280, 'max' => 900],
+            [['widgetWidth'], 'integer', 'min' => 280, 'max' => 720],
+            [['widgetHeight'], 'integer', 'min' => 360, 'max' => 1000],
+            [['widgetFontSize'], 'integer', 'min' => 11, 'max' => 22],
             [['humanHandoffMode'], 'in', 'range' => ['always', 'ai']],
             [['humanHandoffMode'], 'string'],
             [['logoText'], 'string', 'max' => 3],
@@ -367,9 +382,24 @@ class Settings extends Model
             $fields = is_array($form['fields'] ?? null) ? $form['fields'] : [];
             $hasField = false;
             foreach ($fields as $f) {
-                if (is_array($f) && ($f['name'] ?? '') !== '') {
-                    $hasField = true;
-                    break;
+                if (!is_array($f) || ($f['name'] ?? '') === '') {
+                    continue;
+                }
+                $hasField = true;
+                $type = (string)($f['type'] ?? '');
+                $source = (string)($f['optionsSource'] ?? 'manual');
+                // A choice field pointed at nothing renders as an empty fieldset
+                // and offers the model nothing to pick from, so catch it here
+                // rather than on the live site.
+                if (in_array($type, ['select', 'checkboxes'], true)) {
+                    if ($source === 'section' && trim((string)($f['optionsSection'] ?? '')) === '') {
+                        $this->addError($attribute, "Form \"{$label}\": field \"{$f['name']}\" takes its choices from a section but none is selected.");
+                    } elseif ($source === 'field' && trim((string)($f['optionsField'] ?? '')) === '') {
+                        $this->addError($attribute, "Form \"{$label}\": field \"{$f['name']}\" takes its choices from a field but none is selected.");
+                    }
+                }
+                if ($type === 'checkboxes' && $source === 'manual' && !array_filter((array)($f['options'] ?? []))) {
+                    $this->addError($attribute, "Form \"{$label}\": checkbox field \"{$f['name']}\" needs at least one option.");
                 }
             }
             if (!$hasField) {

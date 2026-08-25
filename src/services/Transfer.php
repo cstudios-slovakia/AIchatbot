@@ -47,6 +47,11 @@ use yii\base\Component;
  * The bundle is gzipped NDJSON: one header line, then one line per trained
  * source with its chunks, with uploaded documents following their line in
  * base64 slices. Nothing has to be held in memory whole, at either end.
+ *
+ * Conversational form definitions travel too, on their own line type. They are
+ * settings rather than content — no chunks, no vectors — but they are edited in
+ * the CP, so on a site whose project config is not shared they would otherwise
+ * have to be typed out a second time.
  */
 class Transfer extends Component
 {
@@ -54,7 +59,7 @@ class Transfer extends Component
     public const FORMAT = 1;
 
     /** Source kinds, in the vocabulary `rag/retrain-all --only` already uses. */
-    public const KINDS = ['entries', 'categories', 'globals', 'files', 'urls', 'qa', 'sources'];
+    public const KINDS = ['entries', 'categories', 'globals', 'files', 'urls', 'qa', 'sources', 'forms'];
 
     /** kind => the `chatbot_chunks.sourceType` its chunks are stored under. */
     private const CHUNK_TYPES = [
@@ -98,6 +103,10 @@ class Transfer extends Component
 
         try {
             $this->writeLine($fp, $this->header());
+
+            if ($wants('forms')) {
+                $counts['forms'] = $this->writeForms($fp, $warnings);
+            }
 
             if ($wants('entries')) {
                 $sections = [];
@@ -260,6 +269,53 @@ class Transfer extends Component
     }
 
     /**
+     * Write the conversational form definitions, availability included.
+     *
+     * These have no chunks and no local ids to resolve — they are plugin
+     * settings the model calls as tools. They go on their own line type so a
+     * reader written before they existed skips them rather than misreading one
+     * as a trained source.
+     *
+     * @param resource $fp
+     * @param string[] $warnings
+     */
+    private function writeForms($fp, array &$warnings): int
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $count = 0;
+        $inTheClear = [];
+
+        foreach ($settings->formDefinitions() as $form) {
+            $name = (string)$form['name'];
+            foreach ((array)($form['delivery']['webhook']['headers'] ?? []) as $header) {
+                $value = trim((string)($header['value'] ?? ''));
+                // A `$TOKEN` reference is resolved from the target's own .env
+                // when a submission is delivered; anything else is the secret
+                // itself, and it is about to be written to a downloadable file.
+                if ($value !== '' && !str_starts_with($value, '$')) {
+                    $inTheClear[$name] = true;
+                }
+            }
+            $this->writeLine($fp, [
+                't' => 'form',
+                'form' => $form,
+                'availability' => $settings->capabilityState($name),
+            ]);
+            $count++;
+        }
+
+        if ($inTheClear) {
+            $warnings[] = 'Webhook header values on ' . implode(', ', array_keys($inTheClear))
+                . ' are stored literally, so the bundle now carries them in the clear. '
+                . 'Keep it out of version control, or move them to $ENV_VAR references.';
+        }
+        if ($count > 0 && !$settings->formsEnabled) {
+            $warnings[] = 'Conversational forms are switched off on this site; the definitions travel anyway.';
+        }
+        return $count;
+    }
+
+    /**
      * @return array{format:int, ...}
      */
     private function header(): array
@@ -384,7 +440,7 @@ class Transfer extends Component
     /**
      * Read a bundle and reproduce its trained state here.
      *
-     * @param array{only?:string[]|null, reembed?:bool, dryRun?:bool, siteMap?:array<string,string>, overwriteFiles?:bool} $options
+     * @param array{only?:string[]|null, reembed?:bool, dryRun?:bool, siteMap?:array<string,string>, overwriteFiles?:bool, overwriteForms?:bool} $options
      * @return array{header:array<string,mixed>, imported:array<string,int>, skipped:array<string,int>, chunks:int, queued:int, files:int, warnings:string[], dryRun:bool}
      */
     public function import(string $path, array $options = []): array
@@ -397,6 +453,7 @@ class Transfer extends Component
         $dryRun = (bool)($options['dryRun'] ?? false);
         $siteMap = $options['siteMap'] ?? [];
         $overwriteFiles = (bool)($options['overwriteFiles'] ?? false);
+        $overwriteForms = (bool)($options['overwriteForms'] ?? false);
         $wants = fn(string $kind): bool => $only === null || in_array($kind, $only, true);
 
         $fp = gzopen($path, 'rb');
@@ -415,6 +472,8 @@ class Transfer extends Component
         $documents = [];
         /** @var array{filename:string, path:string|null, handle:resource|null}|null $pendingFile */
         $pendingFile = null;
+        /** @var array<int, array<string, mixed>> form lines, applied in one settings write at the end */
+        $formLines = [];
 
         try {
             $header = $this->readHeader($fp);
@@ -432,6 +491,15 @@ class Transfer extends Component
 
                 if (($data['t'] ?? '') === 'file') {
                     $pendingFile = $this->appendFileSlice($pendingFile, $data, $dryRun);
+                    continue;
+                }
+                if (($data['t'] ?? '') === 'form') {
+                    $pendingFile = $this->closeFile($pendingFile, $filesWritten);
+                    if ($wants('forms')) {
+                        // Held until the bundle is read: every form lands in one
+                        // settings write rather than one project-config write each.
+                        $formLines[] = $data;
+                    }
                     continue;
                 }
                 if (($data['t'] ?? '') !== 'source') {
@@ -480,6 +548,10 @@ class Transfer extends Component
             $this->closeFile($pendingFile, $filesWritten);
         } finally {
             gzclose($fp);
+        }
+
+        if ($formLines) {
+            $this->importForms($formLines, $overwriteForms, $dryRun, $imported, $skipped, $warnings);
         }
 
         // A record whose document never arrived — exported with --no-files, or
@@ -696,6 +768,130 @@ class Transfer extends Component
     }
 
     /**
+     * Merge bundled form definitions into this site's plugin settings, by name.
+     *
+     * A form that already exists here is left alone unless the caller asked for
+     * it to be replaced: its delivery config belongs to this site — the
+     * recipient, the endpoint, the token — and a definition carried over from a
+     * copy would quietly send real submissions somewhere else.
+     *
+     * @param array<int, array<string, mixed>> $lines
+     * @param array<string, int> $imported
+     * @param array<string, int> $skipped
+     * @param string[] $warnings
+     */
+    private function importForms(array $lines, bool $overwrite, bool $dryRun, array &$imported, array &$skipped, array &$warnings): void
+    {
+        $plugin = Plugin::getInstance();
+        $settings = $plugin->getSettings();
+
+        // Plugin settings live in project config. Where the CP cannot write to
+        // it, neither can this — say so instead of throwing at the last step.
+        if (!Craft::$app->getConfig()->getGeneral()->allowAdminChanges) {
+            $skipped['forms'] += count($lines);
+            $warnings[] = 'Form definitions were not applied: admin changes are disabled here, so plugin '
+                . 'settings only move through project config. Deploy them that way instead.';
+            return;
+        }
+
+        $originalForms = $settings->forms;
+        $originalStates = $settings->capabilityStates;
+
+        $forms = array_values(array_filter($settings->forms, 'is_array'));
+        $states = $settings->capabilityStates;
+        $byName = [];
+        foreach ($forms as $i => $form) {
+            $byName[(string)($form['name'] ?? '')] = $i;
+        }
+
+        $kept = [];
+        $heldBack = [];
+        $changed = false;
+
+        foreach ($lines as $line) {
+            $form = (array)($line['form'] ?? []);
+            $name = (string)($form['name'] ?? '');
+            if ($name === '' || empty($form['fields'])) {
+                $skipped['forms']++;
+                $warnings[] = 'Skipped a form with no name or no fields.';
+                continue;
+            }
+
+            $exists = isset($byName[$name]);
+            if ($exists && !$overwrite) {
+                $skipped['forms']++;
+                $kept[] = $name;
+                continue;
+            }
+
+            $imported['forms']++;
+            if ($dryRun) {
+                continue;
+            }
+
+            if ($exists) {
+                $forms[$byName[$name]] = $form;
+            } else {
+                $byName[$name] = count($forms);
+                $forms[] = $form;
+            }
+
+            $state = (string)($line['availability'] ?? 'admins');
+            if (!in_array($state, ['off', 'on', 'admins'], true)) {
+                $state = 'admins';
+            }
+            if ($exists) {
+                // Whatever this site had it set to is the deliberate choice; the
+                // definition changes, its exposure does not.
+                $state = $settings->capabilityState($name);
+            } elseif ($state === 'on') {
+                // A form goes live the moment it is saved. One that has never
+                // run against this site's delivery config waits at admins-only,
+                // where the CP starts a new one, so it can be tried first.
+                $state = 'admins';
+                $heldBack[] = $name;
+            }
+            $states[$name] = $state;
+            $changed = true;
+        }
+
+        if ($kept) {
+            $warnings[] = "This site's own version of " . implode(', ', $kept)
+                . ' was kept; import with --overwrite-forms (or tick “Replace forms”) to take the bundle\'s.';
+        }
+        if ($heldBack) {
+            $warnings[] = implode(', ', $heldBack) . ' arrived switched on and is set to admins-only here; '
+                . 'check the delivery config against this site, then turn it on under Skills.';
+        }
+        if (!$changed) {
+            return;
+        }
+
+        $settings->forms = $forms;
+        $settings->capabilityStates = $states;
+        if (!$settings->validate(['forms'])) {
+            $settings->forms = $originalForms;
+            $settings->capabilityStates = $originalStates;
+            $warnings[] = 'Form definitions were not saved: ' . implode(' ', $settings->getErrors('forms'));
+            return;
+        }
+
+        try {
+            Craft::$app->plugins->savePluginSettings($plugin, $settings->getAttributes());
+        } catch (Throwable $e) {
+            $settings->forms = $originalForms;
+            $settings->capabilityStates = $originalStates;
+            $warnings[] = 'Form definitions were not saved: ' . $e->getMessage();
+            return;
+        }
+
+        if (!$settings->formsEnabled) {
+            $warnings[] = 'Conversational forms are switched off on this site — turn them on under '
+                . 'Settings → AI Configuration for the imported forms to reach the assistant.';
+        }
+    }
+
+    /**
      * Copy the status the source carried, so the target's Training screens and
      * the dashboard's health check read the same as the install it came from.
      *
@@ -755,6 +951,7 @@ class Transfer extends Component
                 $written++;
             }
             $transaction?->commit();
+            VectorSearch::invalidateCorpusStats();
             if ($dropped > 0) {
                 $warnings[] = "Dropped {$dropped} chunk(s) scoped to a site this install does not have.";
             }

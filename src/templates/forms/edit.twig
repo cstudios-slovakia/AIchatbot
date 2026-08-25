@@ -11,11 +11,12 @@
 
 {% set fieldTypes = {
   text: 'Text', textarea: 'Long text', email: 'Email', tel: 'Phone',
-  number: 'Number', select: 'Choice', hidden: 'Predefined (not asked)'
+  number: 'Number', select: 'Choice (pick one)', checkboxes: 'Checkboxes (pick several)',
+  consent: 'Consent checkbox', hidden: 'Predefined (not asked)'
 } %}
 
 {# One row of the fields editor. Pass i='__I__' to produce a JS template row. #}
-{% macro fieldRow(i, f, fieldTypes) %}
+{% macro fieldRow(i, f, fieldTypes, optionSections, optionFields) %}
   {% set f = f ?? {} %}
   <tr class="cs-field-row">
     <td><input type="text" class="text fullwidth" name="form[fields][{{ i }}][name]" value="{{ f.name ?? '' }}" placeholder="email"></td>
@@ -30,9 +31,31 @@
     <td style="text-align:center;"><input type="checkbox" name="form[fields][{{ i }}][required]" value="1" {{ (f.required ?? false) ? 'checked' }}></td>
     <td><input type="text" class="text fullwidth" name="form[fields][{{ i }}][description]" value="{{ f.description ?? '' }}" placeholder="Hint for the AI"></td>
     <td>
+      <div class="select fullwidth cs-field-optsrc-wrap">
+        <select class="cs-field-optsrc" name="form[fields][{{ i }}][optionsSource]">
+          {% set srcs = { manual: 'Typed list', section: 'Entries in a section', field: 'A field’s options' } %}
+          {% for val, lbl in srcs %}
+            <option value="{{ val }}" {{ (f.optionsSource ?? 'manual') == val ? 'selected' }}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <input type="text" class="text fullwidth cs-field-options" name="form[fields][{{ i }}][options]"
-             placeholder="a, b, c (choices)"
+             placeholder="a, b, c (choices)" style="margin-top:4px;"
              value="{{ (f.options is defined and f.options is iterable) ? f.options|join(', ') : (f.options|default('')) }}">
+      <div class="select fullwidth cs-field-optsection-wrap" style="margin-top:4px;">
+        <select class="cs-field-optsection" name="form[fields][{{ i }}][optionsSection]">
+          {% for uid, name in optionSections %}
+            <option value="{{ uid }}" {{ (f.optionsSection ?? '') == uid ? 'selected' }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="select fullwidth cs-field-optfield-wrap" style="margin-top:4px;">
+        <select class="cs-field-optfield" name="form[fields][{{ i }}][optionsField]">
+          {% for handle, name in optionFields %}
+            <option value="{{ handle }}" {{ (f.optionsField ?? '') == handle ? 'selected' }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <input type="text" class="text fullwidth cs-field-value" name="form[fields][{{ i }}][value]"
              placeholder="Predefined value"
              value="{{ f.value ?? '' }}" style="margin-top:4px;">
@@ -105,7 +128,9 @@
 
     <hr>
     <h2>Fields</h2>
-    <p class="instructions">The model asks for these in conversation (or the user fills them inline) and the answers are passed verbatim. Mark required fields so it won’t submit without them. <strong>Choice</strong> fields use the comma-separated options; <strong>Predefined</strong> fields are not asked — their value is always sent as-is.</p>
+    <p class="instructions">The model asks for these in conversation (or the user fills them inline) and the answers are passed verbatim. Mark required fields so it won’t submit without them. <strong>Choice</strong> and <strong>Checkboxes</strong> fields use the comma-separated options — Choice takes one, Checkboxes any number (e.g. <em>Extra services: rubble removal, dismantling</em>); <strong>Predefined</strong> fields are not asked — their value is always sent as-is.</p>
+    <p class="instructions"><strong>Consent checkbox</strong> is a single box the visitor ticks (GDPR, terms). Put the link in its label with <code>[text](https://example.com/privacy)</code> — e.g. <code>I agree to the [privacy policy](/privacy-policy)</code>. Mark it required and the form can’t be submitted unticked.</p>
+    <p class="instructions">Choices can be <strong>typed</strong> as a comma-separated list, or pulled from the site itself: <strong>Entries in a section</strong> offers the titles of that section’s live entries (in the visitor’s site language), and <strong>A field’s options</strong> reuses the choices of a Craft dropdown, radio, checkboxes or multi-select field, so the assistant offers exactly what an editor would see. Content-driven lists follow the content — no need to re-type them here when it changes — and are capped at 200 choices. Changes appear within about five minutes.</p>
     <p class="instructions">Labels and choice options are shown to visitors, so on a multi-site install they are translated per site: add them to <code>translations/&lt;language&gt;/site.php</code>. An untranslated one is shown as typed. Choice <em>values</em> are stored and delivered as configured — only the text beside them changes.</p>
     <table class="data fullwidth" id="cs-fields-table">
       <thead>
@@ -121,12 +146,12 @@
       </thead>
       <tbody>
         {% for f in (form.fields ?? []) %}
-          {{ _self.fieldRow(loop.index0, f, fieldTypes) }}
+          {{ _self.fieldRow(loop.index0, f, fieldTypes, optionSections, optionFields) }}
         {% endfor %}
       </tbody>
     </table>
     <button type="button" class="btn add icon" id="cs-add-field" style="margin-top:8px;">Add a field</button>
-    <template id="cs-field-tpl">{{ _self.fieldRow('__I__', {}, fieldTypes) }}</template>
+    <template id="cs-field-tpl">{{ _self.fieldRow('__I__', {}, fieldTypes, optionSections, optionFields) }}</template>
 
     <hr>
     <h2>Delivery</h2>
@@ -236,10 +261,18 @@
       // Toggle the Options vs Predefined-value input based on the field type.
       function syncRow(row) {
         var type = (row.querySelector('.cs-field-type') || {}).value;
-        var opts = row.querySelector('.cs-field-options');
-        var val = row.querySelector('.cs-field-value');
-        if (opts) opts.style.display = (type === 'select') ? '' : 'none';
-        if (val) val.style.display = (type === 'hidden') ? '' : 'none';
+        var srcSel = row.querySelector('.cs-field-optsrc');
+        var src = srcSel ? srcSel.value : 'manual';
+        var choice = (type === 'select' || type === 'checkboxes');
+        function show(sel, on) {
+          var node = row.querySelector(sel);
+          if (node) node.style.display = on ? '' : 'none';
+        }
+        show('.cs-field-optsrc-wrap', choice);
+        show('.cs-field-options', choice && src === 'manual');
+        show('.cs-field-optsection-wrap', choice && src === 'section');
+        show('.cs-field-optfield-wrap', choice && src === 'field');
+        show('.cs-field-value', type === 'hidden');
       }
       function syncAll(scope) {
         (scope || document).querySelectorAll('.cs-field-row').forEach(syncRow);
@@ -276,7 +309,7 @@
         if (rm) { var tr = rm.closest('tr'); if (tr) tr.remove(); }
       });
       document.addEventListener('change', function (e) {
-        if (e.target.classList && e.target.classList.contains('cs-field-type')) {
+        if (e.target.classList && (e.target.classList.contains('cs-field-type') || e.target.classList.contains('cs-field-optsrc'))) {
           var tr = e.target.closest('tr');
           if (tr) syncRow(tr);
         }

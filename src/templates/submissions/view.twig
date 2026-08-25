@@ -25,7 +25,8 @@
       {% for key, value in data %}
         <tr>
           <th scope="row" style="width:30%;">{{ labels[key] ?? key }}</th>
-          <td>{{ value is iterable ? value|join(', ') : value }}</td>
+          {# Checkbox groups store a list, a consent box a boolean. #}
+          <td>{{ value is iterable ? value|join(', ') : (value is same as(true) ? 'Yes' : (value is same as(false) ? 'No' : value)) }}</td>
         </tr>
       {% endfor %}
     </tbody>
