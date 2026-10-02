@@ -675,7 +675,7 @@
     if (t.length === 0) return true;
     if (t.length < 4) return false;
     // Latin letters (incl. extended). If string contains non-Latin chars (CJK, Arabic, Cyrillic), skip heuristics.
-    if (/[^ -ɏ\s\d.,!?;:'"()\-\[\]\/@#&%*+=]/.test(t)) return false;
+    if (/[^\u0000-\u024f\s\d.,!?;:'"()\-\[\]\/@#&%*+=]/.test(t)) return false;
     var letters = t.replace(/[^A-Za-zÀ-ɏ]/g, '');
     if (letters.length === 0) return true;
     var lower = letters.toLowerCase();

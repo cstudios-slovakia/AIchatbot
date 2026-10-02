@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed the chat widget failing to start on pages that are not served as UTF-8.
+  One of its patterns contained raw non-ASCII characters, which such a page
+  misreads, and the whole script stopped before the launcher appeared.
 - The control panel screens have a new look. Screens without tabs — the
   Dashboard, Live Chat, a conversation's log, missed chats — are now built of
   cards: a titled panel per topic, with the state of things (needs attention,
