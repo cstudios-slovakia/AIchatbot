@@ -647,10 +647,15 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
 .cs-chatbot__title { cursor: pointer; user-select: none; }
 .cs-chatbot__title:hover { color: var(--cb-primary); }
 
+.cs-chatbot__menu-id {
+  display: flex; align-items: center;
+  margin-top: 4px; padding: 8px 10px 6px;
+  border-top: 1px solid var(--cb-border);
+  color: var(--cb-muted); font-size: var(--cb-fs); white-space: nowrap; cursor: text;
+}
 .cs-chatbot__short-id {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: var(--cb-fs-xxs); color: var(--cb-muted);
-  padding: 2px 6px; border: 1px solid var(--cb-border); border-radius: 6px;
+  font-size: var(--cb-fs-xs); user-select: all;
 }
 
 .cs-chatbot__time {

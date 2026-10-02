@@ -799,8 +799,6 @@
 
     var logo = el('div', { class: 'cs-chatbot__logo' }, [logoInner]);
     var title = el('div', { class: 'cs-chatbot__title', role: 'button', tabindex: '0', title: T('clickMinimize') }, [config.companyName || 'Chatbot']);
-    var shortIdBadge = el('div', { class: 'cs-chatbot__short-id', title: T('conversationId') });
-    shortIdBadge.style.display = 'none';
 
     var endMenuItem = el('button', { class: 'cs-chatbot__menu-item', type: 'button', html: '<span class="cs-chatbot__menu-icon">⏻</span>' + T('endConversation') });
     endMenuItem.dataset.role = 'end';
@@ -812,6 +810,24 @@
     textMenuItem.dataset.role = 'textsize';
     var menuItems = [endMenuItem, themeMenuItem];
     if (resizable) menuItems.push(sizeMenuItem, textMenuItem);
+    // The conversation ID is for the rare visitor talking to support, so it sits
+    // at the foot of the menu rather than in the header. Not a button: a click
+    // selects it for copying instead of closing the menu.
+    var shortIdValue = el('span', { class: 'cs-chatbot__short-id' });
+    var shortIdBadge = el('div', { class: 'cs-chatbot__menu-id', title: T('conversationId') }, [
+      el('span', { class: 'cs-chatbot__menu-icon', html: '#' }),
+      shortIdValue,
+    ]);
+    shortIdBadge.style.display = 'none';
+    shortIdBadge.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var range = document.createRange();
+      range.selectNodeContents(shortIdValue);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    menuItems.push(shortIdBadge);
     var menu = el('div', { class: 'cs-chatbot__menu' }, menuItems);
     var menuBtn = el('button', { class: 'cs-chatbot__icon-btn', title: T('more'), type: 'button', html: '⋯', 'aria-haspopup': 'true' });
     var menuWrap = el('div', { class: 'cs-chatbot__menu-wrap' }, [menuBtn, menu]);
@@ -822,7 +838,7 @@
     var refreshBtn = el('button', { class: 'cs-chatbot__icon-btn', title: T('newConversation'), type: 'button', html: '↻' });
     var closeBtn = el('button', { class: 'cs-chatbot__icon-btn', title: T('minimize'), type: 'button', html: '×' });
 
-    var header = el('div', { class: 'cs-chatbot__header' }, [logo, title, shortIdBadge, menuWrap, refreshBtn, closeBtn]);
+    var header = el('div', { class: 'cs-chatbot__header' }, [logo, title, menuWrap, refreshBtn, closeBtn]);
 
     menuBtn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -1067,7 +1083,7 @@
 
       // Short ID badge
       if (state.shortId) {
-        shortIdBadge.textContent = state.shortId;
+        shortIdValue.textContent = state.shortId;
         shortIdBadge.style.display = '';
       } else {
         shortIdBadge.style.display = 'none';

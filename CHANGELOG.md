@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The conversation ID no longer sits in the chat window's header. It is now at
+  the bottom of the **⋯** menu, where a visitor talking to support can still
+  find it; clicking it selects the ID so it can be copied straight away. The
+  header has more room for the assistant's name as a result.
 - The control panel screens have a new look. Screens without tabs — the
   Dashboard, Live Chat, a conversation's log, missed chats — are now built of
   cards: a titled panel per topic, with the state of things (needs attention,
