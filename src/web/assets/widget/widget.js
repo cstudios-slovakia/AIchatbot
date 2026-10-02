@@ -509,6 +509,50 @@
     if (!href || !/^https?:/i.test(href) || !isOnSiteUrl(href)) return null;
     return { node: node, href: href };
   }
+  // The direct child of `container` that holds `node` — the paragraph, list or
+  // table a card for an inline link goes underneath.
+  function topLevelBlock(container, node) {
+    while (node && node.parentNode !== container) node = node.parentNode;
+    return node;
+  }
+  // Cards for on-site links written inside a sentence ("see his profile [here](…)").
+  // The model only sometimes puts a link on its own line, so a card that depended
+  // on that showed up one answer and not the next. The link stays in the prose;
+  // its card goes under the block it sits in. A page already carded in this
+  // bubble is not carded again.
+  function linkKey(url) {
+    return String(url).replace(/#.*$/, '').replace(/\/+$/, '').toLowerCase();
+  }
+  function enrichInlineLinkCards(container) {
+    var seen = {};
+    Array.prototype.forEach.call(container.querySelectorAll('.cs-chatbot__link-card'), function (c) {
+      seen[linkKey(c.getAttribute('href'))] = true;
+    });
+    var found = [];
+    Array.prototype.forEach.call(container.querySelectorAll('a[data-cs-href]'), function (a) {
+      var href = a.getAttribute('data-cs-href');
+      if (!href || seen[linkKey(href)] || !isOnSiteUrl(href)) return;
+      var block = topLevelBlock(container, a);
+      if (!block) return;
+      seen[linkKey(href)] = true;
+      found.push({ block: block, meta: fetchOg(href).then(function (r) { return r && r.ok ? r : null; }) });
+    });
+    if (!found.length) return;
+    Promise.all(found.map(function (f) { return f.meta; })).then(function (metas) {
+      var lastAfter = [];
+      found.forEach(function (f, i) {
+        if (!metas[i] || !f.block.parentNode) return;
+        // Several links in one block: keep their cards in reading order.
+        var prev = null;
+        lastAfter.forEach(function (e) { if (e.block === f.block) prev = e; });
+        var after = prev ? prev.card : f.block;
+        var card = buildLinkCard(metas[i]);
+        after.parentNode.insertBefore(card, after.nextSibling);
+        if (prev) prev.card = card; else lastAfter.push({ block: f.block, card: card });
+      });
+      groupAdjacentLinkCards(container, 'cs-chatbot__link-card', 'cs-chatbot__link-carousel');
+    });
+  }
   function enrichLinkCards(container) {
     if (!container) return;
     var ps = Array.prototype.slice.call(container.querySelectorAll('p'));
@@ -525,7 +569,10 @@
         return { p: p, segs: segs, anchorInfo: anchorInfo, metas: metas };
       }));
     });
-    if (!tasks.length) return;
+    if (!tasks.length) {
+      enrichInlineLinkCards(container);
+      return;
+    }
     Promise.all(tasks).then(function (results) {
       results.forEach(function (r) {
         if (!r.p.parentNode) return;
@@ -567,6 +614,7 @@
       });
       // group cards from adjacent separate top-level positions into a carousel
       groupAdjacentLinkCards(container, 'cs-chatbot__link-card', 'cs-chatbot__link-carousel');
+      enrichInlineLinkCards(container);
     });
   }
   function buildLinkCard(meta) {

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Pages the assistant links to now get a preview card consistently. A card used
+  to appear only when the model happened to put the link on a line of its own;
+  a link worked into a sentence — "you can see his profile here" — stayed a
+  plain link, and some answers about a page left the link out entirely. A link
+  inside a sentence now keeps working as a link and also gets its card underneath
+  the paragraph, and the assistant is told to link the page whenever its answer
+  is about something that has one.
 - Answers arrive in fewer round trips to OpenAI. A turn used to take up to five
   calls in a row, each waiting on the one before it, and three of them were
   spent on preparation rather than on the answer. Two are now gone. The first
