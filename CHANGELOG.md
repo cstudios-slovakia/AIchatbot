@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Link preview cards now show an image for pages whose SEO field has none. The
+  card falls back to the `og:image` the page itself declares — usually a default
+  your templates set, or one derived from the hero image — which is the same
+  image the page shows when shared on social networks. Only the page's `<head>`
+  is downloaded to find it, and the result is cached for an hour like the rest of
+  the card.
 - Pages the assistant links to now get a preview card consistently. A card used
   to appear only when the model happened to put the link on a line of its own;
   a link worked into a sentence — "you can see his profile here" — stayed a

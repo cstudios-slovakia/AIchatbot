@@ -67,11 +67,10 @@ class OgController extends Controller
         $title = trim((string)$entry->title) ?: null;
         $description = self::seoDescription($entry)
             ?? self::firstStringFieldValue($entry, ['summary', 'description', 'excerpt', 'metaDescription', 'seoDescription']);
-        $image = self::seoImageUrl($entry);
-
         if (!$title && !$description) {
             return null;
         }
+        $image = self::seoImageUrl($entry) ?? self::headOgImage($url);
         return [
             'ok' => true,
             'url' => $url,
@@ -80,6 +79,88 @@ class OgController extends Controller
             'image' => $image,
             'siteName' => $site->name ?: null,
         ];
+    }
+
+    /**
+     * The `og:image` the page itself declares, for entries whose SEO field has
+     * none — the template often sets a default or derives one from a hero image,
+     * and that is what the page shares on social networks anyway.
+     *
+     * Reads only as far as `</head>`: the response is streamed and dropped once
+     * the head is in, so a long page costs a few kilobytes rather than the whole
+     * document. Only ever called for URLs on this install's own sites, and a
+     * redirect to another host is refused, so it can't be pointed elsewhere.
+     */
+    private static function headOgImage(string $url): ?string
+    {
+        $head = self::fetchHead($url);
+        if ($head === null || !preg_match_all('/<meta\b[^>]*>/i', $head, $tags)) {
+            return null;
+        }
+        $found = [];
+        foreach ($tags[0] as $tag) {
+            if (!preg_match('/\b(?:property|name)\s*=\s*["\']?([^"\'\s>]+)/i', $tag, $key)
+                || !preg_match('/\bcontent\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $tag, $content)) {
+                continue;
+            }
+            $value = trim(html_entity_decode($content[1] . ($content[2] ?? '') . ($content[3] ?? ''), ENT_QUOTES | ENT_HTML5));
+            if ($value !== '') {
+                $found[strtolower($key[1])] ??= $value;
+            }
+        }
+        $image = $found['og:image'] ?? $found['og:image:url'] ?? $found['og:image:secure_url'] ?? null;
+        if ($image === null) {
+            return null;
+        }
+        // Relative or protocol-relative values resolve against the page.
+        if (str_starts_with($image, '//')) {
+            $image = (parse_url($url, PHP_URL_SCHEME) ?: 'https') . ':' . $image;
+        } elseif (!preg_match('#^https?://#i', $image)) {
+            $origin = parse_url($url, PHP_URL_SCHEME) . '://' . parse_url($url, PHP_URL_HOST)
+                . (($port = parse_url($url, PHP_URL_PORT)) ? ':' . $port : '');
+            $image = $origin . '/' . ltrim($image, '/');
+        }
+        return $image;
+    }
+
+    private static function fetchHead(string $url): ?string
+    {
+        $maxBytes = 65536;
+        try {
+            $response = Craft::createGuzzleClient()->get($url, [
+                'stream' => true,
+                'connect_timeout' => 2,
+                'timeout' => 4,
+                'http_errors' => false,
+                'headers' => ['Accept' => 'text/html'],
+                'allow_redirects' => [
+                    'max' => 3,
+                    'on_redirect' => function($request, $response, $uri): void {
+                        if (self::matchSite((string)$uri) === null) {
+                            throw new \RuntimeException('redirect off-site');
+                        }
+                    },
+                ],
+            ]);
+            if ($response->getStatusCode() !== 200) {
+                return null;
+            }
+            $body = $response->getBody();
+            $html = '';
+            while (!$body->eof() && strlen($html) < $maxBytes) {
+                $html .= $body->read(8192);
+                $end = stripos($html, '</head>');
+                if ($end !== false) {
+                    $html = substr($html, 0, $end);
+                    break;
+                }
+            }
+            $body->close();
+            return $html;
+        } catch (\Throwable $e) {
+            Craft::info("OG head fetch failed for {$url}: {$e->getMessage()}", 'cs-chatbot');
+            return null;
+        }
     }
 
     private static function firstStringFieldValue(\craft\base\Element $entry, array $handles): ?string
