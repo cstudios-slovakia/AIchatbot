@@ -2,59 +2,79 @@
 {% set title = 'Forms' %}
 {% set selectedSubnavItem = 'forms' %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
+{% block actionButton %}
+  <a href="{{ url('interactive-ai-assistant/forms/new') }}" class="btn submit add icon">New form</a>
+{% endblock %}
+
 {% block content %}
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
-    <p class="light" style="margin:0;">
+  <div class="iaa-note iaa-note--info">
+    <span class="iaa-note__icon">{{ icons.svg('circle-info') }}</span>
+    <p>
       Forms the assistant can fill out in conversation and submit to a webhook/CRM or email.
       Each form is exposed to the model as a skill — turn it on under
       <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration → Agent &amp; skills</a>.
     </p>
-    <a href="{{ url('interactive-ai-assistant/forms/new') }}" class="btn submit add icon">New form</a>
   </div>
 
   {% if not agentModeEnabled %}
-    <p class="warning" style="margin-top:14px;">
-      Agent mode is off, so forms will not be offered. Enable it under
-      <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration</a>.
-    </p>
+    <div class="iaa-note iaa-note--warn">
+      <span class="iaa-note__icon">{{ icons.svg('triangle-exclamation') }}</span>
+      <p>
+        Agent mode is off, so forms will not be offered. Enable it under
+        <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration</a>.
+      </p>
+    </div>
   {% endif %}
 
-  <hr>
-
-  {% if not forms|length %}
-    <p>No forms yet. <a href="{{ url('interactive-ai-assistant/forms/new') }}">Create one</a>.</p>
-  {% else %}
-    <table class="data fullwidth">
-      <thead>
-        <tr>
-          <th>Name</th><th>Label</th><th>Fields</th><th>Delivery</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for form in forms %}
-          {% set d = form.delivery ?? {} %}
-          {% set editUrl = url('interactive-ai-assistant/forms/edit/' ~ form.name) %}
-          <tr data-form-name="{{ form.name }}">
-            <td><a href="{{ editUrl }}"><code>{{ form.name }}</code></a></td>
-            <td><a href="{{ editUrl }}">{{ form.label ? form.label|t('site') : '—' }}</a></td>
-            <td>{{ form.fields|length }}</td>
-            <td class="light">
-              {%- set channels = [] -%}
-              {%- if d.webhook.enabled ?? false -%}{% set channels = channels|merge(['webhook']) %}{%- endif -%}
-              {%- if d.email.enabled ?? false -%}{% set channels = channels|merge(['email']) %}{%- endif -%}
-              {%- if d.contactform.enabled ?? false -%}{% set channels = channels|merge(['contact-form']) %}{%- endif -%}
-              {%- set channels = channels|merge(['stored']) -%}
-              {{ channels|join(', ') }}
-            </td>
-            <td style="text-align:right;">
-              <a href="{{ url('interactive-ai-assistant/forms/edit/' ~ form.name) }}" class="btn small">Edit</a>
-              <button type="button" class="btn small delete-form-btn" data-name="{{ form.name }}">Delete</button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('file-lines') }}</span>
+        <h2 class="iaa-card__title">Forms</h2>
+        {% if forms|length %}<span class="iaa-card__aside"><span class="iaa-chip">{{ forms|length }}</span></span>{% endif %}
+      </div>
+      {% if not forms|length %}
+        <div class="iaa-empty"><p>No forms yet. <a href="{{ url('interactive-ai-assistant/forms/new') }}">Create one</a>.</p></div>
+      {% else %}
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            <thead>
+              <tr>
+                <th>Name</th><th>Label</th><th class="iaa-num">Fields</th><th>Delivery</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for form in forms %}
+                {% set d = form.delivery ?? {} %}
+                {% set editUrl = url('interactive-ai-assistant/forms/edit/' ~ form.name) %}
+                <tr data-form-name="{{ form.name }}">
+                  <td><a href="{{ editUrl }}"><code>{{ form.name }}</code></a></td>
+                  <td><a href="{{ editUrl }}">{{ form.label ? form.label|t('site') : '—' }}</a></td>
+                  <td class="iaa-num">{{ form.fields|length }}</td>
+                  <td>
+                    {%- set channels = [] -%}
+                    {%- if d.webhook.enabled ?? false -%}{% set channels = channels|merge(['webhook']) %}{%- endif -%}
+                    {%- if d.email.enabled ?? false -%}{% set channels = channels|merge(['email']) %}{%- endif -%}
+                    {%- if d.contactform.enabled ?? false -%}{% set channels = channels|merge(['contact-form']) %}{%- endif -%}
+                    {%- set channels = channels|merge(['stored']) -%}
+                    <span class="iaa-chips">{% for c in channels %}<span class="iaa-chip {{ c != 'stored' ? 'iaa-chip--info' }}">{{ c }}</span>{% endfor %}</span>
+                  </td>
+                  <td class="iaa-nowrap">
+                    <div class="iaa-row-actions">
+                      <a href="{{ url('interactive-ai-assistant/forms/edit/' ~ form.name) }}" class="btn small">Edit</a>
+                      <button type="button" class="btn small delete-form-btn" data-name="{{ form.name }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </div>
 
   {% js %}
     document.querySelectorAll('.delete-form-btn').forEach(function (b) {

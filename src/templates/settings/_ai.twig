@@ -1,311 +1,406 @@
 {% import '_includes/forms' as forms %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 
-{{ forms.autosuggestField({
-  label: 'OpenAI API Key',
-  instructions: 'Required for embeddings and chat completions. Supports $ENV_VAR.',
-  name: 'settings[openaiApiKey]',
-  value: settings.openaiApiKey,
-  suggestEnvVars: true,
-}) }}
+<div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('bolt') }}</span>
+      <h2 class="iaa-card__title">OpenAI</h2>
+    </div>
+    <div class="iaa-card__body">
+      {{ forms.autosuggestField({
+        label: 'OpenAI API Key',
+        instructions: 'Required for embeddings and chat completions. Supports $ENV_VAR.',
+        name: 'settings[openaiApiKey]',
+        value: settings.openaiApiKey,
+        suggestEnvVars: true,
+      }) }}
 
-{{ forms.selectField({
-  label: 'Chat Model',
-  instructions: 'GPT-5 reasoning models (gpt-5, gpt-5-mini, gpt-5-nano) run at default temperature. gpt-5-chat-latest and GPT-4o honor the configured temperature.',
-  name: 'settings[chatModel]',
-  value: settings.chatModel,
-  options: {
-    'gpt-5': 'gpt-5',
-    'gpt-5-mini': 'gpt-5-mini (recommended)',
-    'gpt-5-nano': 'gpt-5-nano (fastest / cheapest)',
-    'gpt-5-chat-latest': 'gpt-5-chat-latest',
-    'gpt-4o-mini': 'gpt-4o-mini',
-    'gpt-4o': 'gpt-4o',
-    'gpt-3.5-turbo': 'gpt-3.5-turbo',
-  },
-}) }}
+      <div class="iaa-rows">
+        {{ forms.selectField({
+          label: 'Chat Model',
+          instructions: 'GPT-5 reasoning models (gpt-5, gpt-5-mini, gpt-5-nano) run at default temperature. gpt-5-chat-latest and GPT-4o honor the configured temperature.',
+          name: 'settings[chatModel]',
+          value: settings.chatModel,
+          options: {
+            'gpt-5': 'gpt-5',
+            'gpt-5-mini': 'gpt-5-mini (recommended)',
+            'gpt-5-nano': 'gpt-5-nano (fastest / cheapest)',
+            'gpt-5-chat-latest': 'gpt-5-chat-latest',
+            'gpt-4o-mini': 'gpt-4o-mini',
+            'gpt-4o': 'gpt-4o',
+            'gpt-3.5-turbo': 'gpt-3.5-turbo',
+          },
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Stream replies',
-  instructions: 'Show the answer as it is written instead of when it is finished. Turn off if a proxy or CDN in front of the site buffers responses.',
-  name: 'settings[streamingEnabled]',
-  on: settings.streamingEnabled,
-}) }}
+        {{ forms.selectField({
+          label: 'Helper Model',
+          instructions: 'Used for the internal steps that are not the answer itself — rewriting follow-up questions into search queries, reranking results, and translating Q&A pairs. Keep it cheap; it runs on most turns.',
+          name: 'settings[helperModel]',
+          value: settings.helperModel,
+          options: {
+            'gpt-4o-mini': 'gpt-4o-mini (recommended)',
+            'gpt-4.1-mini': 'gpt-4.1-mini',
+            'gpt-4.1-nano': 'gpt-4.1-nano',
+            'gpt-5-mini': 'gpt-5-mini',
+            'gpt-5-nano': 'gpt-5-nano',
+          },
+        }) }}
 
-{{ forms.selectField({
-  label: 'Helper Model',
-  instructions: 'Used for the internal steps that are not the answer itself — rewriting follow-up questions into search queries, reranking results, and translating Q&A pairs. Keep it cheap; it runs on most turns.',
-  name: 'settings[helperModel]',
-  value: settings.helperModel,
-  options: {
-    'gpt-4o-mini': 'gpt-4o-mini (recommended)',
-    'gpt-4.1-mini': 'gpt-4.1-mini',
-    'gpt-4.1-nano': 'gpt-4.1-nano',
-    'gpt-5-mini': 'gpt-5-mini',
-    'gpt-5-nano': 'gpt-5-nano',
-  },
-}) }}
+        {{ forms.selectField({
+          label: 'Embedding Model',
+          instructions: 'Switching this requires full retraining of all content.',
+          name: 'settings[embeddingModel]',
+          value: settings.embeddingModel,
+          options: {
+            'text-embedding-3-small': 'text-embedding-3-small (recommended)',
+            'text-embedding-3-large': 'text-embedding-3-large',
+            'text-embedding-ada-002': 'text-embedding-ada-002',
+          },
+        }) }}
 
-{{ forms.selectField({
-  label: 'Embedding Model',
-  instructions: 'Switching this requires full retraining of all content.',
-  name: 'settings[embeddingModel]',
-  value: settings.embeddingModel,
-  options: {
-    'text-embedding-3-small': 'text-embedding-3-small (recommended)',
-    'text-embedding-3-large': 'text-embedding-3-large',
-    'text-embedding-ada-002': 'text-embedding-ada-002',
-  },
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Stream replies',
+          instructions: 'Show the answer as it is written instead of when it is finished. Turn off if a proxy or CDN in front of the site buffers responses.',
+          name: 'settings[streamingEnabled]',
+          on: settings.streamingEnabled,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('comment') }}</span>
+      <h2 class="iaa-card__title">Conversation</h2>
+    </div>
+    <div class="iaa-card__body">
+      {{ forms.textField({
+        label: 'Initial Message (default)',
+        instructions: 'Opening message shown when chat starts. Used when no site-specific override is set below.',
+        name: 'settings[initialMessage]',
+        value: settings.initialMessage,
+      }) }}
 
-{{ forms.textField({
-  label: 'Initial Message (default)',
-  instructions: 'Opening message shown when chat starts. Used when no site-specific override is set below.',
-  name: 'settings[initialMessage]',
-  value: settings.initialMessage,
-}) }}
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'AI Disclaimer',
+          instructions: 'Shows a small note under the chat input warning that answers are AI-generated and can be wrong.',
+          name: 'settings[disclaimerEnabled]',
+          on: settings.disclaimerEnabled ?? false,
+          toggle: 'cs-disclaimer-text',
+        }) }}
+      </div>
 
-{{ forms.lightswitchField({
-  label: 'AI Disclaimer',
-  instructions: 'Shows a small note under the chat input warning that answers are AI-generated and can be wrong.',
-  name: 'settings[disclaimerEnabled]',
-  on: settings.disclaimerEnabled ?? false,
-  toggle: 'cs-disclaimer-text',
-}) }}
+      <div id="cs-disclaimer-text" class="{{ (settings.disclaimerEnabled ?? false) ? '' : 'hidden' }}">
+        {{ forms.textField({
+            label: 'Disclaimer Text (default)',
+            instructions: 'Leave empty to use the plugin\'s own wording, translated into each site\'s language.',
+            name: 'settings[disclaimerText]',
+            value: settings.disclaimerText ?? '',
+            placeholder: 'AI assistant — answers can be inaccurate. Please verify important information.',
+          }) }}
+      </div>
 
-<div id="cs-disclaimer-text" class="{{ (settings.disclaimerEnabled ?? false) ? '' : 'hidden' }}">
-  {{ forms.textField({
-    label: 'Disclaimer Text (default)',
-    instructions: 'Leave empty to use the plugin\'s own wording, translated into each site\'s language.',
-    name: 'settings[disclaimerText]',
-    value: settings.disclaimerText ?? '',
-    placeholder: 'AI assistant — answers can be inaccurate. Please verify important information.',
-  }) }}
+      {{ forms.textareaField({
+        label: 'System Prompt (default)',
+        name: 'settings[systemPrompt]',
+        value: settings.systemPrompt,
+        rows: 6,
+      }) }}
+    </div>
+  </div>
 </div>
-
-{{ forms.textareaField({
-  label: 'System Prompt (default)',
-  name: 'settings[systemPrompt]',
-  value: settings.systemPrompt,
-  rows: 6,
-}) }}
 
 {% set allSites = craft.app.sites.getAllSites() %}
 {% if allSites|length > 1 %}
-  <hr>
-  <h2>Per-site translations / overrides</h2>
-  <p class="light">Leave a field blank to fall back to the matching default. Each Craft site can have its own opener, company name, suggestions and system prompt.</p>
-
-  {% for site in allSites %}
-    <div style="border:1px solid #d8dde2;border-radius:6px;padding:14px;margin-bottom:14px;background:#fbfcfd;">
-      <div style="font-weight:600;font-size:14px;margin-bottom:8px;">
-        {{ site.name }}
-        <span class="light" style="font-weight:normal;font-size:11px;">· {{ site.handle }} · {{ site.language }} · {{ site.baseUrl ?: '—' }}</span>
-      </div>
-
-      {{ forms.textField({
-        label: 'Company Name',
-        name: 'settings[companyNames][' ~ site.uid ~ ']',
-        value: settings.companyNames[site.uid] ?? '',
-        placeholder: settings.companyName,
-      }) }}
-
-      {{ forms.textField({
-        label: 'Initial Message',
-        name: 'settings[initialMessages][' ~ site.uid ~ ']',
-        value: settings.initialMessages[site.uid] ?? '',
-        placeholder: settings.initialMessage,
-      }) }}
-
-      {{ forms.textField({
-        label: 'Disclaimer Text',
-        name: 'settings[disclaimerTexts][' ~ site.uid ~ ']',
-        value: settings.disclaimerTexts[site.uid] ?? '',
-        placeholder: settings.disclaimerText ?: 'Plugin default, translated',
-      }) }}
-
-      {{ forms.textareaField({
-        label: 'System Prompt',
-        name: 'settings[systemPrompts][' ~ site.uid ~ ']',
-        value: settings.systemPrompts[site.uid] ?? '',
-        placeholder: settings.systemPrompt,
-        rows: 4,
-      }) }}
+  <div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('earth-europe') }}</span>
+      <h2 class="iaa-card__title">Per-site translations / overrides</h2>
     </div>
-  {% endfor %}
+    <div class="iaa-card__body">
+      <p class="iaa-card__note">Leave a field blank to fall back to the matching default. Each Craft site can have its own opener, company name, suggestions and system prompt.</p>
+    </div>
+
+    {% for site in allSites %}
+      <div class="iaa-card__body iaa-site">
+        <h3 class="iaa-site__name">
+          {{ site.name }}
+          <span class="iaa-site__meta">· {{ site.handle }} · {{ site.language }} · {{ site.baseUrl ?: '—' }}</span>
+        </h3>
+
+        {{ forms.textField({
+                label: 'Company Name',
+                name: 'settings[companyNames][' ~ site.uid ~ ']',
+                value: settings.companyNames[site.uid] ?? '',
+                placeholder: settings.companyName,
+              }) }}
+
+        {{ forms.textField({
+                label: 'Initial Message',
+                name: 'settings[initialMessages][' ~ site.uid ~ ']',
+                value: settings.initialMessages[site.uid] ?? '',
+                placeholder: settings.initialMessage,
+              }) }}
+
+        {{ forms.textField({
+                label: 'Disclaimer Text',
+                name: 'settings[disclaimerTexts][' ~ site.uid ~ ']',
+                value: settings.disclaimerTexts[site.uid] ?? '',
+                placeholder: settings.disclaimerText ?: 'Plugin default, translated',
+              }) }}
+
+        {{ forms.textareaField({
+                label: 'System Prompt',
+                name: 'settings[systemPrompts][' ~ site.uid ~ ']',
+                value: settings.systemPrompts[site.uid] ?? '',
+                placeholder: settings.systemPrompt,
+                rows: 4,
+              }) }}
+      </div>
+    {% endfor %}
+  </div>
+  </div>
 {% endif %}
 
-{{ forms.textField({
-  label: 'Max Context Chunks',
-  name: 'settings[maxContextChunks]',
-  value: settings.maxContextChunks,
-  type: 'number',
-  size: 6,
-}) }}
+<div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('layer-group') }}</span>
+      <h2 class="iaa-card__title">Answer context</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.textField({
+          label: 'Max Context Chunks',
+          name: 'settings[maxContextChunks]',
+          value: settings.maxContextChunks,
+          type: 'number',
+          size: 6,
+        }) }}
 
-{{ forms.textField({
-  label: 'Conversation Memory',
-  instructions: 'How many earlier messages are replayed to the model each turn. Lower is cheaper and faster; higher lets it remember what was agreed earlier in a long conversation.',
-  name: 'settings[historyMessages]',
-  value: settings.historyMessages,
-  type: 'number',
-  min: 2,
-  max: 40,
-  size: 6,
-}) }}
+        {{ forms.textField({
+          label: 'Conversation Memory',
+          instructions: 'How many earlier messages are replayed to the model each turn. Lower is cheaper and faster; higher lets it remember what was agreed earlier in a long conversation.',
+          name: 'settings[historyMessages]',
+          value: settings.historyMessages,
+          type: 'number',
+          min: 2,
+          max: 40,
+          size: 6,
+        }) }}
 
-{{ forms.textField({
-  label: 'Min Similarity Score',
-  instructions: '0.00 to 1.00',
-  name: 'settings[minSimilarityScore]',
-  value: settings.minSimilarityScore,
-  type: 'number',
-  step: '0.01',
-  min: 0,
-  max: 1,
-  size: 6,
-}) }}
+        {{ forms.textField({
+          label: 'Min Similarity Score',
+          instructions: '0.00 to 1.00',
+          name: 'settings[minSimilarityScore]',
+          value: settings.minSimilarityScore,
+          type: 'number',
+          step: '0.01',
+          min: 0,
+          max: 1,
+          size: 6,
+        }) }}
 
-{{ forms.textField({
-  label: 'Relative Score Floor',
-  instructions: 'Also drop chunks scoring far below the best match for the same question, as a fraction of it. 0.7 keeps anything within 30% of the top hit; 0 turns it off. Unlike the absolute floor above, this needs no per-site tuning.',
-  name: 'settings[relativeScoreFloor]',
-  value: settings.relativeScoreFloor,
-  type: 'number',
-  step: '0.05',
-  min: 0,
-  max: 1,
-  size: 6,
-}) }}
+        {{ forms.textField({
+          label: 'Relative Score Floor',
+          instructions: 'Also drop chunks scoring far below the best match for the same question, as a fraction of it. 0.7 keeps anything within 30% of the top hit; 0 turns it off. Unlike the absolute floor above, this needs no per-site tuning.',
+          name: 'settings[relativeScoreFloor]',
+          value: settings.relativeScoreFloor,
+          type: 'number',
+          step: '0.05',
+          min: 0,
+          max: 1,
+          size: 6,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('magnifying-glass') }}</span>
+      <h2 class="iaa-card__title">Retrieval (RAG)</h2>
+    </div>
+    <div class="iaa-card__body">
+      <p class="iaa-card__note">These improve how relevant context is found. Turn any of them off to fall back to the original cosine-only retrieval. No retraining is required.</p>
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'History-aware query rewriting',
+          instructions: 'Rewrites each follow-up ("and the price?") into a standalone query using the conversation before searching, so retrieval understands context. Costs one cheap model call per turn when there is history.',
+          name: 'settings[queryRewriteEnabled]',
+          on: settings.queryRewriteEnabled,
+        }) }}
 
-<hr>
-<h2>Retrieval (RAG)</h2>
-<p class="light">These improve how relevant context is found. Turn any of them off to fall back to the original cosine-only retrieval. No retraining is required.</p>
+        {{ forms.lightswitchField({
+          label: 'Retrieval guard',
+          instructions: 'Skips knowledge-base lookup for greetings, thanks and smalltalk that need no context — saves latency and stops "hello" from pulling random content.',
+          name: 'settings[retrievalGuardEnabled]',
+          on: settings.retrievalGuardEnabled,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'History-aware query rewriting',
-  instructions: 'Rewrites each follow-up ("and the price?") into a standalone query using the conversation before searching, so retrieval understands context. Costs one cheap model call per turn when there is history.',
-  name: 'settings[queryRewriteEnabled]',
-  on: settings.queryRewriteEnabled,
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Hybrid lexical + vector search',
+          instructions: 'Fuses keyword (BM25) matching with embedding similarity via Reciprocal Rank Fusion, so exact terms, product names and numbers are not lost. Pure PHP, no extra services.',
+          name: 'settings[hybridEnabled]',
+          on: settings.hybridEnabled,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Retrieval guard',
-  instructions: 'Skips knowledge-base lookup for greetings, thanks and smalltalk that need no context — saves latency and stops "hello" from pulling random content.',
-  name: 'settings[retrievalGuardEnabled]',
-  on: settings.retrievalGuardEnabled,
-}) }}
+        {{ forms.textField({
+          label: 'RRF constant (k)',
+          instructions: 'Reciprocal Rank Fusion constant. Higher flattens the fusion. Default 60.',
+          name: 'settings[rrfK]',
+          value: settings.rrfK,
+          type: 'number',
+          size: 6,
+          min: 1,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Hybrid lexical + vector search',
-  instructions: 'Fuses keyword (BM25) matching with embedding similarity via Reciprocal Rank Fusion, so exact terms, product names and numbers are not lost. Pure PHP, no extra services.',
-  name: 'settings[hybridEnabled]',
-  on: settings.hybridEnabled,
-}) }}
+        {{ forms.textField({
+          label: 'Candidate pool size',
+          instructions: 'How many chunks to retrieve before reranking down to Max Context Chunks (5–100). Larger pools give the reranker more to work with. Default 30.',
+          name: 'settings[retrievalCandidatePool]',
+          value: settings.retrievalCandidatePool,
+          type: 'number',
+          size: 6,
+          min: 5,
+          max: 100,
+        }) }}
 
-{{ forms.textField({
-  label: 'RRF constant (k)',
-  instructions: 'Reciprocal Rank Fusion constant. Higher flattens the fusion. Default 60.',
-  name: 'settings[rrfK]',
-  value: settings.rrfK,
-  type: 'number',
-  size: 6,
-  min: 1,
-}) }}
+        {{ forms.selectField({
+          label: 'Rerank mode',
+          instructions: 'How the candidate pool is reduced to the final context. "LLM rerank" scores candidates with a cheap model call (best quality). "MMR" diversifies in PHP for free. "Off" keeps the fused order.',
+          name: 'settings[rerankMode]',
+          value: settings.rerankMode,
+          options: {
+            llm: 'LLM rerank (recommended)',
+            mmr: 'MMR (free, in-PHP)',
+            off: 'Off (fused order)',
+          },
+        }) }}
 
-{{ forms.textField({
-  label: 'Candidate pool size',
-  instructions: 'How many chunks to retrieve before reranking down to Max Context Chunks (5–100). Larger pools give the reranker more to work with. Default 30.',
-  name: 'settings[retrievalCandidatePool]',
-  value: settings.retrievalCandidatePool,
-  type: 'number',
-  size: 6,
-  min: 5,
-  max: 100,
-}) }}
+        {{ forms.textField({
+          label: 'MMR lambda',
+          instructions: 'Only used when rerank mode is MMR. Relevance vs. diversity trade-off: 1.0 = pure relevance, 0.0 = pure diversity. Default 0.7.',
+          name: 'settings[mmrLambda]',
+          value: settings.mmrLambda,
+          type: 'number',
+          step: '0.05',
+          min: 0,
+          max: 1,
+          size: 6,
+        }) }}
 
-{{ forms.selectField({
-  label: 'Rerank mode',
-  instructions: 'How the candidate pool is reduced to the final context. "LLM rerank" scores candidates with a cheap model call (best quality). "MMR" diversifies in PHP for free. "Off" keeps the fused order.',
-  name: 'settings[rerankMode]',
-  value: settings.rerankMode,
-  options: {
-    llm: 'LLM rerank (recommended)',
-    mmr: 'MMR (free, in-PHP)',
-    off: 'Off (fused order)',
-  },
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Per-site retrieval filter',
+          instructions: 'Restrict retrieval to the current site’s content (plus site-agnostic URL/file/Q&A chunks), so a query on one site/language does not pull another’s. Takes effect after a retrain populates chunk metadata.',
+          name: 'settings[siteFilterEnabled]',
+          on: settings.siteFilterEnabled,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('folder-tree') }}</span>
+      <h2 class="iaa-card__title">Indexing &amp; chunking</h2>
+    </div>
+    <div class="iaa-card__body">
+      <p class="iaa-card__note">How content is split and embedded at training time. <strong>Changing any setting below requires a full retrain</strong> to take effect on existing content — run <code>php craft interactive-ai-assistant/rag/retrain-all</code> or use the button below.</p>
+      <div class="iaa-rows">
+        {{ forms.textField({
+          label: 'Chunk size',
+          instructions: 'Target chunk length in characters (~4 chars per token). Smaller = more precise retrieval. Default 1200 (~300 tokens).',
+          name: 'settings[chunkSize]',
+          value: settings.chunkSize,
+          type: 'number',
+          size: 6,
+          min: 300,
+          max: 4000,
+        }) }}
 
-{{ forms.textField({
-  label: 'MMR lambda',
-  instructions: 'Only used when rerank mode is MMR. Relevance vs. diversity trade-off: 1.0 = pure relevance, 0.0 = pure diversity. Default 0.7.',
-  name: 'settings[mmrLambda]',
-  value: settings.mmrLambda,
-  type: 'number',
-  step: '0.05',
-  min: 0,
-  max: 1,
-  size: 6,
-}) }}
+        {{ forms.textField({
+          label: 'Chunk overlap',
+          instructions: 'Characters carried between adjacent chunks for context continuity. Default 150.',
+          name: 'settings[chunkOverlap]',
+          value: settings.chunkOverlap,
+          type: 'number',
+          size: 6,
+          min: 0,
+          max: 1000,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Per-site retrieval filter',
-  instructions: 'Restrict retrieval to the current site’s content (plus site-agnostic URL/file/Q&A chunks), so a query on one site/language does not pull another’s. Takes effect after a retrain populates chunk metadata.',
-  name: 'settings[siteFilterEnabled]',
-  on: settings.siteFilterEnabled,
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Contextual chunk prefix',
+          instructions: 'Prepend a “Document title › Section” breadcrumb to each chunk before embedding (and keep it in stored content), so retrieval and the model know where each chunk came from.',
+          name: 'settings[contextualPrefixEnabled]',
+          on: settings.contextualPrefixEnabled,
+        }) }}
 
-<hr>
-<h2>Indexing &amp; chunking</h2>
-<p class="light">How content is split and embedded at training time. <strong>Changing any setting below requires a full retrain</strong> to take effect on existing content — run <code>php craft interactive-ai-assistant/rag/retrain-all</code> or use the button below.</p>
+        {{ forms.textField({
+          label: 'Embedding dimensions',
+          instructions: 'Output dimensions for text-embedding-3-* models. 0 = model default (1536 for 3-small, 3072 for 3-large). Capping 3-large to 1536 gives near-large quality at small-model storage.',
+          name: 'settings[embeddingDimensions]',
+          value: settings.embeddingDimensions,
+          type: 'number',
+          size: 6,
+          min: 0,
+          max: 3072,
+        }) }}
+      </div>
+    </div>
+    <div class="iaa-card__foot">
+      {# NOTE: must NOT be a nested <form> or carry an actionInput — this template is
+         rendered inside the plugin-settings form, and a leaked actionInput would
+         hijack the Save button. Use a plain button that POSTs via JS instead. #}
+      <div class="field iaa-retrain">
+        <div class="heading"><label>Retrain all content</label></div>
+        <div class="instructions"><p>Re-chunk and re-embed every trained source under the current settings above. Queues background jobs (Q&amp;A runs inline). Run after changing indexing settings or upgrading the plugin.</p></div>
+        <div class="iaa-retrain__action">
+          <button type="button" class="btn" id="cs-retrain-all">Retrain all now</button>
+          <span id="cs-retrain-all-status" class="light"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('wand-magic-sparkles') }}</span>
+      <h2 class="iaa-card__title">Agent &amp; skills</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Enable agent mode (skills)',
+          instructions: 'When on, the assistant can call registered "skills" (tools) to fetch live data or perform actions, in addition to answering from trained content. When off, it is pure retrieval Q&A.',
+          name: 'settings[agentModeEnabled]',
+          on: settings.agentModeEnabled,
+        }) }}
 
-{{ forms.textField({
-  label: 'Chunk size',
-  instructions: 'Target chunk length in characters (~4 chars per token). Smaller = more precise retrieval. Default 1200 (~300 tokens).',
-  name: 'settings[chunkSize]',
-  value: settings.chunkSize,
-  type: 'number',
-  size: 6,
-  min: 300,
-  max: 4000,
-}) }}
+        {{ forms.textField({
+          label: 'Max tool iterations',
+          instructions: 'Safety cap on how many tool-call rounds a single answer may take (1–10).',
+          name: 'settings[maxToolIterations]',
+          value: settings.maxToolIterations,
+          type: 'number',
+          size: 4,
+          min: 1,
+          max: 10,
+        }) }}
 
-{{ forms.textField({
-  label: 'Chunk overlap',
-  instructions: 'Characters carried between adjacent chunks for context continuity. Default 150.',
-  name: 'settings[chunkOverlap]',
-  value: settings.chunkOverlap,
-  type: 'number',
-  size: 6,
-  min: 0,
-  max: 1000,
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Enable conversational forms',
+          instructions: 'Lets the assistant collect and submit admin-defined forms (e.g. lead/quote requests) to a webhook/CRM or email. Adds the Forms and Submissions screens. Requires agent mode. Off by default.',
+          name: 'settings[formsEnabled]',
+          on: settings.formsEnabled ?? false,
+        }) }}
+      </div>
 
-{{ forms.lightswitchField({
-  label: 'Contextual chunk prefix',
-  instructions: 'Prepend a “Document title › Section” breadcrumb to each chunk before embedding (and keep it in stored content), so retrieval and the model know where each chunk came from.',
-  name: 'settings[contextualPrefixEnabled]',
-  on: settings.contextualPrefixEnabled,
-}) }}
-
-{{ forms.textField({
-  label: 'Embedding dimensions',
-  instructions: 'Output dimensions for text-embedding-3-* models. 0 = model default (1536 for 3-small, 3072 for 3-large). Capping 3-large to 1536 gives near-large quality at small-model storage.',
-  name: 'settings[embeddingDimensions]',
-  value: settings.embeddingDimensions,
-  type: 'number',
-  size: 6,
-  min: 0,
-  max: 3072,
-}) }}
-
-<div class="field">
-  <div class="heading"><label>Retrain all content</label></div>
-  <div class="instructions"><p>Re-chunk and re-embed every trained source under the current settings above. Queues background jobs (Q&amp;A runs inline). Run after changing indexing settings or upgrading the plugin.</p></div>
-  {# NOTE: must NOT be a nested <form> or carry an actionInput — this template is
-     rendered inside the plugin-settings form, and a leaked actionInput would
-     hijack the Save button. Use a plain button that POSTs via JS instead. #}
-  <button type="button" class="btn" id="cs-retrain-all">Retrain all now</button>
-  <span id="cs-retrain-all-status" class="light" style="margin-left:8px;"></span>
+      {% if settings.formsEnabled %}
+        <p class="light iaa-ai__formslink">Manage forms under <a href="{{ url('interactive-ai-assistant/forms') }}">Forms</a>; review captures under <a href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">Submissions</a>.</p>
+      {% endif %}
+    </div>
+  </div>
 </div>
 
 {% js %}
@@ -333,77 +428,58 @@ document.getElementById('cs-retrain-all')?.addEventListener('click', function (e
 });
 {% endjs %}
 
-<hr>
-<h2>Agent &amp; skills</h2>
-
-{{ forms.lightswitchField({
-  label: 'Enable agent mode (skills)',
-  instructions: 'When on, the assistant can call registered "skills" (tools) to fetch live data or perform actions, in addition to answering from trained content. When off, it is pure retrieval Q&A.',
-  name: 'settings[agentModeEnabled]',
-  on: settings.agentModeEnabled,
-}) }}
-
-{{ forms.textField({
-  label: 'Max tool iterations',
-  instructions: 'Safety cap on how many tool-call rounds a single answer may take (1–10).',
-  name: 'settings[maxToolIterations]',
-  value: settings.maxToolIterations,
-  type: 'number',
-  size: 4,
-  min: 1,
-  max: 10,
-}) }}
-
-{{ forms.lightswitchField({
-  label: 'Enable conversational forms',
-  instructions: 'Lets the assistant collect and submit admin-defined forms (e.g. lead/quote requests) to a webhook/CRM or email. Adds the Forms and Submissions screens. Requires agent mode. Off by default.',
-  name: 'settings[formsEnabled]',
-  on: settings.formsEnabled ?? false,
-}) }}
-
-{% if settings.formsEnabled %}
-  <p class="light" style="margin-top:-8px;">Manage forms under <a href="{{ url('interactive-ai-assistant/forms') }}">Forms</a>; review captures under <a href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">Submissions</a>.</p>
-{% endif %}
-
 {% if settings.agentModeEnabled %}
   {% set formNames = [] %}
   {% if settings.formsEnabled %}
     {% for f in settings.formDefinitions() %}{% set formNames = formNames|merge([f.name]) %}{% endfor %}
   {% endif %}
-  <h3>Registered skills</h3>
-  {% if capabilities|length %}
-    <p class="light">Choose where each skill is available. <strong>Admins only</strong> exposes it just to logged-in control-panel users — handy for testing on the live site before turning it on for everyone.</p>
-    <table class="data fullwidth">
-      <thead>
-        <tr><th scope="col">Skill</th><th scope="col">Description</th><th scope="col" style="width:180px;">Availability</th></tr>
-      </thead>
-      <tbody>
-        {% for cap in capabilities %}
-          <tr>
-            <td>
-              {% if cap.name() in formNames %}
-                <a href="{{ url('interactive-ai-assistant/forms/edit/' ~ cap.name()) }}" title="Edit this form"><code>{{ cap.name() }}</code></a>
-              {% else %}
-                <code>{{ cap.name() }}</code>
-              {% endif %}
-            </td>
-            <td class="light">{{ cap.description() }}</td>
-            <td>
-              {{ forms.select({
-                name: 'settings[capabilityStates][' ~ cap.name() ~ ']',
-                value: settings.capabilityState(cap.name()),
-                options: {
-                  off: 'Off',
-                  on: 'Enabled (everyone)',
-                  admins: 'Admins only (testing)',
-                },
-              }) }}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="light">No skills are registered yet. Plugins or modules add them via the <code>Capabilities::EVENT_REGISTER_CAPABILITIES</code> event.</p>
-  {% endif %}
+  <div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('plug') }}</span>
+      <h2 class="iaa-card__title">Registered skills</h2>
+    </div>
+    {% if capabilities|length %}
+      <div class="iaa-card__body">
+        <p class="iaa-card__note">Choose where each skill is available. <strong>Admins only</strong> exposes it just to logged-in control-panel users — handy for testing on the live site before turning it on for everyone.</p>
+      </div>
+      <div class="iaa-card__body iaa-card__body--flush">
+        <table class="data fullwidth">
+          <thead>
+            <tr><th scope="col">Skill</th><th scope="col">Description</th><th scope="col" class="iaa-ai__avail">Availability</th></tr>
+          </thead>
+          <tbody>
+            {% for cap in capabilities %}
+              <tr>
+                <td>
+                  {% if cap.name() in formNames %}
+                    <a href="{{ url('interactive-ai-assistant/forms/edit/' ~ cap.name()) }}" title="Edit this form"><code>{{ cap.name() }}</code></a>
+                  {% else %}
+                    <code>{{ cap.name() }}</code>
+                  {% endif %}
+                </td>
+                <td class="light">{{ cap.description() }}</td>
+                <td>
+                  {{ forms.select({
+                                  name: 'settings[capabilityStates][' ~ cap.name() ~ ']',
+                                  value: settings.capabilityState(cap.name()),
+                                  options: {
+                                    off: 'Off',
+                                    on: 'Enabled (everyone)',
+                                    admins: 'Admins only (testing)',
+                                  },
+                                }) }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="iaa-empty">
+        <p>No skills are registered yet. Plugins or modules add them via the <code>Capabilities::EVENT_REGISTER_CAPABILITIES</code> event.</p>
+      </div>
+    {% endif %}
+  </div>
+  </div>
 {% endif %}

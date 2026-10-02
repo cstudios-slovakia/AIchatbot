@@ -7,33 +7,74 @@
   {% set labels = labels|merge({ (field.name): (field.label ?: field.name) }) %}
 {% endfor %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
 {% block content %}
+  {% set statusTones = { pending: 'warn', sent: 'good', failed: 'bad' } %}
   <p>
-    <a href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">← All submissions</a>
+    <a class="btn" href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">← All submissions</a>
   </p>
 
-  <div class="meta" style="margin-bottom:18px;">
-    <div><strong>Form:</strong> <code>{{ submission.formName }}</code> {{ form.label ? '(' ~ form.label ~ ')' }}</div>
-    <div><strong>Status:</strong> {{ submission.status|capitalize }}</div>
-    <div><strong>Received:</strong> {{ submission.dateCreated|date('Y-m-d H:i:s') }}</div>
-    {% if submission.sessionId %}<div><strong>Session:</strong> #{{ submission.sessionId }}</div>{% endif %}
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide iaa-card--accent">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('envelope') }}</span>
+        <h2 class="iaa-card__title">{{ title }}</h2>
+      </div>
+      <div class="iaa-card__body">
+        <dl class="iaa-facts">
+          <div class="iaa-fact">
+            <dt class="iaa-fact__label">Form:</dt>
+            <dd class="iaa-fact__value"><code>{{ submission.formName }}</code> {{ form.label ? '(' ~ form.label ~ ')' }}</dd>
+          </div>
+          <div class="iaa-fact">
+            <dt class="iaa-fact__label">Status:</dt>
+            <dd class="iaa-fact__value"><span class="iaa-chip {{ statusTones[submission.status] is defined ? 'iaa-chip--' ~ statusTones[submission.status] }}">{{ submission.status|capitalize }}</span></dd>
+          </div>
+          <div class="iaa-fact">
+            <dt class="iaa-fact__label">Received:</dt>
+            <dd class="iaa-fact__value">{{ submission.dateCreated|date('Y-m-d H:i:s') }}</dd>
+          </div>
+          {% if submission.sessionId %}
+            <div class="iaa-fact">
+              <dt class="iaa-fact__label">Session:</dt>
+              <dd class="iaa-fact__value">#{{ submission.sessionId }}</dd>
+            </div>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('list-check') }}</span>
+        <h2 class="iaa-card__title">Answers</h2>
+      </div>
+      <div class="iaa-card__body iaa-card__body--flush">
+        <table class="data fullwidth iaa-answers">
+          <tbody>
+            {% for key, value in data %}
+              <tr>
+                <th scope="row">{{ labels[key] ?? key }}</th>
+                {# Checkbox groups store a list, a consent box a boolean. #}
+                <td>{{ value is iterable ? value|join(', ') : (value is same as(true) ? 'Yes' : (value is same as(false) ? 'No' : value)) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if submission.deliveryLog %}
+      <div class="iaa-card iaa-card--wide {{ submission.status == 'failed' ? 'iaa-card--bad' }}">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('paper-plane') }}</span>
+          <h2 class="iaa-card__title">Delivery log</h2>
+        </div>
+        <div class="iaa-card__body">
+          <pre class="iaa-pre">{{ submission.deliveryLog }}</pre>
+        </div>
+      </div>
+    {% endif %}
   </div>
-
-  <h2>Answers</h2>
-  <table class="data fullwidth">
-    <tbody>
-      {% for key, value in data %}
-        <tr>
-          <th scope="row" style="width:30%;">{{ labels[key] ?? key }}</th>
-          {# Checkbox groups store a list, a consent box a boolean. #}
-          <td>{{ value is iterable ? value|join(', ') : (value is same as(true) ? 'Yes' : (value is same as(false) ? 'No' : value)) }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  {% if submission.deliveryLog %}
-    <h2>Delivery log</h2>
-    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:6px;">{{ submission.deliveryLog }}</pre>
-  {% endif %}
 {% endblock %}

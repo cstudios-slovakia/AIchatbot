@@ -9,6 +9,8 @@
 {% set replyUrl = actionUrl('interactive-ai-assistant/handoff/reply') %}
 {% set endUrl = actionUrl('interactive-ai-assistant/handoff/end') %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
 {% block content %}
   <div id="lc-root" data-current-user-id="{{ currentUser.id }}" data-selected-session="{{ selectedSessionId ?: '' }}"
        data-poll-url="{{ pollUrl }}"
@@ -19,18 +21,20 @@
        data-end-url="{{ endUrl }}">
     <div class="lc-grid">
       <aside class="lc-sidebar">
-        <h2 class="lc-section-title">Waiting <span class="lc-count" id="lc-waiting-count">0</span></h2>
+        <h2 class="lc-section-title lc-section-title--waiting"><span class="lc-section-icon">{{ icons.svg('user-clock') }}</span>Waiting <span class="lc-count" id="lc-waiting-count">0</span></h2>
         <ul class="lc-list" id="lc-waiting"></ul>
-        <h2 class="lc-section-title">Active <span class="lc-count" id="lc-active-count">0</span></h2>
+        <h2 class="lc-section-title lc-section-title--active"><span class="lc-section-icon">{{ icons.svg('comments') }}</span>Active <span class="lc-count" id="lc-active-count">0</span></h2>
         <ul class="lc-list" id="lc-active"></ul>
       </aside>
       <section class="lc-chat" id="lc-chat">
         <div class="lc-empty" id="lc-empty">
+          <span class="lc-empty-icon">{{ icons.svg('headset') }}</span>
           <p class="light">Pick a session from the left to start chatting.</p>
         </div>
         <div class="lc-pane" id="lc-pane" style="display:none;">
           <header class="lc-pane-head">
-            <div>
+            <span class="lc-pane-icon">{{ icons.svg('message') }}</span>
+            <div class="lc-pane-id">
               <strong id="lc-pane-title">Session</strong>
               <code class="lc-short-id" id="lc-short-id" title="Conversation ID"></code>
               <span class="lc-rating" id="lc-rating"></span>
@@ -80,7 +84,7 @@
           </div>
           <form class="lc-form" id="lc-form" autocomplete="off">
             <textarea id="lc-input" class="text fullwidth" placeholder="Type a reply… (Shift+Enter for newline)" rows="1" disabled></textarea>
-            <button type="button" class="btn lc-link-entry-btn" id="lc-link-entry" title="Insert link to an entry (renders as a preview card)" disabled>🔗</button>
+            <button type="button" class="btn lc-link-entry-btn" id="lc-link-entry" title="Insert link to an entry (renders as a preview card)" aria-label="Insert link to an entry" disabled>{{ icons.svg('link') }}</button>
             <button type="submit" class="btn submit" id="lc-send" disabled>Send</button>
           </form>
         </div>
@@ -88,153 +92,6 @@
     </div>
   </div>
 
-  <style>
-    .lc-grid { display:grid; grid-template-columns: 320px 1fr; gap:14px; height: calc(100vh - 220px); min-height: 520px; }
-    .lc-sidebar { border:1px solid var(--medium-hairline-color,#cdd8e4); border-radius:6px; background:var(--gray-050,#fff); overflow:auto; padding:8px; }
-    .lc-chat { border:1px solid var(--medium-hairline-color,#cdd8e4); border-radius:6px; background:#fff; display:flex; flex-direction:column; overflow:hidden; }
-    .lc-section-title { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#596673; padding:8px 6px 4px; margin:0; display:flex; align-items:center; gap:6px;}
-    .lc-count { background:#e6e9ec; color:#3f4d5a; border-radius:10px; padding:0 6px; font-size:11px; font-weight:600;}
-    .lc-list { list-style:none; padding:0; margin:0; }
-    .lc-list li { padding:8px 10px; border-radius:4px; cursor:pointer; margin-bottom:2px; }
-    .lc-list li:hover { background:#eef2f7;}
-    .lc-list li.is-selected { background: #d6e4f5; }
-    .lc-list .lc-row-top { display:flex; justify-content:space-between; align-items:center; font-weight:500; font-size:13px;}
-    .lc-list .lc-preview { font-size:12px; color:#596673; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-    .lc-list .lc-unread { background:#e12d39; color:#fff; border-radius:10px; padding:0 6px; font-size:11px; font-weight:600;}
-
-    /* Subtle color coding per section */
-    #lc-waiting-count { background:#fde2e2; color:#a92027; }
-    #lc-waiting li {
-      background: linear-gradient(90deg, rgba(225,45,57,0.10), rgba(225,45,57,0.03));
-      border-left: 3px solid #e12d39;
-      padding-left: 9px;
-      animation: lc-waiting-pulse 2.4s ease-in-out infinite;
-    }
-    #lc-waiting li:hover { background: linear-gradient(90deg, rgba(225,45,57,0.18), rgba(225,45,57,0.06)); }
-    #lc-waiting li.is-selected { background: rgba(225,45,57,0.20); border-left-color:#a92027; }
-    @keyframes lc-waiting-pulse {
-      0%, 100% { box-shadow: inset 3px 0 0 #e12d39, 0 0 0 0 rgba(225,45,57,0); }
-      50%      { box-shadow: inset 3px 0 0 #e12d39, 0 0 0 2px rgba(225,45,57,0.10); }
-    }
-
-    #lc-active-count { background:#dbeafe; color:#1d4ed8; }
-    #lc-active li {
-      background: linear-gradient(90deg, rgba(37,99,235,0.08), rgba(37,99,235,0.02));
-      border-left: 3px solid #2563eb;
-      padding-left: 9px;
-    }
-    #lc-active li:hover { background: linear-gradient(90deg, rgba(37,99,235,0.16), rgba(37,99,235,0.04)); }
-    #lc-active li.is-selected { background: rgba(37,99,235,0.22); border-left-color:#1d4ed8; }
-
-    .lc-row-actions { display:inline-flex; gap:2px; align-items:center; margin-left:auto; }
-    .lc-icon-btn { background:transparent; border:0; cursor:pointer; padding:0 4px; font-size:13px; line-height:1; color:#596673; border-radius:4px; }
-    .lc-icon-btn:hover { background:rgba(0,0,0,.06); color:#111; }
-    .lc-star-btn { color:#c08a1e; }
-    .lc-star-mark { color:#c08a1e; font-weight:600; }
-    .lc-list li.is-starred { box-shadow: inset 4px 0 0 #f5b400; }
-
-    /* Muted: dim + suppress pulse + neutralize the urgent gradient */
-    .lc-list li.is-muted { opacity:.55; animation:none !important; background:#f5f7fa !important; border-left-color:#cdd8e4 !important; box-shadow:none !important;}
-    .lc-list li.is-muted .lc-unread { background:#9ca3af; }
-    .lc-list li.is-muted:hover { opacity:.8; }
-    .lc-empty { padding:30px; text-align:center; }
-    .lc-pane { display:flex; flex-direction:column; flex:1; min-height:0;}
-    .lc-pane-head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #e1e6ec;}
-    .lc-pane-sub { color:#596673; font-size:12px;}
-    .lc-messages { flex:1; overflow-y:auto; padding:14px; background:#f7f9fb;}
-    .lc-msg { max-width:75%; padding:8px 12px; border-radius:12px; margin-bottom:8px; font-size:14px; line-height:1.4; white-space:pre-wrap; word-wrap:break-word;}
-    .lc-msg--user { background:#fff; border:1px solid #e1e6ec; align-self:flex-start;}
-    .lc-msg--bot { background:#eef2f7; align-self:flex-start; color:#3f4d5a; font-style:italic;}
-    .lc-msg--admin { background:#2563eb; color:#fff; margin-left:auto;}
-    .lc-msg-row--cont { margin-top:-6px; }
-    .lc-msg--cont { margin-bottom:4px; }
-    .lc-msg--user.lc-msg--cont, .lc-msg--bot.lc-msg--cont { border-top-left-radius:4px; }
-    .lc-msg--admin.lc-msg--cont { border-top-right-radius:4px; }
-    .lc-short-id { display:inline-block; margin-left:8px; font-size:11px; padding:2px 6px; background:#eef2f7; color:#3f4d5a; border-radius:4px; font-family:ui-monospace,Menlo,monospace; cursor:pointer; }
-    .lc-short-id:hover { background:#d6e4f5; }
-    .lc-rating { display:inline-block; margin-left:6px; font-size:13px; }
-    .lc-msg { position:relative; }
-    .lc-msg[data-time]::after { content: attr(data-time); position:absolute; top:50%; transform:translateY(-50%); font-size:10px; color:#596673; background:#fff; padding:2px 6px; border:1px solid #cdd8e4; border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s ease; z-index:2; }
-    .lc-msg--admin[data-time]::after { right: calc(100% + 6px); }
-    .lc-msg--user[data-time]::after, .lc-msg--bot[data-time]::after { left: calc(100% + 6px); }
-    .lc-msg:hover[data-time]::after { opacity:1; }
-    .lc-msg-time { font-size:10px; color:#8a96a3; margin:-6px 1px 4px; padding:0 4px; }
-    .lc-msg--system { background:transparent; color:#8a96a3; font-size:12px; text-align:center; width:100%; max-width:100%; padding:4px;}
-    .lc-msg--md { white-space:normal; font-style:normal; overflow-wrap:anywhere; word-break:break-word; }
-    .lc-msg--md a { overflow-wrap:anywhere; word-break:break-word; }
-    .lc-msg--md > :first-child { margin-top:0; }
-    .lc-msg--md > :last-child { margin-bottom:0; }
-    .lc-msg--md p { margin:0 0 6px; }
-    .lc-msg--md p:last-child { margin-bottom:0; }
-    .lc-msg--md ul, .lc-msg--md ol { margin:4px 0; padding-left:20px; }
-    .lc-msg--md li { margin:1px 0; }
-    .lc-msg--md h1, .lc-msg--md h2, .lc-msg--md h3, .lc-msg--md h4, .lc-msg--md h5, .lc-msg--md h6 { margin:6px 0 4px; font-weight:600; line-height:1.25; }
-    .lc-msg--md h1 { font-size:1.2em; }
-    .lc-msg--md h2 { font-size:1.12em; }
-    .lc-msg--md h3, .lc-msg--md h4, .lc-msg--md h5, .lc-msg--md h6 { font-size:1em; }
-    .lc-msg--md code { background:rgba(0,0,0,0.08); padding:1px 5px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.92em; }
-    .lc-msg--md pre { background:rgba(0,0,0,0.08); padding:8px 10px; border-radius:8px; overflow-x:auto; margin:6px 0; }
-    .lc-msg--md pre code { background:transparent; padding:0; border-radius:0; font-size:0.9em; }
-    .lc-msg--md a { color:inherit; text-decoration:underline; }
-    .lc-msg--md a[data-cs-href]:hover::after {
-      content: "↗ " attr(data-cs-href);
-      position:absolute; bottom:calc(100% + 4px); right:0; left:auto;
-      max-width:100%;
-      background:#111827; color:#f9fafb;
-      padding:4px 8px; border-radius:4px;
-      font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      z-index:9999; pointer-events:none;
-      box-shadow:0 2px 8px rgba(0,0,0,0.2);
-    }
-    .lc-msg--admin.lc-msg--md code, .lc-msg--admin.lc-msg--md pre { background:rgba(255,255,255,0.18); }
-    .lc-link-card { display:flex; gap:10px; align-items:stretch; background:#fff; border:1px solid #e1e6ec; border-radius:10px; padding:8px; text-decoration:none; color:inherit; margin:6px 0; overflow:hidden; }
-    .lc-link-card:hover { border-color:#2563eb; }
-    .lc-link-card-img { width:64px; min-width:64px; height:64px; border-radius:6px; background-size:cover; background-position:center; background-color:#e1e6ec; }
-    .lc-link-card-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
-    .lc-link-card-site { font-size:10px; color:inherit; opacity:0.65; text-transform:uppercase; letter-spacing:.04em; }
-    .lc-link-card-title { font-size:13px; font-weight:600; line-height:1.25; color:inherit; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-    .lc-link-card-desc { font-size:12px; color:inherit; opacity:0.8; line-height:1.35; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-    .lc-msg--admin .lc-link-card { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.25); }
-    .lc-link-carousel { position:relative; margin:6px 0; padding-bottom:22px; }
-    .lc-link-carousel-viewport { overflow:hidden; border-radius:10px; }
-    .lc-link-carousel-track { display:flex; flex-wrap:nowrap; transition:transform .25s ease; will-change:transform; }
-    .lc-link-carousel-item { flex:0 0 100%; min-width:0; margin:0 !important; }
-    .lc-link-carousel-btn { position:absolute; top:50%; width:28px; height:28px; margin-top:-22px; border-radius:50%; border:1px solid #e1e6ec; background:#fff; color:#3f4d5a; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 2px 6px rgba(0,0,0,.15); z-index:2; }
-    .lc-link-carousel-btn:hover:not(:disabled) { border-color:#2563eb; color:#2563eb; }
-    .lc-link-carousel-btn:disabled { opacity:.35; cursor:not-allowed; }
-    .lc-link-carousel-btn--prev { left:4px; }
-    .lc-link-carousel-btn--next { right:4px; }
-    .lc-link-carousel-dots { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:center; gap:6px; padding:4px 0 2px; }
-    .lc-link-carousel-dot { width:6px; height:6px; border-radius:50%; border:0; padding:0; background:#cdd8e4; cursor:pointer; transition:background .15s, transform .15s; }
-    .lc-link-carousel-dot.is-active { background:#2563eb; transform:scale(1.4); }
-    .lc-msg-row { display:flex;}
-    .lc-msg-row--right { justify-content:flex-end;}
-    .lc-msg-meta { font-size:11px; color:#8a96a3; margin-bottom:2px;}
-    .lc-form { display:flex; gap:8px; padding:10px; border-top:1px solid #e1e6ec; background:#fff; align-items:flex-end;}
-    .lc-link-entry-btn { padding:0 12px !important; font-size:16px; line-height:34px; height:34px; }
-    .lc-form .text { flex:1; }
-    #lc-input { resize:none; min-height:34px; max-height:200px; overflow-y:auto; font-family:inherit; line-height:1.4; }
-    .lc-claim-zone { padding:14px; border-top:1px solid #e1e6ec; background:#f7f9fb; text-align:center; }
-    .lc-claim-big { font-size:15px !important; padding:12px 24px !important; flex:1; }
-    .lc-claim-row { display:flex; gap:8px; align-items:stretch; }
-    .lc-quick-end { display:flex; gap:2px; }
-    .lc-quick-end-menu-btn { padding:12px 14px !important; font-weight:600; }
-    #lc-quick-end-menu { position:absolute; right:0; bottom:100%; top:auto; margin-bottom:6px; min-width:220px; box-shadow:0 -6px 18px rgba(0,0,0,.08); }
-    .lc-claim-hint { margin:8px 0 0; color:#596673; font-size:12px; }
-    .lc-templates { display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px 0; background:#fff; border-top:1px solid #e1e6ec;}
-    .lc-tpl { background:transparent; border:1px solid #cdd8e4; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; color:#3f4d5a; max-width:100%; text-align:left;}
-    .lc-tpl:hover { border-color:#2563eb; color:#2563eb; }
-    .lc-tpl-multi { opacity:.55; font-weight:600; margin-left:2px; }
-    .lc-pane-actions { display:flex; gap:4px; align-items:center; }
-    .lc-end-menu-btn { padding:4px 6px !important; font-weight:600; }
-    .lc-end-menu { position:absolute; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #cdd8e4; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.08); min-width:200px; z-index:50; display:none; overflow:hidden; }
-    .lc-end-menu.is-open { display:block; }
-    .lc-end-menu button { display:block; width:100%; text-align:left; background:transparent; border:0; padding:8px 12px; font-size:13px; cursor:pointer; color:#3f4d5a; }
-    .lc-end-menu button:hover { background:#f3f6fa; color:#2563eb; }
-    .lc-end-menu-sep { padding:6px 12px 2px; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#8895a4; border-top:1px solid #eef2f6; margin-top:2px; }
-    .lc-tpl:disabled { opacity:.4; cursor:not-allowed; }
-  </style>
 
   <script>
     (function () {

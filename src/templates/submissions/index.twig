@@ -9,77 +9,97 @@
 
 {% set totalPages = total > 0 ? ((total - 1) // perPage) + 1 : 0 %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
 {% block content %}
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-    <form method="get" style="display:flex;gap:8px;align-items:center;">
-      <select name="form" class="" onchange="this.form.submit()">
-        <option value="">All forms</option>
-        {% for f in formOptions %}
-          <option value="{{ f.name }}" {{ formName == f.name ? 'selected' }}>{{ (f.label ?: f.name)|t('site') }}</option>
-        {% endfor %}
-      </select>
-      <select name="status" onchange="this.form.submit()">
-        <option value="">Any status</option>
-        {% for s in ['pending', 'sent', 'failed'] %}
-          <option value="{{ s }}" {{ status == s ? 'selected' }}>{{ s|capitalize }}</option>
-        {% endfor %}
-      </select>
-    </form>
-    <span class="light">{{ total }} submission{{ total == 1 ? '' : 's' }}</span>
-    {% if unread ?? 0 %}
-      <span style="color:#7c3aed;font-weight:600;">{{ unread }} new</span>
-    {% endif %}
+  <form method="get" class="iaa-filters">
+    <div class="field field--narrow">
+      <div class="select">
+        <select name="form" onchange="this.form.submit()" aria-label="All forms">
+          <option value="">All forms</option>
+          {% for f in formOptions %}
+            <option value="{{ f.name }}" {{ formName == f.name ? 'selected' }}>{{ (f.label ?: f.name)|t('site') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field field--narrow">
+      <div class="select">
+        <select name="status" onchange="this.form.submit()" aria-label="Any status">
+          <option value="">Any status</option>
+          {% for s in ['pending', 'sent', 'failed'] %}
+            <option value="{{ s }}" {{ status == s ? 'selected' }}>{{ s|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </form>
+
+  {% set statusTones = { pending: 'warn', sent: 'good', failed: 'bad' } %}
+
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide iaa-card--accent">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('envelope') }}</span>
+        <h2 class="iaa-card__title">{{ total }} submission{{ total == 1 ? '' : 's' }}</h2>
+        {% if unread ?? 0 %}
+          <span class="iaa-card__aside"><span class="iaa-chip iaa-chip--accent">{{ unread }} new</span></span>
+        {% endif %}
+      </div>
+      {% if not rows|length %}
+        <div class="iaa-empty"><p>No submissions{{ formName or status ? ' match this filter' }}.</p></div>
+      {% else %}
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            <thead>
+              <tr><th>When</th><th>Form</th><th>Summary</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr data-sub-id="{{ r.id }}">
+                  <td class="iaa-nowrap">
+                    {% if not r.readAt %}
+                      <span class="iaa-chip iaa-chip--accent iaa-new" title="Not seen yet">NEW</span>
+                    {% endif %}
+                    {{ r.dateCreated ? r.dateCreated|date('Y-m-d H:i') : '' }}
+                  </td>
+                  <td><code>{{ r.formName }}</code></td>
+                  <td class="light">
+                    {%- set parts = [] -%}
+                    {%- for k, v in r.data -%}
+                      {%- set shown = v is iterable ? v|join(', ') : (v is same as(true) ? 'Yes' : (v is same as(false) ? 'No' : v)) -%}
+                      {%- set parts = parts|merge([k ~ ': ' ~ shown]) -%}
+                    {%- endfor -%}
+                    {{ parts|join(' · ')|slice(0, 120) }}
+                  </td>
+                  <td>
+                    <span class="iaa-chip {{ statusTones[r.status] is defined ? 'iaa-chip--' ~ statusTones[r.status] }}">{{ r.status|capitalize }}</span>
+                  </td>
+                  <td class="iaa-nowrap">
+                    <div class="iaa-row-actions">
+                      <a href="{{ url('interactive-ai-assistant/missed-chats/submissions/view/' ~ r.id) }}" class="btn small">View</a>
+                      {% if r.status != 'sent' %}
+                        <button type="button" class="btn small retry-btn" data-id="{{ r.id }}">Retry</button>
+                      {% endif %}
+                      <button type="button" class="btn small delete-sub-btn" data-id="{{ r.id }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
   </div>
 
-  {% if not rows|length %}
-    <p>No submissions{{ formName or status ? ' match this filter' }}.</p>
-  {% else %}
-    <table class="data fullwidth">
-      <thead>
-        <tr><th>When</th><th>Form</th><th>Summary</th><th>Status</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-          <tr data-sub-id="{{ r.id }}">
-            <td>
-              {% if not r.readAt %}
-                <span title="Not seen yet" style="display:inline-block;background:#7c3aed;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-right:6px;">NEW</span>
-              {% endif %}
-              {{ r.dateCreated ? r.dateCreated|date('Y-m-d H:i') : '' }}
-            </td>
-            <td><code>{{ r.formName }}</code></td>
-            <td class="light">
-              {%- set parts = [] -%}
-              {%- for k, v in r.data -%}
-                {%- set shown = v is iterable ? v|join(', ') : (v is same as(true) ? 'Yes' : (v is same as(false) ? 'No' : v)) -%}
-                {%- set parts = parts|merge([k ~ ': ' ~ shown]) -%}
-              {%- endfor -%}
-              {{ parts|join(' · ')|slice(0, 120) }}
-            </td>
-            <td>
-              {% set color = { pending: '#9a6700', sent: '#1a7f37', failed: '#cf222e' } %}
-              <span style="color:{{ color[r.status] ?? '#57606a' }};font-weight:600;">{{ r.status|capitalize }}</span>
-            </td>
-            <td style="text-align:right;white-space:nowrap;">
-              <a href="{{ url('interactive-ai-assistant/missed-chats/submissions/view/' ~ r.id) }}" class="btn small">View</a>
-              {% if r.status != 'sent' %}
-                <button type="button" class="btn small retry-btn" data-id="{{ r.id }}">Retry</button>
-              {% endif %}
-              <button type="button" class="btn small delete-sub-btn" data-id="{{ r.id }}">Delete</button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    {% if totalPages > 1 %}
-      <div class="pagination" style="margin-top:14px;display:flex;gap:6px;">
-        {% for p in 1..totalPages %}
-          <a class="btn small {{ p == page ? 'active' }}"
-             href="{{ url('interactive-ai-assistant/missed-chats/submissions', { form: formName, status: status, page: p }) }}">{{ p }}</a>
-        {% endfor %}
-      </div>
-    {% endif %}
+  {% if rows|length and totalPages > 1 %}
+    <div class="pagination iaa-pages">
+      {% for p in 1..totalPages %}
+        <a class="btn small {{ p == page ? 'active' }}"
+           href="{{ url('interactive-ai-assistant/missed-chats/submissions', { form: formName, status: status, page: p }) }}">{{ p }}</a>
+      {% endfor %}
+    </div>
   {% endif %}
 
   {% js %}

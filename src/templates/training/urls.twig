@@ -1,4 +1,5 @@
 {% extends 'interactive-ai-assistant/_layout' %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 {% set title = 'Training · URLs' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
@@ -15,87 +16,114 @@
 {% set selectedTab = 'urls' %}
 
 {% block content %}
-  <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-    <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+  <div class="iaa-cards iaa-cards--stretch">
+    <form method="post" accept-charset="UTF-8" class="iaa-card">
       {{ csrfInput() }}
       {{ actionInput('interactive-ai-assistant/training/import-sitemap') }}
-      <h2>Sitemap import</h2>
-      <input type="url" name="sitemap" class="text fullwidth" placeholder="https://example.com/sitemap.xml" required>
-      {% if sites|length > 1 %}
-        <div class="field" style="margin-top:8px;">
-          <div class="heading"><label>Applies to</label></div>
-          <div class="input">
-            <div class="select">
-              <select name="siteId">
-                <option value="0">All sites</option>
-                {% for site in sites %}
-                  <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
-                {% endfor %}
-              </select>
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('folder-tree') }}</span>
+        <h2 class="iaa-card__title">Sitemap import</h2>
+      </div>
+      <div class="iaa-card__body">
+        <p class="iaa-card__note">Up to 500 URLs per import. Each one is fetched and embedded.</p>
+        <input type="url" name="sitemap" class="text fullwidth" placeholder="https://example.com/sitemap.xml" required>
+        {% if sites|length > 1 %}
+          <div class="field iaa-field-gap">
+            <div class="heading"><label>Applies to</label></div>
+            <div class="input">
+              <div class="select">
+                <select name="siteId">
+                  <option value="0">All sites</option>
+                  {% for site in sites %}
+                    <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+                  {% endfor %}
+                </select>
+              </div>
             </div>
           </div>
-        </div>
-      {% endif %}
-      <button type="submit" class="btn submit" style="margin-top:8px;">Import sitemap</button>
-      <p class="light" style="font-size:12px;margin-top:6px;">Up to 500 URLs per import. Each one is fetched and embedded.</p>
+        {% endif %}
+      </div>
+      <div class="iaa-card__foot">
+        <button type="submit" class="btn submit">Import sitemap</button>
+      </div>
     </form>
 
-    <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
+    <form method="post" accept-charset="UTF-8" class="iaa-card">
       {{ csrfInput() }}
       {{ actionInput('interactive-ai-assistant/training/add-urls') }}
-      <h2>Manual URLs</h2>
-      <textarea name="urls" class="text fullwidth" rows="5" placeholder="One URL per line"></textarea>
-      {% if sites|length > 1 %}
-        <div class="field" style="margin-top:8px;">
-          <div class="heading"><label>Applies to</label></div>
-          <div class="input">
-            <div class="select">
-              <select name="siteId">
-                <option value="0">All sites</option>
-                {% for site in sites %}
-                  <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
-                {% endfor %}
-              </select>
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('link') }}</span>
+        <h2 class="iaa-card__title">Manual URLs</h2>
+      </div>
+      <div class="iaa-card__body">
+        <textarea name="urls" class="text fullwidth" rows="5" placeholder="One URL per line"></textarea>
+        {% if sites|length > 1 %}
+          <div class="field iaa-field-gap">
+            <div class="heading"><label>Applies to</label></div>
+            <div class="input">
+              <div class="select">
+                <select name="siteId">
+                  <option value="0">All sites</option>
+                  {% for site in sites %}
+                    <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+                  {% endfor %}
+                </select>
+              </div>
             </div>
           </div>
-        </div>
-      {% endif %}
-      <button type="submit" class="btn submit" style="margin-top:8px;">Add URLs</button>
+        {% endif %}
+      </div>
+      <div class="iaa-card__foot">
+        <button type="submit" class="btn submit">Add URLs</button>
+      </div>
     </form>
   </div>
 
-  <form method="post" accept-charset="UTF-8" style="margin-bottom:8px;">
-    {{ csrfInput() }}
-    {{ actionInput('interactive-ai-assistant/training/crawl-all') }}
-    <button type="submit" class="btn">Crawl all &amp; index</button>
-  </form>
-
-  <h2>URLs</h2>
-  {% if rows|length %}
-    <table class="data fullwidth">
-      {% set siteNames = {} %}
-      {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
-      <thead><tr><th>URL</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Source</th><th>Status</th><th>Chunks</th><th>Last</th><th></th></tr></thead>
-      <tbody>
-        {% for r in rows %}
-          <tr>
-            <td><a href="{{ url('interactive-ai-assistant/training/url-chunks/' ~ r.id) }}">{{ r.url }}</a></td>
-            {% if sites|length > 1 %}<td>{{ r.siteId ? (siteNames[r.siteId] ?? 'Site #' ~ r.siteId) : 'All sites' }}</td>{% endif %}
-            <td>{{ r.source }}</td>
-            <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
-            <td>{{ r.chunkCount }}</td>
-            <td>{{ r.lastTrainedAt ?: '—' }}</td>
-            <td>
-              <button class="btn small js-recrawl" data-id="{{ r.id }}">Re-crawl</button>
-              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="light">No URLs added yet.</p>
-  {% endif %}
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('link') }}</span>
+        <h2 class="iaa-card__title">URLs</h2>
+        <span class="iaa-card__aside">
+          {% if rows|length %}<span class="iaa-chip">{{ rows|length }}</span>{% endif %}
+          <form method="post" accept-charset="UTF-8">
+            {{ csrfInput() }}
+            {{ actionInput('interactive-ai-assistant/training/crawl-all') }}
+            <button type="submit" class="btn small">Crawl all &amp; index</button>
+          </form>
+        </span>
+      </div>
+      {% if rows|length %}
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            {% set siteNames = {} %}
+            {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
+            <thead><tr><th>URL</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Source</th><th>Status</th><th class="iaa-num">Chunks</th><th>Last</th><th></th></tr></thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td class="iaa-code"><a href="{{ url('interactive-ai-assistant/training/url-chunks/' ~ r.id) }}">{{ r.url }}</a></td>
+                  {% if sites|length > 1 %}<td>{{ r.siteId ? (siteNames[r.siteId] ?? 'Site #' ~ r.siteId) : 'All sites' }}</td>{% endif %}
+                  <td><span class="iaa-chip">{{ r.source }}</span></td>
+                  <td>{% include 'interactive-ai-assistant/training/_status' with { status: r.status } only %}</td>
+                  <td class="iaa-num">{{ r.chunkCount }}</td>
+                  <td class="iaa-nowrap">{{ r.lastTrainedAt ?: '—' }}</td>
+                  <td>
+                    <div class="iaa-row-actions">
+                      <button class="btn small js-recrawl" data-id="{{ r.id }}">Re-crawl</button>
+                      <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="iaa-empty"><p>No URLs added yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
 
   <script>
     (function(){

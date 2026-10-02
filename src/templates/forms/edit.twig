@@ -28,7 +28,7 @@
         {% endfor %}
       </select></div>
     </td>
-    <td style="text-align:center;"><input type="checkbox" name="form[fields][{{ i }}][required]" value="1" {{ (f.required ?? false) ? 'checked' }}></td>
+    <td class="iaa-center"><input type="checkbox" name="form[fields][{{ i }}][required]" value="1" {{ (f.required ?? false) ? 'checked' }}></td>
     <td><input type="text" class="text fullwidth" name="form[fields][{{ i }}][description]" value="{{ f.description ?? '' }}" placeholder="Hint for the AI"></td>
     <td>
       <div class="select fullwidth cs-field-optsrc-wrap">
@@ -39,28 +39,28 @@
           {% endfor %}
         </select>
       </div>
-      <input type="text" class="text fullwidth cs-field-options" name="form[fields][{{ i }}][options]"
-             placeholder="a, b, c (choices)" style="margin-top:4px;"
+      <input type="text" class="text fullwidth cs-field-options iaa-gap-top" name="form[fields][{{ i }}][options]"
+             placeholder="a, b, c (choices)"
              value="{{ (f.options is defined and f.options is iterable) ? f.options|join(', ') : (f.options|default('')) }}">
-      <div class="select fullwidth cs-field-optsection-wrap" style="margin-top:4px;">
+      <div class="select fullwidth cs-field-optsection-wrap iaa-gap-top">
         <select class="cs-field-optsection" name="form[fields][{{ i }}][optionsSection]">
           {% for uid, name in optionSections %}
             <option value="{{ uid }}" {{ (f.optionsSection ?? '') == uid ? 'selected' }}>{{ name }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="select fullwidth cs-field-optfield-wrap" style="margin-top:4px;">
+      <div class="select fullwidth cs-field-optfield-wrap iaa-gap-top">
         <select class="cs-field-optfield" name="form[fields][{{ i }}][optionsField]">
           {% for handle, name in optionFields %}
             <option value="{{ handle }}" {{ (f.optionsField ?? '') == handle ? 'selected' }}>{{ name }}</option>
           {% endfor %}
         </select>
       </div>
-      <input type="text" class="text fullwidth cs-field-value" name="form[fields][{{ i }}][value]"
+      <input type="text" class="text fullwidth cs-field-value iaa-gap-top" name="form[fields][{{ i }}][value]"
              placeholder="Predefined value"
-             value="{{ f.value ?? '' }}" style="margin-top:4px;">
+             value="{{ f.value ?? '' }}">
     </td>
-    <td style="text-align:right;"><button type="button" class="btn small cs-row-remove">Remove</button></td>
+    <td class="iaa-end"><button type="button" class="btn small cs-row-remove">Remove</button></td>
   </tr>
 {% endmacro %}
 
@@ -69,16 +69,21 @@
   <tr class="cs-header-row">
     <td><input type="text" class="text fullwidth" name="form[delivery][webhook][headers][{{ i }}][key]" value="{{ h.key ?? '' }}" placeholder="Authorization"></td>
     <td><input type="text" class="text fullwidth" name="form[delivery][webhook][headers][{{ i }}][value]" value="{{ h.value ?? '' }}" placeholder="Bearer $MY_API_TOKEN"></td>
-    <td style="text-align:right;"><button type="button" class="btn small cs-row-remove">Remove</button></td>
+    <td class="iaa-end"><button type="button" class="btn small cs-row-remove">Remove</button></td>
   </tr>
 {% endmacro %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
 {% block content %}
   {% if not agentModeEnabled %}
-    <p class="warning">
-      Agent mode is off. Forms are only offered when agent mode is enabled under
-      <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration</a>.
-    </p>
+    <div class="iaa-note iaa-note--warn">
+      <span class="iaa-note__icon">{{ icons.svg('triangle-exclamation') }}</span>
+      <p>
+        Agent mode is off. Forms are only offered when agent mode is enabled under
+        <a href="{{ url('interactive-ai-assistant/settings', { tab: 'ai' }) }}">AI Configuration</a>.
+      </p>
+    </div>
   {% endif %}
 
   <form method="post" accept-charset="UTF-8" id="cs-form-editor">
@@ -86,171 +91,226 @@
     {{ actionInput('interactive-ai-assistant/forms/save') }}
     <input type="hidden" name="originalName" value="{{ form.name ?? '' }}">
 
-    {{ forms.textField({
-      first: true,
-      label: 'Tool name',
-      instructions: 'Internal identifier the model uses. Letters, numbers, _ or - (max 64). e.g. quote_request',
-      name: 'form[name]',
-      value: form.name ?? '',
-      required: true,
-    }) }}
+    <div class="iaa-cards">
+      <div class="iaa-card iaa-card--wide iaa-card--info">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('file-lines') }}</span>
+          <h2 class="iaa-card__title">{{ title }}</h2>
+        </div>
+        <div class="iaa-card__body">
+          {{ forms.textField({
+            first: true,
+            label: 'Tool name',
+            instructions: 'Internal identifier the model uses. Letters, numbers, _ or - (max 64). e.g. quote_request',
+            name: 'form[name]',
+            value: form.name ?? '',
+            required: true,
+          }) }}
 
-    {{ forms.textField({
-      label: 'Label',
-      instructions: 'Human-friendly name shown in the control panel, in emails, and as the title of an inline form. Shown to visitors in their site’s language if it is translated in `translations/<language>/site.php`.',
-      name: 'form[label]',
-      value: form.label ?? '',
-    }) }}
+          {{ forms.textField({
+            label: 'Label',
+            instructions: 'Human-friendly name shown in the control panel, in emails, and as the title of an inline form. Shown to visitors in their site’s language if it is translated in `translations/<language>/site.php`.',
+            name: 'form[label]',
+            value: form.label ?? '',
+          }) }}
 
-    {{ forms.textareaField({
-      label: 'When to use this form (shown to the AI)',
-      instructions: 'Describe when the assistant should offer this form, like a salesperson — e.g. “Offer when the visitor asks for pricing or shows buying intent.”',
-      name: 'form[description]',
-      value: form.description ?? '',
-      rows: 3,
-    }) }}
+          {{ forms.textareaField({
+            label: 'When to use this form (shown to the AI)',
+            instructions: 'Describe when the assistant should offer this form, like a salesperson — e.g. “Offer when the visitor asks for pricing or shows buying intent.”',
+            name: 'form[description]',
+            value: form.description ?? '',
+            rows: 3,
+          }) }}
 
-    {{ forms.selectField({
-      label: 'Collection mode',
-      instructions: 'Conversational — the assistant asks for each field in chat and submits for the user. Inline form — the assistant displays the form for the user to fill in and submit themselves.',
-      name: 'form[mode]',
-      value: form.mode ?? 'conversational',
-      options: { conversational: 'Conversational (AI asks the questions)', inline: 'Inline form (user fills it in)' },
-    }) }}
+          <div class="iaa-fields2">
+            {{ forms.selectField({
+              label: 'Collection mode',
+              instructions: 'Conversational — the assistant asks for each field in chat and submits for the user. Inline form — the assistant displays the form for the user to fill in and submit themselves.',
+              name: 'form[mode]',
+              value: form.mode ?? 'conversational',
+              options: { conversational: 'Conversational (AI asks the questions)', inline: 'Inline form (user fills it in)' },
+            }) }}
 
-    {{ forms.selectField({
-      label: 'Availability',
-      instructions: 'Same per-skill control as the Agent & skills list. “Admins only” lets you test on the live site first.',
-      name: 'availability',
-      value: availability ?? 'admins',
-      options: { off: 'Off', on: 'Enabled (everyone)', admins: 'Admins only (testing)' },
-    }) }}
+            {{ forms.selectField({
+              label: 'Availability',
+              instructions: 'Same per-skill control as the Agent & skills list. “Admins only” lets you test on the live site first.',
+              name: 'availability',
+              value: availability ?? 'admins',
+              options: { off: 'Off', on: 'Enabled (everyone)', admins: 'Admins only (testing)' },
+            }) }}
+          </div>
+        </div>
+      </div>
 
-    <hr>
-    <h2>Fields</h2>
-    <p class="instructions">The model asks for these in conversation (or the user fills them inline) and the answers are passed verbatim. Mark required fields so it won’t submit without them. <strong>Choice</strong> and <strong>Checkboxes</strong> fields use the comma-separated options — Choice takes one, Checkboxes any number (e.g. <em>Extra services: rubble removal, dismantling</em>); <strong>Predefined</strong> fields are not asked — their value is always sent as-is.</p>
-    <p class="instructions"><strong>Consent checkbox</strong> is a single box the visitor ticks (GDPR, terms). Put the link in its label with <code>[text](https://example.com/privacy)</code> — e.g. <code>I agree to the [privacy policy](/privacy-policy)</code>. Mark it required and the form can’t be submitted unticked.</p>
-    <p class="instructions">Choices can be <strong>typed</strong> as a comma-separated list, or pulled from the site itself: <strong>Entries in a section</strong> offers the titles of that section’s live entries (in the visitor’s site language), and <strong>A field’s options</strong> reuses the choices of a Craft dropdown, radio, checkboxes or multi-select field, so the assistant offers exactly what an editor would see. Content-driven lists follow the content — no need to re-type them here when it changes — and are capped at 200 choices. Changes appear within about five minutes.</p>
-    <p class="instructions">Labels and choice options are shown to visitors, so on a multi-site install they are translated per site: add them to <code>translations/&lt;language&gt;/site.php</code>. An untranslated one is shown as typed. Choice <em>values</em> are stored and delivered as configured — only the text beside them changes.</p>
-    <table class="data fullwidth" id="cs-fields-table">
-      <thead>
-        <tr>
-          <th scope="col">Field name</th>
-          <th scope="col">Label</th>
-          <th scope="col" style="width:150px;">Type</th>
-          <th scope="col" style="width:70px;">Required</th>
-          <th scope="col">Hint for AI</th>
-          <th scope="col">Options / Predefined value</th>
-          <th scope="col" style="width:80px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for f in (form.fields ?? []) %}
-          {{ _self.fieldRow(loop.index0, f, fieldTypes, optionSections, optionFields) }}
-        {% endfor %}
-      </tbody>
-    </table>
-    <button type="button" class="btn add icon" id="cs-add-field" style="margin-top:8px;">Add a field</button>
-    <template id="cs-field-tpl">{{ _self.fieldRow('__I__', {}, fieldTypes, optionSections, optionFields) }}</template>
-
-    <hr>
-    <h2>Delivery</h2>
-    <p class="light">Submissions are always stored in the control panel. Optionally also deliver them:</p>
-
-    {{ forms.lightswitchField({
-      label: 'Send to a webhook / CRM',
-      name: 'form[delivery][webhook][enabled]',
-      on: webhook.enabled ?? false,
-    }) }}
-    {{ forms.textField({
-      label: 'Endpoint URL',
-      name: 'form[delivery][webhook][url]',
-      value: webhook.url ?? '',
-      placeholder: 'https://example.com/api/leads',
-    }) }}
-    {{ forms.selectField({
-      label: 'Method',
-      name: 'form[delivery][webhook][method]',
-      value: webhook.method ?? 'POST',
-      options: { POST: 'POST', PUT: 'PUT', PATCH: 'PATCH' },
-    }) }}
-
-    <div class="field">
-      <div class="heading"><label>Headers</label></div>
-      <div class="instructions"><p>Sent with the request. Values support $ENV_VAR references (e.g. an API token).</p></div>
-      <table class="data fullwidth" id="cs-headers-table">
-        <thead><tr><th scope="col">Header</th><th scope="col">Value</th><th scope="col" style="width:80px;"></th></tr></thead>
-        <tbody>
-          {% for h in (webhook.headers ?? []) %}
-            {{ _self.headerRow(loop.index0, h) }}
-          {% endfor %}
-        </tbody>
-      </table>
-      <button type="button" class="btn add icon" id="cs-add-header" style="margin-top:8px;">Add a header</button>
-      <template id="cs-header-tpl">{{ _self.headerRow('__I__', {}) }}</template>
+      <div class="iaa-card iaa-card--wide">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('list-check') }}</span>
+          <h2 class="iaa-card__title">Fields</h2>
+        </div>
+        <div class="iaa-card__body">
+          <p class="iaa-card__note">The model asks for these in conversation (or the user fills them inline) and the answers are passed verbatim. Mark required fields so it won’t submit without them. <strong>Choice</strong> and <strong>Checkboxes</strong> fields use the comma-separated options — Choice takes one, Checkboxes any number (e.g. <em>Extra services: rubble removal, dismantling</em>); <strong>Predefined</strong> fields are not asked — their value is always sent as-is.</p>
+            <p class="iaa-card__note"><strong>Consent checkbox</strong> is a single box the visitor ticks (GDPR, terms). Put the link in its label with <code>[text](https://example.com/privacy)</code> — e.g. <code>I agree to the [privacy policy](/privacy-policy)</code>. Mark it required and the form can’t be submitted unticked.</p>
+            <p class="iaa-card__note">Choices can be <strong>typed</strong> as a comma-separated list, or pulled from the site itself: <strong>Entries in a section</strong> offers the titles of that section’s live entries (in the visitor’s site language), and <strong>A field’s options</strong> reuses the choices of a Craft dropdown, radio, checkboxes or multi-select field, so the assistant offers exactly what an editor would see. Content-driven lists follow the content — no need to re-type them here when it changes — and are capped at 200 choices. Changes appear within about five minutes.</p>
+            <p class="iaa-card__note">Labels and choice options are shown to visitors, so on a multi-site install they are translated per site: add them to <code>translations/&lt;language&gt;/site.php</code>. An untranslated one is shown as typed. Choice <em>values</em> are stored and delivered as configured — only the text beside them changes.</p>
+        </div>
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth iaa-fields-table" id="cs-fields-table">
+            <thead>
+              <tr>
+                <th scope="col">Field name</th>
+                <th scope="col">Label</th>
+                <th scope="col" class="iaa-col-type">Type</th>
+                <th scope="col" class="iaa-col-req">Required</th>
+                <th scope="col">Hint for AI</th>
+                <th scope="col">Options / Predefined value</th>
+                <th scope="col" class="iaa-col-remove"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in (form.fields ?? []) %}
+                {{ _self.fieldRow(loop.index0, f, fieldTypes, optionSections, optionFields) }}
+              {% endfor %}
+            </tbody>
+          </table>
+          <template id="cs-field-tpl">{{ _self.fieldRow('__I__', {}, fieldTypes, optionSections, optionFields) }}</template>
+        </div>
+        <div class="iaa-card__foot">
+          <button type="button" class="btn add icon" id="cs-add-field">Add a field</button>
+        </div>
+      </div>
     </div>
 
-    <hr>
-    {{ forms.lightswitchField({
-      label: 'Send by email',
-      name: 'form[delivery][email][enabled]',
-      on: email.enabled ?? false,
-    }) }}
-    {{ forms.textField({
-      label: 'Recipient(s)',
-      instructions: 'Comma-separate multiple addresses.',
-      name: 'form[delivery][email][to]',
-      value: email.to ?? '',
-      placeholder: 'sales@example.com',
-    }) }}
-    {{ forms.textField({
-      label: 'Subject',
-      name: 'form[delivery][email][subject]',
-      value: email.subject ?? '',
-      placeholder: 'New form submission',
-    }) }}
+    <div class="iaa-note">
+      <span class="iaa-note__icon">{{ icons.svg('paper-plane') }}</span>
+      <p><strong>Delivery</strong> — Submissions are always stored in the control panel. Optionally also deliver them:</p>
+    </div>
 
-    <hr>
-    {{ forms.lightswitchField({
-      label: 'Send via the Contact Form plugin',
-      instructions: 'Hands the submission to the Contact Form plugin in-process (the same path as its contact-form/send action), so any CRM integration hooked onto it runs. No CSRF needed — it’s server-side. Map the fields below.',
-      name: 'form[delivery][contactform][enabled]',
-      on: cf.enabled ?? false,
-    }) }}
-    {% if not contactFormInstalled %}
-      <p class="warning">The Contact Form plugin isn’t installed/enabled — this delivery will fail until it is.</p>
-    {% endif %}
-    {% set fieldOpts = { '': '— select a field —' } %}
-    {% for f in (form.fields ?? []) %}{% set fieldOpts = fieldOpts|merge({ (f.name): (f.label ?: f.name) }) %}{% endfor %}
-    {{ forms.selectField({
-      label: 'Email field',
-      instructions: 'Which form field holds the visitor’s email — Contact Form requires it. (Add and save your fields first if the list is empty.)',
-      name: 'form[delivery][contactform][emailField]',
-      value: cf.emailField ?? '',
-      options: fieldOpts,
-    }) }}
-    {{ forms.selectField({
-      label: 'Name field (optional)',
-      name: 'form[delivery][contactform][nameField]',
-      value: cf.nameField ?? '',
-      options: fieldOpts,
-    }) }}
-    {{ forms.textField({
-      label: 'Subject',
-      name: 'form[delivery][contactform][subject]',
-      value: cf.subject ?? '',
-      placeholder: 'New chatbot enquiry',
-    }) }}
-    {{ forms.textField({
-      label: 'Form identifier (sent as message[formName])',
-      instructions: 'Sent to Contact Form as message[formName] so the CRM can tell which form this is. Leave blank to use the form’s label. Add this key to the Contact Form plugin’s “Allowed message fields” setting if you’ve restricted it.',
-      name: 'form[delivery][contactform][formName]',
-      value: cf.formName ?? '',
-      placeholder: form.label ?? form.name ?? '',
-    }) }}
+    <div class="iaa-cards">
+      <div class="iaa-card">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('plug') }}</span>
+          <h2 class="iaa-card__title">Send to a webhook / CRM</h2>
+        </div>
+        <div class="iaa-card__body">
+          <div class="iaa-rows iaa-rows--lead">
+            {{ forms.lightswitchField({
+              label: 'Send to a webhook / CRM',
+              name: 'form[delivery][webhook][enabled]',
+              on: webhook.enabled ?? false,
+            }) }}
+          </div>
+          {{ forms.textField({
+            label: 'Endpoint URL',
+            name: 'form[delivery][webhook][url]',
+            value: webhook.url ?? '',
+            placeholder: 'https://example.com/api/leads',
+          }) }}
+          {{ forms.selectField({
+            label: 'Method',
+            name: 'form[delivery][webhook][method]',
+            value: webhook.method ?? 'POST',
+            options: { POST: 'POST', PUT: 'PUT', PATCH: 'PATCH' },
+          }) }}
 
-    <hr>
-    <div class="buttons">
+          <div class="field">
+            <div class="heading"><label>Headers</label></div>
+            <div class="instructions"><p>Sent with the request. Values support $ENV_VAR references (e.g. an API token).</p></div>
+            <table class="data fullwidth" id="cs-headers-table">
+              <thead><tr><th scope="col">Header</th><th scope="col">Value</th><th scope="col" class="iaa-col-remove"></th></tr></thead>
+              <tbody>
+                {% for h in (webhook.headers ?? []) %}
+                  {{ _self.headerRow(loop.index0, h) }}
+                {% endfor %}
+              </tbody>
+            </table>
+            <button type="button" class="btn add icon iaa-gap-top" id="cs-add-header">Add a header</button>
+            <template id="cs-header-tpl">{{ _self.headerRow('__I__', {}) }}</template>
+          </div>
+        </div>
+      </div>
+
+      <div class="iaa-card">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('envelope') }}</span>
+          <h2 class="iaa-card__title">Send by email</h2>
+        </div>
+        <div class="iaa-card__body">
+          <div class="iaa-rows iaa-rows--lead">
+            {{ forms.lightswitchField({
+              label: 'Send by email',
+              name: 'form[delivery][email][enabled]',
+              on: email.enabled ?? false,
+            }) }}
+          </div>
+          {{ forms.textField({
+            label: 'Recipient(s)',
+            instructions: 'Comma-separate multiple addresses.',
+            name: 'form[delivery][email][to]',
+            value: email.to ?? '',
+            placeholder: 'sales@example.com',
+          }) }}
+          {{ forms.textField({
+            label: 'Subject',
+            name: 'form[delivery][email][subject]',
+            value: email.subject ?? '',
+            placeholder: 'New form submission',
+          }) }}
+        </div>
+      </div>
+
+      <div class="iaa-card {{ not contactFormInstalled ? 'iaa-card--warn' }}">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('paper-plane') }}</span>
+          <h2 class="iaa-card__title">Send via the Contact Form plugin</h2>
+        </div>
+        <div class="iaa-card__body">
+          <div class="iaa-rows iaa-rows--lead">
+            {{ forms.lightswitchField({
+              label: 'Send via the Contact Form plugin',
+              instructions: 'Hands the submission to the Contact Form plugin in-process (the same path as its contact-form/send action), so any CRM integration hooked onto it runs. No CSRF needed — it’s server-side. Map the fields below.',
+              name: 'form[delivery][contactform][enabled]',
+              on: cf.enabled ?? false,
+            }) }}
+          </div>
+          {% if not contactFormInstalled %}
+            <div class="iaa-note iaa-note--warn iaa-gap-top">
+              <span class="iaa-note__icon">{{ icons.svg('triangle-exclamation') }}</span>
+              <p>The Contact Form plugin isn’t installed/enabled — this delivery will fail until it is.</p>
+            </div>
+          {% endif %}
+          {% set fieldOpts = { '': '— select a field —' } %}
+          {% for f in (form.fields ?? []) %}{% set fieldOpts = fieldOpts|merge({ (f.name): (f.label ?: f.name) }) %}{% endfor %}
+          {{ forms.selectField({
+            label: 'Email field',
+            instructions: 'Which form field holds the visitor’s email — Contact Form requires it. (Add and save your fields first if the list is empty.)',
+            name: 'form[delivery][contactform][emailField]',
+            value: cf.emailField ?? '',
+            options: fieldOpts,
+          }) }}
+          {{ forms.selectField({
+            label: 'Name field (optional)',
+            name: 'form[delivery][contactform][nameField]',
+            value: cf.nameField ?? '',
+            options: fieldOpts,
+          }) }}
+          {{ forms.textField({
+            label: 'Subject',
+            name: 'form[delivery][contactform][subject]',
+            value: cf.subject ?? '',
+            placeholder: 'New chatbot enquiry',
+          }) }}
+          {{ forms.textField({
+            label: 'Form identifier (sent as message[formName])',
+            instructions: 'Sent to Contact Form as message[formName] so the CRM can tell which form this is. Leave blank to use the form’s label. Add this key to the Contact Form plugin’s “Allowed message fields” setting if you’ve restricted it.',
+            name: 'form[delivery][contactform][formName]',
+            value: cf.formName ?? '',
+            placeholder: form.label ?? form.name ?? '',
+          }) }}
+        </div>
+      </div>
+    </div>
+
+    <div class="buttons iaa-actions">
       <button type="submit" class="btn submit">Save</button>
       <a href="{{ url('interactive-ai-assistant/forms') }}" class="btn">Cancel</a>
     </div>

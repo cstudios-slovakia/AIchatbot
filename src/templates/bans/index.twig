@@ -7,57 +7,76 @@
 } %}
 {% set selectedTab = 'bans' %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
 {% block content %}
-  <div style="display:flex; gap:32px; align-items:flex-start;">
-    <div style="flex:2;">
-      <h2 style="margin-top:0;">Active bans</h2>
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--bans">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('ban') }}</span>
+        <h2 class="iaa-card__title">Active bans</h2>
+        {% if bans|length %}<span class="iaa-card__aside"><span class="iaa-chip">{{ bans|length }}</span></span>{% endif %}
+      </div>
       {% if not bans|length %}
-        <p>No active bans.</p>
+        <div class="iaa-empty"><p>No active bans.</p></div>
       {% else %}
-        <table class="data fullwidth">
-          <thead>
-            <tr><th>IP</th><th>Reason</th><th>Banned by</th><th>Banned at</th><th>Expires</th><th></th></tr>
-          </thead>
-          <tbody>
-            {% for b in bans %}
-              <tr data-ban-id="{{ b.id }}">
-                <td><code>{{ b.ip }}</code></td>
-                <td>{{ b.reason ?: '—' }}</td>
-                <td>{{ b.bannedByName ?: '—' }}</td>
-                <td>{{ b.dateCreated ? b.dateCreated|date('Y-m-d H:i') : '' }}</td>
-                <td>{{ b.expiresAt ? b.expiresAt|date('Y-m-d H:i') : 'Permanent' }}</td>
-                <td><button type="button" class="btn small unban-btn" data-id="{{ b.id }}">Unban</button></td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            <thead>
+              <tr><th>IP</th><th>Reason</th><th>Banned by</th><th>Banned at</th><th>Expires</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for b in bans %}
+                <tr data-ban-id="{{ b.id }}">
+                  <td><code>{{ b.ip }}</code></td>
+                  <td>{{ b.reason ?: '—' }}</td>
+                  <td>{{ b.bannedByName ?: '—' }}</td>
+                  <td class="iaa-nowrap">{{ b.dateCreated ? b.dateCreated|date('Y-m-d H:i') : '' }}</td>
+                  <td class="iaa-nowrap">{% if b.expiresAt %}{{ b.expiresAt|date('Y-m-d H:i') }}{% else %}<span class="iaa-chip iaa-chip--bad">Permanent</span>{% endif %}</td>
+                  <td class="iaa-nowrap"><div class="iaa-row-actions"><button type="button" class="btn small unban-btn" data-id="{{ b.id }}">Unban</button></div></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endif %}
     </div>
 
-    <div style="flex:1; max-width:340px;">
-      <h2 style="margin-top:0;">Add ban</h2>
+    <div class="iaa-card iaa-card--side">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('shield-halved') }}</span>
+        <h2 class="iaa-card__title">Add ban</h2>
+      </div>
       <form method="post" accept-charset="UTF-8">
         {{ csrfInput() }}
         {{ actionInput('interactive-ai-assistant/bans/create') }}
-        <div class="field">
-          <label>IP address</label>
-          <input type="text" name="ip" class="text fullwidth" placeholder="1.2.3.4" required>
+        <div class="iaa-card__body">
+          <div class="field">
+            <div class="heading"><label for="iaa-ban-ip">IP address</label></div>
+            <div class="input"><input type="text" id="iaa-ban-ip" name="ip" class="text fullwidth" placeholder="1.2.3.4" required></div>
+          </div>
+          <div class="field">
+            <div class="heading"><label for="iaa-ban-duration">Duration</label></div>
+            <div class="input">
+              <div class="select fullwidth">
+                <select id="iaa-ban-duration" name="duration" class="fullwidth">
+                  <option value="1h">1 hour</option>
+                  <option value="24h">24 hours</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="forever" selected>Permanent</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="heading"><label for="iaa-ban-reason">Reason (optional)</label></div>
+            <div class="input"><input type="text" id="iaa-ban-reason" name="reason" class="text fullwidth" maxlength="500"></div>
+          </div>
         </div>
-        <div class="field">
-          <label>Duration</label>
-          <select name="duration" class="fullwidth">
-            <option value="1h">1 hour</option>
-            <option value="24h">24 hours</option>
-            <option value="7d">7 days</option>
-            <option value="30d">30 days</option>
-            <option value="forever" selected>Permanent</option>
-          </select>
+        <div class="iaa-card__foot">
+          <button type="submit" class="btn submit">Ban</button>
         </div>
-        <div class="field">
-          <label>Reason (optional)</label>
-          <input type="text" name="reason" class="text fullwidth" maxlength="500">
-        </div>
-        <button type="submit" class="btn submit">Ban</button>
       </form>
     </div>
   </div>

@@ -1,23 +1,36 @@
 {% import '_includes/forms' as forms %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 
-{{ forms.lightswitchField({
-  label: 'Message Ratings',
-  instructions: 'Show thumbs up / down under each bot response.',
-  name: 'settings[ratingsEnabled]',
-  on: settings.ratingsEnabled,
-}) }}
+<div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('clock-rotate-left') }}</span>
+      <h2 class="iaa-card__title">Logging</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Message Ratings',
+          instructions: 'Show thumbs up / down under each bot response.',
+          name: 'settings[ratingsEnabled]',
+          on: settings.ratingsEnabled,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Conversation Logging',
-  name: 'settings[loggingEnabled]',
-  on: settings.loggingEnabled,
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Conversation Logging',
+          name: 'settings[loggingEnabled]',
+          on: settings.loggingEnabled,
+        }) }}
 
-{{ forms.textField({
-  label: 'Log Retention (days)',
-  instructions: '0 = keep forever.',
-  name: 'settings[logRetentionDays]',
-  value: settings.logRetentionDays,
-  type: 'number',
-  size: 6,
-}) }}
+        {{ forms.textField({
+          label: 'Log Retention (days)',
+          instructions: '0 = keep forever.',
+          name: 'settings[logRetentionDays]',
+          value: settings.logRetentionDays,
+          type: 'number',
+          size: 6,
+        }) }}
+      </div>
+    </div>
+  </div>
+</div>

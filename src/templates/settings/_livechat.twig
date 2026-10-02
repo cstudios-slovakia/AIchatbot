@@ -1,91 +1,129 @@
 {% import '_includes/forms' as forms %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 
-{{ forms.lightswitchField({
-  label: 'Allow human assistance',
-  instructions: 'Master switch. When off, users can never request a human — no "Talk to a human" button or inline offer appears anywhere, and the bot stops offering it.',
-  name: 'settings[humanHandoffEnabled]',
-  on: settings.humanHandoffEnabled,
-}) }}
+<div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('headset') }}</span>
+      <h2 class="iaa-card__title">Human assistance</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Allow human assistance',
+          instructions: 'Master switch. When off, users can never request a human — no "Talk to a human" button or inline offer appears anywhere, and the bot stops offering it.',
+          name: 'settings[humanHandoffEnabled]',
+          on: settings.humanHandoffEnabled,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: "Show admin's name to user",
-  instructions: 'When on, the widget says "Chatting with [Name]". When off, it just says "Chatting with a human agent".',
-  name: 'settings[showAdminName]',
-  on: settings.showAdminName,
-}) }}
+        {{ forms.selectField({
+          label: 'When can users request a human?',
+          instructions: '"Always available" shows a persistent "Talk to a human" button. "Only when the AI suggests it" hides the button — the offer appears inline below the bot reply when confidence is low or the bot defers to support.',
+          name: 'settings[humanHandoffMode]',
+          value: settings.humanHandoffMode ?? 'always',
+          options: {
+            always: 'Always available (persistent button)',
+            ai: 'Only when the AI suggests it',
+          },
+        }) }}
 
-{{ forms.textField({
-  label: 'Auto-close inactive conversations after (minutes)',
-  instructions: 'Closes any requested/active handoff session with no activity for this many minutes. 0 = disabled. Runs at most once per minute, triggered by admin and widget polls.',
-  name: 'settings[autoCloseInactiveMinutes]',
-  value: settings.autoCloseInactiveMinutes,
-  type: 'number',
-  size: 6,
-}) }}
+        {{ forms.lightswitchField({
+          label: "Show admin's name to user",
+          instructions: 'When on, the widget says "Chatting with [Name]". When off, it just says "Chatting with a human agent".',
+          name: 'settings[showAdminName]',
+          on: settings.showAdminName,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Email me when someone is waiting',
-  instructions: 'Sends an email notification whenever a visitor requests a human, so an agent can jump in.',
-  name: 'settings[handoffNotifyEnabled]',
-  on: settings.handoffNotifyEnabled ?? false,
-}) }}
+        {{ forms.textField({
+          label: 'Auto-close inactive conversations after (minutes)',
+          instructions: 'Closes any requested/active handoff session with no activity for this many minutes. 0 = disabled. Runs at most once per minute, triggered by admin and widget polls.',
+          name: 'settings[autoCloseInactiveMinutes]',
+          value: settings.autoCloseInactiveMinutes,
+          type: 'number',
+          size: 6,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('envelope') }}</span>
+      <h2 class="iaa-card__title">Notifications</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Email me when someone is waiting',
+          instructions: 'Sends an email notification whenever a visitor requests a human, so an agent can jump in.',
+          name: 'settings[handoffNotifyEnabled]',
+          on: settings.handoffNotifyEnabled ?? false,
+        }) }}
+      </div>
 
-{{ forms.textField({
-  label: 'Notify these addresses',
-  instructions: 'Comma-separate multiple addresses. Supports $ENV_VAR. Required for the notification above.',
-  name: 'settings[handoffNotifyEmail]',
-  value: settings.handoffNotifyEmail ?? '',
-  placeholder: 'support@example.com',
-}) }}
+      {{ forms.textField({
+        label: 'Notify these addresses',
+        instructions: 'Comma-separate multiple addresses. Supports $ENV_VAR. Required for the notification above.',
+        name: 'settings[handoffNotifyEmail]',
+        value: settings.handoffNotifyEmail ?? '',
+        placeholder: 'support@example.com',
+      }) }}
 
-{{ forms.textField({
-  label: 'Notification subject',
-  instructions: 'Placeholders: {shortId}, {pageUrl}, {cpUrl}, {cpUrlDirect}.',
-  name: 'settings[handoffNotifySubject]',
-  value: settings.handoffNotifySubject ?? '',
-  placeholder: 'New live chat request — {shortId}',
-}) }}
+      {{ forms.textField({
+        label: 'Notification subject',
+        instructions: 'Placeholders: {shortId}, {pageUrl}, {cpUrl}, {cpUrlDirect}.',
+        name: 'settings[handoffNotifySubject]',
+        value: settings.handoffNotifySubject ?? '',
+        placeholder: 'New live chat request — {shortId}',
+      }) }}
 
-{{ forms.textareaField({
-  label: 'Notification body',
-  instructions: 'Plain-text email body. Placeholders: {shortId} (conversation id), {pageUrl} (page the visitor was on), {cpUrl} (Live Chat list), {cpUrlDirect} (opens this exact conversation).',
-  name: 'settings[handoffNotifyBody]',
-  value: settings.handoffNotifyBody ?? '',
-  rows: 7,
-}) }}
+      {{ forms.textareaField({
+        label: 'Notification body',
+        instructions: 'Plain-text email body. Placeholders: {shortId} (conversation id), {pageUrl} (page the visitor was on), {cpUrl} (Live Chat list), {cpUrlDirect} (opens this exact conversation).',
+        name: 'settings[handoffNotifyBody]',
+        value: settings.handoffNotifyBody ?? '',
+        rows: 7,
+      }) }}
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('inbox') }}</span>
+      <h2 class="iaa-card__title">Missed chats</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Capture contact details (missed chats)',
+          instructions: 'When on, the bot offers to take an email/phone when it can\'t help and the visitor declines a human, and auto-asks for contact details if no agent claims a handoff in time. Submissions appear under "Missed Chats".',
+          name: 'settings[contactCaptureEnabled]',
+          on: settings.contactCaptureEnabled,
+        }) }}
 
-{{ forms.selectField({
-  label: 'When can users request a human?',
-  instructions: '"Always available" shows a persistent "Talk to a human" button. "Only when the AI suggests it" hides the button — the offer appears inline below the bot reply when confidence is low or the bot defers to support.',
-  name: 'settings[humanHandoffMode]',
-  value: settings.humanHandoffMode ?? 'always',
-  options: {
-    always: 'Always available (persistent button)',
-    ai: 'Only when the AI suggests it',
-  },
-}) }}
-
-{{ forms.lightswitchField({
-  label: 'Capture contact details (missed chats)',
-  instructions: 'When on, the bot offers to take an email/phone when it can\'t help and the visitor declines a human, and auto-asks for contact details if no agent claims a handoff in time. Submissions appear under "Missed Chats".',
-  name: 'settings[contactCaptureEnabled]',
-  on: settings.contactCaptureEnabled,
-}) }}
-
-{{ forms.textField({
-  label: 'Ask for contact after no agent for (minutes)',
-  instructions: 'If a visitor requested a human and none has joined after this many minutes, the widget asks for their email/phone so someone can follow up. 0 = never auto-ask. Evaluated on the widget poll.',
-  name: 'settings[contactPromptTimeoutMinutes]',
-  value: settings.contactPromptTimeoutMinutes,
-  type: 'number',
-  size: 6,
-}) }}
-
-{{ forms.textareaField({
-  label: 'Canned Response Templates',
-  instructions: 'Separate templates with a line of three dashes (`---`). Each template may span multiple lines. Shown as quick-insert buttons above the reply input in Live Chat.',
-  name: 'settings[chatTemplates]',
-  value: settings.chatTemplates|join("\n---\n"),
-  rows: 14,
-  placeholder: "Hi! How can I help you today?\n---\nThanks for reaching out — looking into this now.\nCould you share a screenshot or the exact URL?\n---\nI'll get back to you within the next business day.\n\nIn the meantime, our docs may help:\nhttps://example.com/docs",
-}) }}
+        {{ forms.textField({
+          label: 'Ask for contact after no agent for (minutes)',
+          instructions: 'If a visitor requested a human and none has joined after this many minutes, the widget asks for their email/phone so someone can follow up. 0 = never auto-ask. Evaluated on the widget poll.',
+          name: 'settings[contactPromptTimeoutMinutes]',
+          value: settings.contactPromptTimeoutMinutes,
+          type: 'number',
+          size: 6,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('comment') }}</span>
+      <h2 class="iaa-card__title">Canned Response Templates</h2>
+    </div>
+    <div class="iaa-card__body">
+      {{ forms.textareaField({
+        label: 'Canned Response Templates',
+        instructions: 'Separate templates with a line of three dashes (`---`). Each template may span multiple lines. Shown as quick-insert buttons above the reply input in Live Chat.',
+        name: 'settings[chatTemplates]',
+        value: settings.chatTemplates|join("\n---\n"),
+        rows: 14,
+        placeholder: "Hi! How can I help you today?\n---\nThanks for reaching out — looking into this now.\nCould you share a screenshot or the exact URL?\n---\nI'll get back to you within the next business day.\n\nIn the meantime, our docs may help:\nhttps://example.com/docs",
+      }) }}
+    </div>
+  </div>
+</div>

@@ -1,17 +1,27 @@
 {% extends 'interactive-ai-assistant/_layout' %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 {% set title = subtitle ~ ': ' ~ title %}
 {% set selectedSubnavItem = 'training' %}
 
 {% block content %}
-  <p><a class="btn" href="{{ url(backUrl) }}">← Back</a></p>
-  <h2>{{ title }}</h2>
-  <p class="light">{{ chunks|length }} chunks</p>
-  {% for c in chunks %}
-    <div class="readable" style="padding:12px;border:1px solid #d8dde2;border-radius:6px;background:#fff;margin-bottom:8px;">
-      <div style="font-size:12px;color:#596673;">#{{ c.position }} · {{ c.tokens }} tokens</div>
-      <pre style="white-space:pre-wrap;margin:8px 0 0;font-family:inherit;">{{ c.content }}</pre>
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('file-lines') }}</span>
+        <h2 class="iaa-card__title">{{ title }}</h2>
+        <span class="iaa-card__aside">
+          <span class="iaa-chip">{{ chunks|length }} chunks</span>
+          <a class="iaa-card__action" href="{{ url(backUrl) }}">← Back</a>
+        </span>
+      </div>
+      {% for c in chunks %}
+        <div class="iaa-card__body">
+          <div class="iaa-chunk__meta">#{{ c.position }} · {{ c.tokens }} tokens</div>
+          <pre class="iaa-pre iaa-chunk__text">{{ c.content }}</pre>
+        </div>
+      {% else %}
+        <div class="iaa-empty"><p>No chunks indexed.</p></div>
+      {% endfor %}
     </div>
-  {% else %}
-    <p class="light">No chunks indexed.</p>
-  {% endfor %}
+  </div>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends 'interactive-ai-assistant/_layout' %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 {% set title = 'Training · Entries' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
@@ -15,55 +16,75 @@
 {% set selectedTab = 'entries' %}
 
 {% block content %}
-  <form method="post" accept-charset="UTF-8">
+  <form method="post" accept-charset="UTF-8" class="iaa-cards">
     {{ csrfInput() }}
     {{ actionInput('interactive-ai-assistant/training/train-sections') }}
-    <div class="field">
-      <div class="heading"><label>Sections to train</label></div>
-      <div class="input">
-        {% for s in sections %}
-          <label style="display:block;margin-bottom:6px;">
-            <input type="checkbox" name="sections[]" value="{{ s.uid }}"
-              {% if s.uid in selectedSections %}checked{% endif %}>
-            {{ s.name }}
-          </label>
-        {% endfor %}
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('layer-group') }}</span>
+        <h2 class="iaa-card__title">Sections to train</h2>
+      </div>
+      <div class="iaa-card__body">
+        <ul class="iaa-checklist">
+          {% for s in sections %}
+            <li>
+              <label>
+                <input type="checkbox" name="sections[]" value="{{ s.uid }}"
+                  {% if s.uid in selectedSections %}checked{% endif %}>
+                {{ s.name }}
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="iaa-card__foot">
+        <button type="submit" class="btn submit">Train now</button>
       </div>
     </div>
-    <button type="submit" class="btn submit">Train now</button>
   </form>
 
-  <hr>
-  <h2>Indexed entries</h2>
-  {% if rows|length %}
-    <table class="data fullwidth">
-      <thead>
-        <tr>
-          <th>Entry</th><th>Status</th><th>Chunks</th><th>Last trained</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-          <tr>
-            <td>
-              <a href="{{ url('interactive-ai-assistant/training/entry-chunks/' ~ r.id) }}">
-                {{ entryTitles[r.entryId] ?? 'Entry #' ~ r.entryId }}
-              </a>
-            </td>
-            <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
-            <td>{{ r.chunkCount }}</td>
-            <td>{{ r.lastTrainedAt ?: '—' }}</td>
-            <td>
-              <button class="btn small js-train-entry" data-id="{{ r.id }}">Re-train</button>
-              <button class="btn small js-delete-entry" data-id="{{ r.id }}">Delete</button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="light">No entries trained yet.</p>
-  {% endif %}
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('file-lines') }}</span>
+        <h2 class="iaa-card__title">Indexed entries</h2>
+        {% if rows|length %}<span class="iaa-card__aside"><span class="iaa-chip">{{ rows|length }}</span></span>{% endif %}
+      </div>
+      {% if rows|length %}
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            <thead>
+              <tr>
+                <th>Entry</th><th>Status</th><th class="iaa-num">Chunks</th><th>Last trained</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>
+                    <a href="{{ url('interactive-ai-assistant/training/entry-chunks/' ~ r.id) }}">
+                      {{ entryTitles[r.entryId] ?? 'Entry #' ~ r.entryId }}
+                    </a>
+                  </td>
+                  <td>{% include 'interactive-ai-assistant/training/_status' with { status: r.status } only %}</td>
+                  <td class="iaa-num">{{ r.chunkCount }}</td>
+                  <td class="iaa-nowrap">{{ r.lastTrainedAt ?: '—' }}</td>
+                  <td>
+                    <div class="iaa-row-actions">
+                      <button class="btn small js-train-entry" data-id="{{ r.id }}">Re-train</button>
+                      <button class="btn small js-delete-entry" data-id="{{ r.id }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="iaa-empty"><p>No entries trained yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
 
   <script>
     (function(){

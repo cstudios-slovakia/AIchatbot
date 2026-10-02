@@ -1,171 +1,207 @@
 {% import '_includes/forms' as forms %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 
-{{ forms.lightswitchField({
-  label: 'Enable Chatbot',
-  name: 'settings[enabled]',
-  on: settings.enabled,
-}) }}
+<div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('robot') }}</span>
+      <h2 class="iaa-card__title">Widget</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Enable Chatbot',
+          name: 'settings[enabled]',
+          on: settings.enabled,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Debug Mode',
-  instructions: 'When on, the widget is shown only to logged-in control-panel users (admins/staff), not the public. Use it to test before going live.',
-  name: 'settings[debugMode]',
-  on: settings.debugMode ?? false,
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Debug Mode',
+          instructions: 'When on, the widget is shown only to logged-in control-panel users (admins/staff), not the public. Use it to test before going live.',
+          name: 'settings[debugMode]',
+          on: settings.debugMode ?? false,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('pen') }}</span>
+      <h2 class="iaa-card__title">Branding</h2>
+    </div>
+    <div class="iaa-card__body">
+      {{ forms.textField({
+        label: 'Company Name',
+        name: 'settings[companyName]',
+        value: settings.companyName,
+        required: true,
+      }) }}
 
-{{ forms.textField({
-  label: 'Company Name',
-  name: 'settings[companyName]',
-  value: settings.companyName,
-  required: true,
-}) }}
+      {{ forms.elementSelectField({
+        label: 'Logo Image',
+        name: 'settings[logoAssetId]',
+        elementType: 'craft\\elements\\Asset',
+        selectionLabel: 'Choose image',
+        limit: 1,
+        elements: settings.logoAssetId ? [craft.assets.id(settings.logoAssetId).one()]|filter : [],
+      }) }}
+      <div class="iaa-rows">
+        {{ forms.textField({
+          label: 'Logo Text',
+          instructions: 'Up to 3 characters, shown as a badge when no logo image is set.',
+          name: 'settings[logoText]',
+          value: settings.logoText,
+          size: 6,
+        }) }}
 
-{{ forms.textField({
-  label: 'Logo Text',
-  instructions: 'Up to 3 characters, shown as a badge when no logo image is set.',
-  name: 'settings[logoText]',
-  value: settings.logoText,
-  size: 6,
-}) }}
+        {{ forms.colorField({
+          label: 'Primary Color',
+          name: 'settings[primaryColor]',
+          value: settings.primaryColor,
+        }) }}
 
-{{ forms.elementSelectField({
-  label: 'Logo Image',
-  name: 'settings[logoAssetId]',
-  elementType: 'craft\\elements\\Asset',
-  selectionLabel: 'Choose image',
-  limit: 1,
-  elements: settings.logoAssetId ? [craft.assets.id(settings.logoAssetId).one()]|filter : [],
-}) }}
+        {{ forms.colorField({
+          label: 'Logo Background Color',
+          name: 'settings[logoBgColor]',
+          value: settings.logoBgColor,
+        }) }}
 
-{{ forms.colorField({
-  label: 'Primary Color',
-  name: 'settings[primaryColor]',
-  value: settings.primaryColor,
-}) }}
+        {{ forms.selectField({
+          label: 'Default Theme',
+          name: 'settings[defaultTheme]',
+          value: settings.defaultTheme,
+          options: { light: 'Light', dark: 'Dark' },
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('sliders') }}</span>
+      <h2 class="iaa-card__title">Layout &amp; size</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.selectField({
+          label: 'Operation Mode',
+          instructions: 'Chat = floating bubble in the corner. Agent = docked full-height panel on the right that shrinks the page content beside it.',
+          name: 'settings[operationMode]',
+          value: settings.operationMode ?? 'chat',
+          options: { chat: 'Chat (floating bubble)', agent: 'Agent (docked side panel)' },
+        }) }}
 
-{{ forms.colorField({
-  label: 'Logo Background Color',
-  name: 'settings[logoBgColor]',
-  value: settings.logoBgColor,
-}) }}
+        {{ forms.selectField({
+          label: 'Widget Position',
+          instructions: 'Which corner the chat bubble sits in. In Agent mode only the left/right side is used to pick the dock side.',
+          name: 'settings[widgetPosition]',
+          value: settings.widgetPosition ?? 'bottom-right',
+          options: {
+            'bottom-right': 'Bottom right',
+            'bottom-left': 'Bottom left',
+            'top-right': 'Top right',
+            'top-left': 'Top left',
+          },
+        }) }}
 
-{{ forms.selectField({
-  label: 'Default Theme',
-  name: 'settings[defaultTheme]',
-  value: settings.defaultTheme,
-  options: { light: 'Light', dark: 'Dark' },
-}) }}
+        {{ forms.textField({
+          label: 'Agent Panel Width',
+          instructions: 'Width in pixels of the docked panel (Agent mode only). 280–900.',
+          name: 'settings[agentPanelWidth]',
+          value: settings.agentPanelWidth ?? 420,
+          size: 6,
+          type: 'number',
+          unit: 'px',
+        }) }}
 
-{{ forms.selectField({
-  label: 'Operation Mode',
-  instructions: 'Chat = floating bubble in the corner. Agent = docked full-height panel on the right that shrinks the page content beside it.',
-  name: 'settings[operationMode]',
-  value: settings.operationMode ?? 'chat',
-  options: { chat: 'Chat (floating bubble)', agent: 'Agent (docked side panel)' },
-}) }}
+        {{ forms.textField({
+          label: 'Chat Window Width',
+          instructions: 'Width in pixels of the floating chat panel (Chat mode only). 280–720. It never grows past the viewport.',
+          name: 'settings[widgetWidth]',
+          value: settings.widgetWidth ?? 360,
+          size: 6,
+          type: 'number',
+          unit: 'px',
+        }) }}
 
-{{ forms.selectField({
-  label: 'Widget Position',
-  instructions: 'Which corner the chat bubble sits in. In Agent mode only the left/right side is used to pick the dock side.',
-  name: 'settings[widgetPosition]',
-  value: settings.widgetPosition ?? 'bottom-right',
-  options: {
-    'bottom-right': 'Bottom right',
-    'bottom-left': 'Bottom left',
-    'top-right': 'Top right',
-    'top-left': 'Top left',
-  },
-}) }}
+        {{ forms.textField({
+          label: 'Chat Window Height',
+          instructions: 'Height in pixels of the floating chat panel (Chat mode only). 360–1000.',
+          name: 'settings[widgetHeight]',
+          value: settings.widgetHeight ?? 540,
+          size: 6,
+          type: 'number',
+          unit: 'px',
+        }) }}
 
-{{ forms.textField({
-  label: 'Agent Panel Width',
-  instructions: 'Width in pixels of the docked panel (Agent mode only). 280–900.',
-  name: 'settings[agentPanelWidth]',
-  value: settings.agentPanelWidth ?? 420,
-  size: 6,
-  type: 'number',
-  unit: 'px',
-}) }}
+        {{ forms.textField({
+          label: 'Text Size',
+          instructions: 'Base text size inside the widget, 11–22. Every other size — bubbles, labels, timestamps — is a ratio of it, so this scales the whole widget’s text.',
+          name: 'settings[widgetFontSize]',
+          value: settings.widgetFontSize ?? 13,
+          size: 6,
+          type: 'number',
+          unit: 'px',
+        }) }}
 
-{{ forms.textField({
-  label: 'Chat Window Width',
-  instructions: 'Width in pixels of the floating chat panel (Chat mode only). 280–720. It never grows past the viewport.',
-  name: 'settings[widgetWidth]',
-  value: settings.widgetWidth ?? 360,
-  size: 6,
-  type: 'number',
-  unit: 'px',
-}) }}
+        {{ forms.lightswitchField({
+          label: 'Let Visitors Resize',
+          instructions: 'Adds “Enlarge window” and “Text size” to the widget’s ⋯ menu, so a visitor can make the chat bigger for themselves. Their choice is remembered on their device.',
+          name: 'settings[widgetResizeEnabled]',
+          on: settings.widgetResizeEnabled ?? true,
+        }) }}
+      </div>
+    </div>
+  </div>
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('comments') }}</span>
+      <h2 class="iaa-card__title">Bubble Colors (frontend)</h2>
+    </div>
+    <div class="iaa-card__body">
+      <p class="iaa-card__note">Leave empty to use the default. An empty text color is picked automatically so it stays readable on the bubble.</p>
+      <div class="iaa-rows">
+        {{ forms.colorField({
+          label: 'User Bubble',
+          instructions: 'Defaults to Primary Color.',
+          name: 'settings[bubbleUserColor]',
+          value: settings.bubbleUserColor,
+        }) }}
 
-{{ forms.textField({
-  label: 'Chat Window Height',
-  instructions: 'Height in pixels of the floating chat panel (Chat mode only). 360–1000.',
-  name: 'settings[widgetHeight]',
-  value: settings.widgetHeight ?? 540,
-  size: 6,
-  type: 'number',
-  unit: 'px',
-}) }}
+        {{ forms.colorField({
+          label: 'User Bubble Text',
+          instructions: 'Leave empty to pick automatically for contrast.',
+          name: 'settings[bubbleUserTextColor]',
+          value: settings.bubbleUserTextColor,
+        }) }}
 
-{{ forms.textField({
-  label: 'Text Size',
-  instructions: 'Base text size inside the widget, 11–22. Every other size — bubbles, labels, timestamps — is a ratio of it, so this scales the whole widget’s text.',
-  name: 'settings[widgetFontSize]',
-  value: settings.widgetFontSize ?? 13,
-  size: 6,
-  type: 'number',
-  unit: 'px',
-}) }}
+        {{ forms.colorField({
+          label: 'Bot Bubble',
+          instructions: 'Defaults to light grey (light theme) / dark grey (dark theme).',
+          name: 'settings[bubbleBotColor]',
+          value: settings.bubbleBotColor,
+        }) }}
 
-{{ forms.lightswitchField({
-  label: 'Let Visitors Resize',
-  instructions: 'Adds “Enlarge window” and “Text size” to the widget’s ⋯ menu, so a visitor can make the chat bigger for themselves. Their choice is remembered on their device.',
-  name: 'settings[widgetResizeEnabled]',
-  on: settings.widgetResizeEnabled ?? true,
-}) }}
+        {{ forms.colorField({
+          label: 'Bot Bubble Text',
+          instructions: 'Leave empty to pick automatically for contrast.',
+          name: 'settings[bubbleBotTextColor]',
+          value: settings.bubbleBotTextColor,
+        }) }}
 
-<hr>
-<h3>Bubble Colors (frontend)</h3>
-<p class="instructions">Leave empty to use the default. An empty text color is picked automatically so it stays readable on the bubble.</p>
+        {{ forms.colorField({
+          label: 'Admin Bubble',
+          instructions: 'Defaults to green (#10b981).',
+          name: 'settings[bubbleAdminColor]',
+          value: settings.bubbleAdminColor,
+        }) }}
 
-{{ forms.colorField({
-  label: 'User Bubble',
-  instructions: 'Defaults to Primary Color.',
-  name: 'settings[bubbleUserColor]',
-  value: settings.bubbleUserColor,
-}) }}
-
-{{ forms.colorField({
-  label: 'User Bubble Text',
-  instructions: 'Leave empty to pick automatically for contrast.',
-  name: 'settings[bubbleUserTextColor]',
-  value: settings.bubbleUserTextColor,
-}) }}
-
-{{ forms.colorField({
-  label: 'Bot Bubble',
-  instructions: 'Defaults to light grey (light theme) / dark grey (dark theme).',
-  name: 'settings[bubbleBotColor]',
-  value: settings.bubbleBotColor,
-}) }}
-
-{{ forms.colorField({
-  label: 'Bot Bubble Text',
-  instructions: 'Leave empty to pick automatically for contrast.',
-  name: 'settings[bubbleBotTextColor]',
-  value: settings.bubbleBotTextColor,
-}) }}
-
-{{ forms.colorField({
-  label: 'Admin Bubble',
-  instructions: 'Defaults to green (#10b981).',
-  name: 'settings[bubbleAdminColor]',
-  value: settings.bubbleAdminColor,
-}) }}
-
-{{ forms.colorField({
-  label: 'Admin Bubble Text',
-  instructions: 'Leave empty to pick automatically for contrast.',
-  name: 'settings[bubbleAdminTextColor]',
-  value: settings.bubbleAdminTextColor,
-}) }}
+        {{ forms.colorField({
+          label: 'Admin Bubble Text',
+          instructions: 'Leave empty to pick automatically for contrast.',
+          name: 'settings[bubbleAdminTextColor]',
+          value: settings.bubbleAdminTextColor,
+        }) }}
+      </div>
+    </div>
+  </div>
+</div>

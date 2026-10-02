@@ -1,7 +1,13 @@
 {% extends '_layouts/cp' %}
+{% do view.registerAssetBundle('cstudiossro\\craftcschatbot\\web\\assets\\cp\\CpAsset') %}
+
 {% set docTitle = (title ?? 'AI Assistant') ~ ' · ' ~ craft.app.systemName %}
 {% set title = title ?? 'AI Assistant' %}
 {% set selectedSubnavItem = selectedSubnavItem ?? 'dashboard' %}
+{# A screen without tabs is cards on the page's ground; a tabbed one keeps
+   Craft's pane with its tabs, and its cards draw as plain sections inside it —
+   see web/assets/cp. #}
+{% set bodyClass = bodyClass ?? ((tabs ?? [])|length > 1 ? 'iaa-paned' : 'iaa-flat') %}
 
 {% set crumbs = [
   { label: 'AI Assistant', url: url('interactive-ai-assistant') },

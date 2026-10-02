@@ -1,4 +1,5 @@
 {% extends 'interactive-ai-assistant/_layout' %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 {% set title = 'Training · Q&A' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
@@ -15,83 +16,104 @@
 {% set selectedTab = 'qa' %}
 
 {% block content %}
-  <form method="post" accept-charset="UTF-8" class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;margin-bottom:16px;">
-    {{ csrfInput() }}
-    {{ actionInput('interactive-ai-assistant/training/save-qa') }}
-    <h2>Add Q&amp;A pair</h2>
-    <div class="field">
-      <div class="heading"><label>Question</label></div>
-      <div class="input"><input type="text" class="text fullwidth" name="question" required></div>
-    </div>
-    <div class="field">
-      <div class="heading"><label>Answer</label></div>
-      <div class="input"><textarea class="text fullwidth" name="answer" rows="4" required></textarea></div>
-    </div>
-    {% if sites|length > 1 %}
-      <div class="field">
-        <div class="heading"><label>Applies to</label></div>
-        <div class="instructions"><p>Leave on all sites unless the answer is only true for one of them.</p></div>
-        <div class="input">
-          <div class="select">
-            <select name="siteId" id="qa-site">
-              <option value="0">All sites</option>
-              {% for site in sites %}
-                <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
-              {% endfor %}
-            </select>
+  <div class="iaa-cards">
+    <form method="post" accept-charset="UTF-8" class="iaa-card iaa-card--wide">
+      {{ csrfInput() }}
+      {{ actionInput('interactive-ai-assistant/training/save-qa') }}
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('plus') }}</span>
+        <h2 class="iaa-card__title">Add Q&amp;A pair</h2>
+      </div>
+      <div class="iaa-card__body">
+        <div class="field">
+          <div class="heading"><label>Question</label></div>
+          <div class="input"><input type="text" class="text fullwidth" name="question" required></div>
+        </div>
+        <div class="field">
+          <div class="heading"><label>Answer</label></div>
+          <div class="input"><textarea class="text fullwidth" name="answer" rows="4" required></textarea></div>
+        </div>
+        {% if sites|length > 1 %}
+          <div class="field">
+            <div class="heading"><label>Applies to</label></div>
+            <div class="instructions"><p>Leave on all sites unless the answer is only true for one of them.</p></div>
+            <div class="input">
+              <div class="select">
+                <select name="siteId" id="qa-site">
+                  <option value="0">All sites</option>
+                  {% for site in sites %}
+                    <option value="{{ site.id }}">{{ site.name }} ({{ site.language }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
+          <div class="field" id="qa-translate-field">
+            <div class="input">
+              <label><input type="checkbox" name="translate" value="1" checked> Index a translated copy for each site</label>
+            </div>
+            <div class="instructions"><p>Write the pair once. It gets embedded per site in that site's language, so a visitor asking in their own language still matches it. Turn this off to index your wording as-is for every site.</p></div>
+          </div>
+          <script>
+            (function () {
+              var site = document.getElementById('qa-site');
+              var translate = document.getElementById('qa-translate-field');
+              var sync = function () { translate.style.display = site.value === '0' ? '' : 'none'; };
+              site.addEventListener('change', sync);
+              sync();
+            })();
+          </script>
+        {% endif %}
       </div>
-      <div class="field" id="qa-translate-field">
-        <div class="input">
-          <label><input type="checkbox" name="translate" value="1" checked> Index a translated copy for each site</label>
-        </div>
-        <div class="instructions"><p>Write the pair once. It gets embedded per site in that site's language, so a visitor asking in their own language still matches it. Turn this off to index your wording as-is for every site.</p></div>
+      <div class="iaa-card__foot">
+        <button type="submit" class="btn submit">Save Q&amp;A</button>
       </div>
-      <script>
-        (function () {
-          var site = document.getElementById('qa-site');
-          var translate = document.getElementById('qa-translate-field');
-          var sync = function () { translate.style.display = site.value === '0' ? '' : 'none'; };
-          site.addEventListener('change', sync);
-          sync();
-        })();
-      </script>
-    {% endif %}
-    <button type="submit" class="btn submit">Save Q&amp;A</button>
-  </form>
+    </form>
+  </div>
 
-  <h2>Pairs</h2>
-  {% if rows|length %}
-    <table class="data fullwidth">
-      <thead><tr><th>Question</th><th>Answer</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Source</th><th>Active</th><th></th></tr></thead>
-      <tbody>
-        {% set siteNames = {} %}
-        {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
-        {% for r in rows %}
-          <tr>
-            <td>{{ r.question|slice(0, 120) }}</td>
-            <td>{{ r.answer|slice(0, 200) }}</td>
-            {% if sites|length > 1 %}
-              <td>
-                {% if r.siteId %}{{ siteNames[r.siteId] ?? 'Site #' ~ r.siteId }}
-                {% else %}All sites{{ r.translate ? ' (translated)' }}{% endif %}
-              </td>
-            {% endif %}
-            <td><span class="status-pill status-{{ r.source }}">{{ r.source }}</span></td>
-            <td>
-              <button class="btn small js-toggle" data-id="{{ r.id }}">{{ r.active ? 'On' : 'Off' }}</button>
-            </td>
-            <td>
-              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="light">No Q&amp;A pairs yet.</p>
-  {% endif %}
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('comments') }}</span>
+        <h2 class="iaa-card__title">Pairs</h2>
+        {% if rows|length %}<span class="iaa-card__aside"><span class="iaa-chip">{{ rows|length }}</span></span>{% endif %}
+      </div>
+      {% if rows|length %}
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            <thead><tr><th>Question</th><th>Answer</th>{% if sites|length > 1 %}<th>Applies to</th>{% endif %}<th>Source</th><th>Active</th><th></th></tr></thead>
+            <tbody>
+              {% set siteNames = {} %}
+              {% for site in sites %}{% set siteNames = siteNames|merge({ (site.id): site.name }) %}{% endfor %}
+              {% for r in rows %}
+                <tr>
+                  <td><strong>{{ r.question|slice(0, 120) }}</strong></td>
+                  <td class="iaa-muted">{{ r.answer|slice(0, 200) }}</td>
+                  {% if sites|length > 1 %}
+                    <td>
+                      {% if r.siteId %}{{ siteNames[r.siteId] ?? 'Site #' ~ r.siteId }}
+                      {% else %}All sites{{ r.translate ? ' (translated)' }}{% endif %}
+                    </td>
+                  {% endif %}
+                  <td><span class="iaa-chip">{{ r.source }}</span></td>
+                  <td>
+                    <button class="btn small js-toggle{{ r.active ? ' iaa-toggle--on' }}" data-id="{{ r.id }}">{{ r.active ? 'On' : 'Off' }}</button>
+                  </td>
+                  <td>
+                    <div class="iaa-row-actions">
+                      <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="iaa-empty"><p>No Q&amp;A pairs yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
 
   <script>
     (function(){

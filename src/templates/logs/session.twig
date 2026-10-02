@@ -2,109 +2,89 @@
 {% set title = 'Session ' ~ session.sessionToken|slice(0, 10) %}
 {% set selectedSubnavItem = 'logs-bans' %}
 {% import 'interactive-ai-assistant/logs/_macros' as m %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 
 {% block content %}
-  <style>
-    .cs-md > :first-child { margin-top:0; }
-    .cs-md > :last-child { margin-bottom:0; }
-    .cs-md p { margin:0 0 6px; }
-    .cs-md ul, .cs-md ol { margin:4px 0; padding-left:22px; }
-    .cs-md li { margin:1px 0; }
-    .cs-md h1, .cs-md h2, .cs-md h3, .cs-md h4, .cs-md h5, .cs-md h6 { margin:8px 0 4px; font-weight:600; line-height:1.25; }
-    .cs-md code { background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.92em; }
-    .cs-md pre { background:rgba(0,0,0,0.06); padding:10px; border-radius:6px; overflow-x:auto; }
-    .cs-md pre code { background:transparent; padding:0; }
-    .cs-md { overflow-wrap:anywhere; word-break:break-word; }
-    .cs-md { position:relative; }
-    .cs-md a { text-decoration:underline; overflow-wrap:anywhere; word-break:break-word; }
-    .cs-md a[data-cs-href]:hover::after {
-      content: "↗ " attr(data-cs-href);
-      position:absolute; bottom:auto; top:-26px; right:0; left:auto;
-      max-width:100%;
-      background:#111827; color:#f9fafb;
-      padding:4px 8px; border-radius:4px;
-      font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      z-index:9999; pointer-events:none;
-      box-shadow:0 2px 8px rgba(0,0,0,0.25);
-    }
-    .cs-md blockquote { margin:6px 0; padding:4px 10px; border-left:3px solid #cdd8e4; color:#596673; }
-
-    .cs-log-layout { display:flex; gap:20px; align-items:flex-start; }
-    .cs-log-chat { flex:1 1 auto; min-width:0; }
-    .cs-log-meta { flex:0 0 320px; width:320px; position:sticky; top:14px; }
-    .cs-log-meta .pane { margin-bottom:14px; }
-    .cs-log-meta .meta { margin:0; --heading-width: 80px; }
-    .cs-log-meta .meta .value { overflow-wrap:anywhere; word-break:break-word; white-space:normal; }
-    @media (max-width: 900px) {
-      .cs-log-layout { flex-direction:column; }
-      .cs-log-meta { width:100%; flex-basis:auto; position:static; }
-    }
-  </style>
   <p><a class="btn" href="{{ url('interactive-ai-assistant/logs') }}">&larr; Back to logs</a></p>
 
-  <div class="cs-log-layout">
-    <div class="cs-log-chat">
-      {% for msg in messages %}
-        <div class="pane" style="margin-bottom:10px;{{ msg.role == 'bot' ? 'background:#f3f7fc;' : '' }}">
-          <div class="flex" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
-            <strong>{{ msg.role == 'bot' ? 'Bot' : 'User' }}</strong>
-            <span class="light" style="font-size:12px;">{{ msg.dateCreated|datetime('short') }}</span>
-            {% if msg.responseTime %}<span class="light" style="font-size:12px;">{{ msg.responseTime }}s</span>{% endif %}
-            {% if msg.role == 'bot' %}{{ m.confidenceBadge(msg.confidence) }}{% endif %}
-            {% if msg.rating == 1 %}<span style="color:#27ab46;">&uarr;</span>{% endif %}
-            {% if msg.rating == -1 %}<span style="color:#cf1124;">&darr;</span>{% endif %}
-            {% if msg.usedAsQa %}
-              <span style="background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:8px;font-size:11px;">&check; Q&amp;A Training</span>
-            {% endif %}
-          </div>
-          <div class="cs-md" style="word-break:break-word;">{{ msg.content|md('gfm-comment') }}</div>
-          {% if msg.role == 'bot' and not msg.usedAsQa %}
-            <div style="margin-top:8px;">
-              <button class="btn small js-use-qa" data-id="{{ msg.id }}">Use as Q&amp;A</button>
-            </div>
-          {% endif %}
+  <div class="iaa-log">
+    <div class="iaa-log__chat">
+      <div class="iaa-card">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('comments') }}</span>
+          <h2 class="iaa-card__title">Conversation</h2>
         </div>
-      {% endfor %}
+        <div class="iaa-log__messages">
+          {% for msg in messages %}
+            <div class="iaa-msg {{ msg.role == 'bot' ? 'iaa-msg--bot' : 'iaa-msg--user' }}">
+              <div class="iaa-msg__head">
+                <strong>{{ msg.role == 'bot' ? 'Bot' : 'User' }}</strong>
+                <span class="light">{{ msg.dateCreated|datetime('short') }}</span>
+                {% if msg.responseTime %}<span class="light">{{ msg.responseTime }}s</span>{% endif %}
+                {% if msg.role == 'bot' %}{{ m.confidenceBadge(msg.confidence) }}{% endif %}
+                {% if msg.rating == 1 %}<span class="iaa-up">&uarr;</span>{% endif %}
+                {% if msg.rating == -1 %}<span class="iaa-down">&darr;</span>{% endif %}
+                {% if msg.usedAsQa %}
+                  <span class="iaa-chip iaa-chip--good">&check; Q&amp;A Training</span>
+                {% endif %}
+                {% if msg.role == 'bot' and not msg.usedAsQa %}
+                  <button class="btn small js-use-qa iaa-msg__action" data-id="{{ msg.id }}">Use as Q&amp;A</button>
+                {% endif %}
+              </div>
+              <div class="cs-md">{{ msg.content|md('gfm-comment') }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
 
-    <aside class="cs-log-meta">
-      <div class="pane">
-        <div class="meta read-only">
-          <div class="data">
-            <div class="heading">Session</div>
-            <div class="value code">{{ session.sessionToken }}</div>
-          </div>
-          <div class="data">
-            <div class="heading">Page</div>
-            <div class="value">{{ session.pageUrl ?: '—' }}</div>
-          </div>
-          <div class="data">
-            <div class="heading">IP</div>
-            <div class="value">{{ session.ip ?: '—' }}</div>
-          </div>
-          <div class="data">
-            <div class="heading">Started</div>
-            <div class="value">{{ session.dateCreated|datetime('short') }}</div>
-          </div>
-          <div class="data">
-            <div class="heading">Ratings</div>
-            <div class="value">
-              <span style="color:#27ab46;">{{ session.ratingPositive }} &uarr;</span>
-              &nbsp;
-              <span style="color:#cf1124;">{{ session.ratingNegative }} &darr;</span>
+    <aside class="iaa-log__meta">
+      <div class="iaa-card">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('circle-info') }}</span>
+          <h2 class="iaa-card__title">Session</h2>
+        </div>
+        <div class="iaa-card__body">
+          <dl class="iaa-facts iaa-facts--stack">
+            <div class="iaa-fact">
+              <dt class="iaa-fact__label">Session</dt>
+              <dd class="iaa-fact__value iaa-code">{{ session.sessionToken }}</dd>
             </div>
-          </div>
+            <div class="iaa-fact">
+              <dt class="iaa-fact__label">Page</dt>
+              <dd class="iaa-fact__value">{{ session.pageUrl ?: '—' }}</dd>
+            </div>
+            <div class="iaa-fact">
+              <dt class="iaa-fact__label">IP</dt>
+              <dd class="iaa-fact__value">{{ session.ip ?: '—' }}</dd>
+            </div>
+            <div class="iaa-fact">
+              <dt class="iaa-fact__label">Started</dt>
+              <dd class="iaa-fact__value">{{ session.dateCreated|datetime('short') }}</dd>
+            </div>
+            <div class="iaa-fact">
+              <dt class="iaa-fact__label">Ratings</dt>
+              <dd class="iaa-fact__value">
+                <span class="iaa-up">{{ session.ratingPositive }} &uarr;</span>
+                &nbsp;
+                <span class="iaa-down">{{ session.ratingNegative }} &darr;</span>
+              </dd>
+            </div>
+          </dl>
         </div>
       </div>
 
-      <div class="pane" style="background:#fffdf4;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <strong style="font-size:13px;">📝 Admin notes <span class="light" style="font-weight:normal;font-size:11px;">(searchable from logs page)</span></strong>
-          <span id="lc-note-status" class="light" style="font-size:11px;"></span>
+      <div class="iaa-card iaa-card--warn">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('pen') }}</span>
+          <h2 class="iaa-card__title">Admin notes</h2>
+          <span class="iaa-card__aside"><span id="lc-note-status" class="light"></span></span>
         </div>
-        <textarea id="lc-note" class="text fullwidth" rows="5" placeholder="Notes for this conversation — e.g. context, follow-up, internal tags...">{{ session.adminNotes }}</textarea>
-        <div style="margin-top:8px;">
+        <div class="iaa-card__body">
+          <p class="iaa-card__note">(searchable from logs page)</p>
+          <textarea id="lc-note" class="text fullwidth" rows="5" placeholder="Notes for this conversation — e.g. context, follow-up, internal tags...">{{ session.adminNotes }}</textarea>
+        </div>
+        <div class="iaa-card__foot">
           <button type="button" class="btn submit" id="lc-note-save">Save note</button>
         </div>
       </div>

@@ -23,8 +23,9 @@
 
     {% include 'interactive-ai-assistant/settings/_' ~ tab with { settings: settings, sections: sections } %}
 
-    <hr>
-    <button type="submit" class="btn submit">Save</button>
+    <div class="iaa-actions">
+      <button type="submit" class="btn submit">Save</button>
+    </div>
   </form>
 
   {% js %}

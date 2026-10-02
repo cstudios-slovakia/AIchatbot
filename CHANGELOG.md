@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The control panel screens have a new look. Screens without tabs — the
+  Dashboard, Live Chat, a conversation's log, missed chats — are now built of
+  cards: a titled panel per topic, with the state of things (needs attention,
+  failed, indexed, waiting) shown as a coloured word in its head and the
+  numbers as large figures. Tabbed screens — Settings, Training, Logs — keep
+  the standard Craft panel with its tabs, and their settings are grouped into
+  titled sections, with short switches and numbers laid out beside their names
+  instead of under them. Nothing about how the screens work has changed; the
+  same settings are in the same tabs.
 - The text color of each chat bubble can now be set, next to its background
   under **Settings → General → Bubble Colors**: one for the visitor's messages,
   one for the assistant's and one for replies from a live agent. Links in the

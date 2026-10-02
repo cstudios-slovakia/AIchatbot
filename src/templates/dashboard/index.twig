@@ -2,26 +2,38 @@
 {% set title = 'Dashboard' %}
 {% set selectedSubnavItem = 'dashboard' %}
 
+{% import 'interactive-ai-assistant/_icons' as icons %}
+
 {% block content %}
   <div id="chatbot-dashboard">
     {# Leads first: a person is waiting on the other end of these, and unlike a
        stale index they go stale by themselves if nobody looks. #}
     {% set newLeads = (missedChatsNew ?? 0) + (newSubmissions ?? 0) %}
     {% if newLeads %}
-      <div class="readable" style="padding:14px;border:1px solid #7c3aed;border-left-width:4px;border-radius:6px;background:#f7f4ff;margin-bottom:24px;">
-        <h2 style="margin-top:0;">{{ newLeads }} new lead{{ newLeads == 1 ? '' : 's' }} waiting</h2>
-        <ul style="margin:0 0 10px;padding-left:18px;">
-          {% if missedChatsNew ?? 0 %}
-            <li><strong>{{ missedChatsNew }}</strong> missed chat{{ missedChatsNew == 1 ? '' : 's' }} — a visitor left contact details and nobody has followed up yet.</li>
-          {% endif %}
-          {% if newSubmissions ?? 0 %}
-            <li><strong>{{ newSubmissions }}</strong> form submission{{ newSubmissions == 1 ? '' : 's' }} nobody has opened yet.</li>
-          {% endif %}
-        </ul>
-        <a class="btn submit" href="{{ url('interactive-ai-assistant/missed-chats', { status: 'new' }) }}">Missed chats</a>
-        {% if newSubmissions ?? 0 %}
-          <a class="btn" href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">Form submissions</a>
-        {% endif %}
+      <div class="iaa-cards">
+        <div class="iaa-card iaa-card--wide iaa-card--accent">
+          <div class="iaa-card__head">
+            <span class="iaa-card__icon">{{ icons.svg('inbox') }}</span>
+            <h2 class="iaa-card__title">{{ newLeads }} new lead{{ newLeads == 1 ? '' : 's' }} waiting</h2>
+            <span class="iaa-card__aside"><span class="iaa-chip iaa-chip--accent">Follow up</span></span>
+          </div>
+          <div class="iaa-card__body">
+            <ul class="iaa-card__note iaa-list">
+              {% if missedChatsNew ?? 0 %}
+                <li><strong>{{ missedChatsNew }}</strong> missed chat{{ missedChatsNew == 1 ? '' : 's' }} — a visitor left contact details and nobody has followed up yet.</li>
+              {% endif %}
+              {% if newSubmissions ?? 0 %}
+                <li><strong>{{ newSubmissions }}</strong> form submission{{ newSubmissions == 1 ? '' : 's' }} nobody has opened yet.</li>
+              {% endif %}
+            </ul>
+          </div>
+          <div class="iaa-card__foot">
+            <a class="btn submit" href="{{ url('interactive-ai-assistant/missed-chats', { status: 'new' }) }}">Missed chats</a>
+            {% if newSubmissions ?? 0 %}
+              <a class="btn" href="{{ url('interactive-ai-assistant/missed-chats/submissions') }}">Form submissions</a>
+            {% endif %}
+          </div>
+        </div>
       </div>
     {% endif %}
 
@@ -30,30 +42,40 @@
     {% set blankCount = health.blank|length %}
     {% set untrainedTotal = health.untrainedBySection|reduce((carry, n) => carry + n, 0) %}
     {% if staleCount or failedCount or blankCount or untrainedTotal or openGaps %}
-      <div class="readable" style="padding:14px;border:1px solid #f0b429;border-left-width:4px;border-radius:6px;background:#fffaf0;margin-bottom:24px;">
-        <h2 style="margin-top:0;">Training needs attention</h2>
-        <ul style="margin:0 0 10px;padding-left:18px;">
-          {% if staleCount %}
-            <li><strong>{{ staleCount }}</strong> source{{ staleCount == 1 ? '' : 's' }} changed since {{ staleCount == 1 ? 'it was' : 'they were' }} last indexed — the assistant is still answering from the old text.</li>
-          {% endif %}
-          {% if untrainedTotal %}
-            <li><strong>{{ untrainedTotal }}</strong> live entr{{ untrainedTotal == 1 ? 'y is' : 'ies are' }} in a section selected for training but {{ untrainedTotal == 1 ? 'has' : 'have' }} never been indexed:
-              {% for section, count in health.untrainedBySection %}{{ section }} ({{ count }}){{ not loop.last ? ', ' }}{% endfor %}.</li>
-          {% endif %}
-          {% if failedCount %}
-            <li><strong>{{ failedCount }}</strong> source{{ failedCount == 1 ? '' : 's' }} failed to index.</li>
-          {% endif %}
-          {% if blankCount %}
-            <li><strong>{{ blankCount }}</strong> source{{ blankCount == 1 ? '' : 's' }} indexed to nothing — no text could be extracted from {{ blankCount == 1 ? 'it' : 'them' }}.</li>
-          {% endif %}
-          {% if openGaps %}
-            <li><strong>{{ openGaps }}</strong> question{{ openGaps == 1 ? '' : 's' }} {{ openGaps == 1 ? 'was' : 'were' }} answered with little or nothing to go on — <a href="{{ url('interactive-ai-assistant/training/gaps') }}">review and answer them</a>.</li>
-          {% endif %}
-        </ul>
-        <a class="btn" href="{{ url('interactive-ai-assistant/training/entries') }}">Review training</a>
-        {% if staleCount %}
-          <button type="button" class="btn submit" id="chatbot-retrain-stale">Re-index changed content</button>
-        {% endif %}
+      <div class="iaa-cards">
+        <div class="iaa-card iaa-card--wide {{ failedCount ? 'iaa-card--bad' : 'iaa-card--warn' }}">
+          <div class="iaa-card__head">
+            <span class="iaa-card__icon">{{ icons.svg('triangle-exclamation') }}</span>
+            <h2 class="iaa-card__title">Training needs attention</h2>
+            <span class="iaa-card__aside"><span class="iaa-chip {{ failedCount ? 'iaa-chip--bad' : 'iaa-chip--warn' }}">Worth a look</span></span>
+          </div>
+          <div class="iaa-card__body">
+            <ul class="iaa-card__note iaa-list">
+              {% if staleCount %}
+                <li><strong>{{ staleCount }}</strong> source{{ staleCount == 1 ? '' : 's' }} changed since {{ staleCount == 1 ? 'it was' : 'they were' }} last indexed — the assistant is still answering from the old text.</li>
+              {% endif %}
+              {% if untrainedTotal %}
+                <li><strong>{{ untrainedTotal }}</strong> live entr{{ untrainedTotal == 1 ? 'y is' : 'ies are' }} in a section selected for training but {{ untrainedTotal == 1 ? 'has' : 'have' }} never been indexed:
+                  {% for section, count in health.untrainedBySection %}{{ section }} ({{ count }}){{ not loop.last ? ', ' }}{% endfor %}.</li>
+              {% endif %}
+              {% if failedCount %}
+                <li><strong>{{ failedCount }}</strong> source{{ failedCount == 1 ? '' : 's' }} failed to index.</li>
+              {% endif %}
+              {% if blankCount %}
+                <li><strong>{{ blankCount }}</strong> source{{ blankCount == 1 ? '' : 's' }} indexed to nothing — no text could be extracted from {{ blankCount == 1 ? 'it' : 'them' }}.</li>
+              {% endif %}
+              {% if openGaps %}
+                <li><strong>{{ openGaps }}</strong> question{{ openGaps == 1 ? '' : 's' }} {{ openGaps == 1 ? 'was' : 'were' }} answered with little or nothing to go on — <a href="{{ url('interactive-ai-assistant/training/gaps') }}">review and answer them</a>.</li>
+              {% endif %}
+            </ul>
+          </div>
+          <div class="iaa-card__foot">
+            {% if staleCount %}
+              <button type="button" class="btn submit" id="chatbot-retrain-stale">Re-index changed content</button>
+            {% endif %}
+            <a class="btn" href="{{ url('interactive-ai-assistant/training/entries') }}">Review training</a>
+          </div>
+        </div>
       </div>
       {% if staleCount %}
         <script>
@@ -81,81 +103,114 @@
       {% endif %}
     {% endif %}
 
-    <form method="get" class="flex flex-nowrap" style="gap:8px;margin-bottom:16px;">
-      <input type="date" name="from" value="{{ from }}" class="text">
-      <input type="date" name="to" value="{{ to }}" class="text">
-      <button type="submit" class="btn">Apply</button>
-      <a class="btn" href="?from={{ now|date_modify('-7 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 7 days</a>
-      <a class="btn" href="?from={{ now|date_modify('-30 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 30 days</a>
-      <a class="btn" href="?from={{ now|date_modify('-90 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 90 days</a>
-    </form>
-
-    <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:24px;">
-      {% set kpis = [
-        { label: 'Active now', value: stats.activeNow ?? 0, href: url('interactive-ai-assistant/logs', { active: 1 }), color: '#2563eb' },
-        { label: 'Missed chats', value: missedChatsNew ?? 0, href: url('interactive-ai-assistant/missed-chats', { status: 'new' }), color: '#7c3aed' },
-      ] %}
-      {% if formsEnabled ?? false %}
-        {% set kpis = kpis|merge([
-          { label: 'New submissions', value: newSubmissions ?? 0, href: url('interactive-ai-assistant/missed-chats/submissions'), color: '#7c3aed' },
-        ]) %}
-      {% endif %}
+    {% set kpis = [
+      { label: 'Active now', value: stats.activeNow ?? 0, href: url('interactive-ai-assistant/logs', { active: 1 }), tone: 'info' },
+      { label: 'Missed chats', value: missedChatsNew ?? 0, href: url('interactive-ai-assistant/missed-chats', { status: 'new' }), tone: 'accent' },
+    ] %}
+    {% if formsEnabled ?? false %}
       {% set kpis = kpis|merge([
-        { label: 'Conversations', value: stats.totalConversations, href: null },
-        { label: 'Messages', value: stats.totalMessages, href: null },
-        { label: 'Avg response (s)', value: stats.avgResponseTime, href: null },
-        { label: 'Avg / day', value: stats.avgPerDay, href: null },
-        { label: 'Positive', value: stats.positive, href: url('interactive-ai-assistant/logs', { rating: 'pos' }), color: '#27ab46' },
-        { label: 'Negative', value: stats.negative, href: url('interactive-ai-assistant/logs', { rating: 'neg' }), color: '#cf1124' },
+        { label: 'New submissions', value: newSubmissions ?? 0, href: url('interactive-ai-assistant/missed-chats/submissions'), tone: 'accent' },
       ]) %}
-      {% for k in kpis %}
-        {% if k.href %}
-          <a href="{{ k.href }}" class="readable" style="display:block;text-decoration:none;color:inherit;padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;transition:border-color .15s, transform .15s;" onmouseover="this.style.borderColor='{{ k.color ?? '#2563eb' }}';" onmouseout="this.style.borderColor='#d8dde2';">
-            <div style="font-size:12px;color:#596673;">{{ k.label }} <span style="font-size:10px;opacity:.6;">↗ view</span></div>
-            <div style="font-size:24px;font-weight:600;color:{{ k.color ?? 'inherit' }};">{{ k.value }}</div>
-          </a>
-        {% else %}
-          <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
-            <div style="font-size:12px;color:#596673;">{{ k.label }}</div>
-            <div style="font-size:24px;font-weight:600;">{{ k.value }}</div>
+    {% endif %}
+    {% set kpis = kpis|merge([
+      { label: 'Conversations', value: stats.totalConversations, href: null },
+      { label: 'Messages', value: stats.totalMessages, href: null },
+      { label: 'Avg response (s)', value: stats.avgResponseTime, href: null },
+      { label: 'Avg / day', value: stats.avgPerDay, href: null },
+      { label: 'Positive', value: stats.positive, href: url('interactive-ai-assistant/logs', { rating: 'pos' }), tone: 'good' },
+      { label: 'Negative', value: stats.negative, href: url('interactive-ai-assistant/logs', { rating: 'neg' }), tone: 'bad' },
+    ]) %}
+
+    <div class="iaa-cards">
+      <div class="iaa-card iaa-card--wide iaa-card--info">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('chart-line') }}</span>
+          <h2 class="iaa-card__title">Activity</h2>
+          <span class="iaa-card__aside">
+            <a class="iaa-card__action" href="?from={{ now|date_modify('-7 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 7 days</a>
+            <a class="iaa-card__action" href="?from={{ now|date_modify('-30 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 30 days</a>
+            <a class="iaa-card__action" href="?from={{ now|date_modify('-90 days')|date('Y-m-d') }}&to={{ now|date('Y-m-d') }}">Last 90 days</a>
+          </span>
+        </div>
+        <div class="iaa-card__body">
+          <form method="get" class="iaa-filters">
+            <div class="field field--narrow">
+              <div class="heading"><label for="chatbot-from">From</label></div>
+              <div class="input"><input type="date" id="chatbot-from" name="from" value="{{ from }}" class="text"></div>
+            </div>
+            <div class="field field--narrow">
+              <div class="heading"><label for="chatbot-to">To</label></div>
+              <div class="input"><input type="date" id="chatbot-to" name="to" value="{{ to }}" class="text"></div>
+            </div>
+            <div class="iaa-go"><button type="submit" class="btn">Apply</button></div>
+          </form>
+        </div>
+        <div class="iaa-card__body iaa-card__body--flush">
+          <div class="iaa-figures">
+            {% for k in kpis %}
+              {% if k.href %}
+                <a href="{{ k.href }}" class="iaa-figure {{ k.tone is defined ? 'iaa-figure--' ~ k.tone }}">
+                  <span class="iaa-figure__value">{{ k.value }}</span>
+                  <span class="iaa-figure__label">{{ k.label }} ↗</span>
+                </a>
+              {% else %}
+                <div class="iaa-figure">
+                  <span class="iaa-figure__value">{{ k.value }}</span>
+                  <span class="iaa-figure__label">{{ k.label }}</span>
+                </div>
+              {% endif %}
+            {% endfor %}
           </div>
-        {% endif %}
-      {% endfor %}
+        </div>
+        <div class="iaa-card__body iaa-chart">
+          <div class="iaa-legend">
+            <span class="iaa-legend__item"><span class="iaa-swatch" style="color:#2563eb;"></span>Conversations</span>
+            <span class="iaa-legend__item"><span class="iaa-swatch" style="color:#10b981;"></span>Messages</span>
+          </div>
+          <canvas id="chatbot-activity" height="160"></canvas>
+        </div>
+      </div>
     </div>
 
-    <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;margin-bottom:24px;">
-      <h2>Activity</h2>
-      <canvas id="chatbot-activity" height="120"></canvas>
-    </div>
-
-    <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
-        <h2>Suggestion clicks</h2>
+    <div class="iaa-cards">
+      <div class="iaa-card">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('lightbulb') }}</span>
+          <h2 class="iaa-card__title">Suggestion clicks</h2>
+        </div>
         {% if suggestions|length %}
-          <table class="data fullwidth">
-            <thead><tr><th>Suggestion</th><th>Clicks</th><th>Last</th></tr></thead>
-            <tbody>
-              {% for s in suggestions %}
-                <tr><td>{{ s.suggestion }}</td><td>{{ s.clicks }}</td><td>{{ s.lastClickedAt }}</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="iaa-card__body iaa-card__body--flush">
+            <table class="data fullwidth">
+              <thead><tr><th>Suggestion</th><th class="iaa-num">Clicks</th><th>Last</th></tr></thead>
+              <tbody>
+                {% for s in suggestions %}
+                  <tr><td>{{ s.suggestion }}</td><td class="iaa-num">{{ s.clicks }}</td><td class="iaa-nowrap">{{ s.lastClickedAt }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         {% else %}
-          <p class="light">No suggestion clicks yet.</p>
+          <div class="iaa-empty"><p>No suggestion clicks yet.</p></div>
         {% endif %}
       </div>
 
-      <div class="readable" style="padding:14px;border:1px solid #d8dde2;border-radius:6px;background:#fff;">
-        <h2>Training data</h2>
-        <table class="data fullwidth">
-          <thead><tr><th>Type</th><th>Sources</th><th>Chunks</th></tr></thead>
-          <tbody>
-            <tr><td>Entries</td><td>{{ training.entries.count }}</td><td>{{ training.entries.chunks }}</td></tr>
-            <tr><td>Files</td><td>{{ training.files.count }}</td><td>{{ training.files.chunks }}</td></tr>
-            <tr><td>URLs</td><td>{{ training.urls.count }}</td><td>{{ training.urls.chunks }}</td></tr>
-            <tr><td>Q&amp;A</td><td>{{ training.qa.count }}</td><td>{{ training.qa.chunks }}</td></tr>
-          </tbody>
-        </table>
+      <div class="iaa-card">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('database') }}</span>
+          <h2 class="iaa-card__title">Training data</h2>
+          <span class="iaa-card__aside"><a class="iaa-card__action" href="{{ url('interactive-ai-assistant/training/entries') }}">Training</a></span>
+        </div>
+        <div class="iaa-card__body iaa-card__body--flush">
+          <table class="data fullwidth">
+            <thead><tr><th>Type</th><th class="iaa-num">Sources</th><th class="iaa-num">Chunks</th></tr></thead>
+            <tbody>
+              <tr><td>Entries</td><td class="iaa-num">{{ training.entries.count }}</td><td class="iaa-num">{{ training.entries.chunks }}</td></tr>
+              <tr><td>Files</td><td class="iaa-num">{{ training.files.count }}</td><td class="iaa-num">{{ training.files.chunks }}</td></tr>
+              <tr><td>URLs</td><td class="iaa-num">{{ training.urls.count }}</td><td class="iaa-num">{{ training.urls.chunks }}</td></tr>
+              <tr><td>Q&amp;A</td><td class="iaa-num">{{ training.qa.count }}</td><td class="iaa-num">{{ training.qa.chunks }}</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -182,10 +237,6 @@
       }
       path('conversations', '#2563eb');
       path('messages', '#10b981');
-      // legend
-      ctx.font = '12px sans-serif';
-      ctx.fillStyle = '#2563eb'; ctx.fillText('Conversations', 10, 14);
-      ctx.fillStyle = '#10b981'; ctx.fillText('Messages', 120, 14);
     })();
   </script>
 {% endblock %}

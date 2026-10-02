@@ -1,4 +1,5 @@
 {% extends 'interactive-ai-assistant/_layout' %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 {% set title = 'Training · Plugins' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
@@ -17,54 +18,72 @@
 {% block content %}
   {% if blocks|length %}
     {% for block in blocks %}
-      <div class="source-block" style="margin-bottom:32px;">
-        <form method="post" accept-charset="UTF-8">
-          {{ csrfInput() }}
-          {{ actionInput('interactive-ai-assistant/training/train-source') }}
-          {{ hiddenInput('handle', block.handle) }}
-          <h2>{{ block.label }}</h2>
-          <button type="submit" class="btn submit">Train all</button>
-        </form>
+      <div class="iaa-cards source-block">
+        <div class="iaa-card iaa-card--wide">
+          <form method="post" accept-charset="UTF-8" class="iaa-card__head">
+            {{ csrfInput() }}
+            {{ actionInput('interactive-ai-assistant/training/train-source') }}
+            {{ hiddenInput('handle', block.handle) }}
+            <span class="iaa-card__icon">{{ icons.svg('plug') }}</span>
+            <h2 class="iaa-card__title">{{ block.label }}</h2>
+            <span class="iaa-card__aside">
+              <button type="submit" class="btn submit small">Train all</button>
+            </span>
+          </form>
 
-        {% if block.rows|length %}
-          <table class="data fullwidth" style="margin-top:12px;">
-            <thead>
-              <tr>
-                <th>Item</th><th>Status</th><th>Chunks</th><th>Last trained</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in block.rows %}
-                <tr>
-                  <td>
-                    <a href="{{ url('interactive-ai-assistant/training/source-chunks/' ~ r.id) }}">
-                      {{ r.title ?: (block.handle ~ ' #' ~ r.itemId) }}
-                    </a>
-                  </td>
-                  <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
-                  <td>{{ r.chunkCount }}</td>
-                  <td>{{ r.lastTrainedAt ?: '—' }}</td>
-                  <td>
-                    <button class="btn small js-train-source" data-id="{{ r.id }}">Re-train</button>
-                    <button class="btn small js-delete-source" data-id="{{ r.id }}">Delete</button>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-          <p class="light" style="margin-top:8px;">Nothing trained yet from this source.</p>
-        {% endif %}
+          {% if block.rows|length %}
+            <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+              <table class="data fullwidth">
+                <thead>
+                  <tr>
+                    <th>Item</th><th>Status</th><th class="iaa-num">Chunks</th><th>Last trained</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in block.rows %}
+                    <tr>
+                      <td>
+                        <a href="{{ url('interactive-ai-assistant/training/source-chunks/' ~ r.id) }}">
+                          {{ r.title ?: (block.handle ~ ' #' ~ r.itemId) }}
+                        </a>
+                      </td>
+                      <td>{% include 'interactive-ai-assistant/training/_status' with { status: r.status } only %}</td>
+                      <td class="iaa-num">{{ r.chunkCount }}</td>
+                      <td class="iaa-nowrap">{{ r.lastTrainedAt ?: '—' }}</td>
+                      <td>
+                        <div class="iaa-row-actions">
+                          <button class="btn small js-train-source" data-id="{{ r.id }}">Re-train</button>
+                          <button class="btn small js-delete-source" data-id="{{ r.id }}">Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="iaa-empty"><p>Nothing trained yet from this source.</p></div>
+          {% endif %}
+        </div>
       </div>
     {% endfor %}
   {% else %}
-    <p class="light">No external training sources are registered.</p>
-    <p class="light">
-      Plugins and modules can add their own sources (e.g. a custom element type
-      from another plugin) by listening to
-      <code>Sources::EVENT_REGISTER_SOURCES</code>. Registered sources appear here
-      with a “Train all” button.
-    </p>
+    <div class="iaa-cards">
+      <div class="iaa-card iaa-card--wide iaa-card--info">
+        <div class="iaa-card__head">
+          <span class="iaa-card__icon">{{ icons.svg('plug') }}</span>
+          <h2 class="iaa-card__title">No external training sources are registered.</h2>
+        </div>
+        <div class="iaa-card__body">
+          <p class="iaa-card__note">
+            Plugins and modules can add their own sources (e.g. a custom element type
+            from another plugin) by listening to
+            <code>Sources::EVENT_REGISTER_SOURCES</code>. Registered sources appear here
+            with a “Train all” button.
+          </p>
+        </div>
+      </div>
+    </div>
   {% endif %}
 
   <script>

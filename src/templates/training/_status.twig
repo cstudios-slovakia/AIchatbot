@@ -1,0 +1,14 @@
+{#
+  A training row's status as a chip, toned by what it means for the index:
+  indexed is answering, empty and skipped answer with nothing, error needs a
+  look, and the in-flight states are on their way.
+#}
+{% set tones = {
+  indexed: 'good',
+  empty: 'warn',
+  error: 'bad',
+  training: 'info',
+  crawling: 'info',
+  pending: 'info',
+} %}
+<span class="iaa-chip{{ tones[status] is defined ? ' iaa-chip--' ~ tones[status] }}">{{ status }}</span>

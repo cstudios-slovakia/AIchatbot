@@ -1,40 +1,61 @@
 {% import '_includes/forms' as forms %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 
-{{ forms.lightswitchField({
-  label: 'Enable Suggestions',
-  name: 'settings[suggestionsEnabled]',
-  on: settings.suggestionsEnabled,
-}) }}
+<div class="iaa-cards">
+  <div class="iaa-card iaa-card--wide">
+    <div class="iaa-card__head">
+      <span class="iaa-card__icon">{{ icons.svg('lightbulb') }}</span>
+      <h2 class="iaa-card__title">Suggestions</h2>
+    </div>
+    <div class="iaa-card__body">
+      <div class="iaa-rows">
+        {{ forms.lightswitchField({
+          label: 'Enable Suggestions',
+          name: 'settings[suggestionsEnabled]',
+          on: settings.suggestionsEnabled,
+        }) }}
+      </div>
 
-{{ forms.textareaField({
-  label: 'Suggested Questions (default)',
-  instructions: 'One per line. Shown as clickable buttons below the initial greeting. Used when no site override is set below.',
-  name: 'settings[suggestions]',
-  value: settings.suggestions|join("\n"),
-  rows: 5,
-}) }}
+      {{ forms.textareaField({
+        label: 'Suggested Questions (default)',
+        instructions: 'One per line. Shown as clickable buttons below the initial greeting. Used when no site override is set below.',
+        name: 'settings[suggestions]',
+        value: settings.suggestions|join("\n"),
+        rows: 5,
+      }) }}
+    </div>
+  </div>
+</div>
 
 {% set allSites = craft.app.sites.getAllSites() %}
 {% if allSites|length > 1 %}
-  <hr>
-  <h2>Per-site overrides</h2>
-  <p class="light">Leave blank to fall back to the default list above. Each Craft site can have its own suggestion buttons (e.g. translated for the site's language).</p>
-
-  {% for site in allSites %}
-    <div style="border:1px solid #d8dde2;border-radius:6px;padding:14px;margin-bottom:14px;background:#fbfcfd;">
-      <div style="font-weight:600;font-size:14px;margin-bottom:8px;">
-        {{ site.name }}
-        <span class="light" style="font-weight:normal;font-size:11px;">· {{ site.handle }} · {{ site.language }} · {{ site.baseUrl ?: '—' }}</span>
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('earth-europe') }}</span>
+        <h2 class="iaa-card__title">Per-site overrides</h2>
+      </div>
+      <div class="iaa-card__body">
+        <p class="iaa-card__note">Leave blank to fall back to the default list above. Each Craft site can have its own suggestion buttons (e.g. translated for the site's language).</p>
       </div>
 
-      {% set siteSuggestions = settings.suggestionsBySite[site.uid] ?? [] %}
-      {{ forms.textareaField({
-        label: 'Suggested Questions',
-        instructions: 'One per line. Overrides the default list when at least one line is set.',
-        name: 'settings[suggestionsBySite][' ~ site.uid ~ ']',
-        value: siteSuggestions|join("\n"),
-        rows: 4,
-      }) }}
+      {% for site in allSites %}
+        <div class="iaa-card__body iaa-site">
+          <h3 class="iaa-site__name">
+            {{ site.name }}
+            <span class="iaa-site__meta">· {{ site.handle }} · {{ site.language }} · {{ site.baseUrl ?: '—' }}</span>
+          </h3>
+
+          {% set siteSuggestions = settings.suggestionsBySite[site.uid] ?? [] %}
+          {{ forms.textareaField({
+                  label: 'Suggested Questions',
+                  instructions: 'One per line. Overrides the default list when at least one line is set.',
+                  name: 'settings[suggestionsBySite][' ~ site.uid ~ ']',
+                  value: siteSuggestions|join("\n"),
+                  rows: 4,
+                }) }}
+        </div>
+      {% endfor %}
     </div>
-  {% endfor %}
+  </div>
 {% endif %}

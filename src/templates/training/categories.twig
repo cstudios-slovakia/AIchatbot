@@ -1,4 +1,5 @@
 {% extends 'interactive-ai-assistant/_layout' %}
+{% import 'interactive-ai-assistant/_icons' as icons %}
 {% set title = 'Training · Categories' %}
 {% set selectedSubnavItem = 'training' %}
 {% set tabs = {
@@ -15,57 +16,79 @@
 {% set selectedTab = 'categories' %}
 
 {% block content %}
-  <form method="post" accept-charset="UTF-8">
+  <form method="post" accept-charset="UTF-8" class="iaa-cards">
     {{ csrfInput() }}
     {{ actionInput('interactive-ai-assistant/training/train-category-groups') }}
-    <div class="field">
-      <div class="heading"><label>Category groups to train</label></div>
-      <div class="input">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('tags') }}</span>
+        <h2 class="iaa-card__title">Category groups to train</h2>
+      </div>
+      <div class="iaa-card__body">
         {% if groups|length %}
-          {% for g in groups %}
-            <label style="display:block;margin-bottom:6px;">
-              <input type="checkbox" name="groups[]" value="{{ g.uid }}"
-                {% if g.uid in selectedGroups %}checked{% endif %}>
-              {{ g.name }}
-            </label>
-          {% endfor %}
+          <ul class="iaa-checklist">
+            {% for g in groups %}
+              <li>
+                <label>
+                  <input type="checkbox" name="groups[]" value="{{ g.uid }}"
+                    {% if g.uid in selectedGroups %}checked{% endif %}>
+                  {{ g.name }}
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
         {% else %}
           <p class="light">No category groups exist yet.</p>
         {% endif %}
       </div>
+      <div class="iaa-card__foot">
+        <button type="submit" class="btn submit"{% if not groups|length %} disabled{% endif %}>Train now</button>
+      </div>
     </div>
-    <button type="submit" class="btn submit"{% if not groups|length %} disabled{% endif %}>Train now</button>
   </form>
 
-  <hr>
-  <h2>Indexed categories</h2>
-  {% if rows|length %}
-    <table class="data fullwidth">
-      <thead>
-        <tr><th>Category</th><th>Status</th><th>Chunks</th><th>Last trained</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-          <tr>
-            <td>
-              <a href="{{ url('interactive-ai-assistant/training/category-chunks/' ~ r.id) }}">
-                {{ titles[r.categoryId] ?? 'Category #' ~ r.categoryId }}
-              </a>
-            </td>
-            <td><span class="status-pill status-{{ r.status }}">{{ r.status }}</span></td>
-            <td>{{ r.chunkCount }}</td>
-            <td>{{ r.lastTrainedAt ?: '—' }}</td>
-            <td>
-              <button class="btn small js-train" data-id="{{ r.id }}">Re-train</button>
-              <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="light">No categories trained yet.</p>
-  {% endif %}
+  <div class="iaa-cards">
+    <div class="iaa-card iaa-card--wide">
+      <div class="iaa-card__head">
+        <span class="iaa-card__icon">{{ icons.svg('tags') }}</span>
+        <h2 class="iaa-card__title">Indexed categories</h2>
+        {% if rows|length %}<span class="iaa-card__aside"><span class="iaa-chip">{{ rows|length }}</span></span>{% endif %}
+      </div>
+      {% if rows|length %}
+        <div class="iaa-card__body iaa-card__body--flush iaa-scroll">
+          <table class="data fullwidth">
+            <thead>
+              <tr>
+                <th>Category</th><th>Status</th><th class="iaa-num">Chunks</th><th>Last trained</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>
+                    <a href="{{ url('interactive-ai-assistant/training/category-chunks/' ~ r.id) }}">
+                      {{ titles[r.categoryId] ?? 'Category #' ~ r.categoryId }}
+                    </a>
+                  </td>
+                  <td>{% include 'interactive-ai-assistant/training/_status' with { status: r.status } only %}</td>
+                  <td class="iaa-num">{{ r.chunkCount }}</td>
+                  <td class="iaa-nowrap">{{ r.lastTrainedAt ?: '—' }}</td>
+                  <td>
+                    <div class="iaa-row-actions">
+                      <button class="btn small js-train" data-id="{{ r.id }}">Re-train</button>
+                      <button class="btn small js-delete" data-id="{{ r.id }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="iaa-empty"><p>No categories trained yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
 
   <script>
     (function(){
