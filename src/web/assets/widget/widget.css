@@ -478,6 +478,8 @@ html.cs-chatbot-agent-left.cs-chatbot-agent-open body { margin-right: 0; margin-
   cursor: pointer;
 }
 .cs-chatbot__new-chat:hover { filter: brightness(1.05); }
+.cs-chatbot__end-offer { align-self: center; margin: 4px 0 8px; font-size: var(--cb-fs-base); }
+.cs-chatbot__end-offer:disabled { opacity: .6; cursor: default; }
 .cs-chatbot__human:hover { background: var(--cb-primary); color: #fff; }
 .cs-chatbot__human:disabled { opacity: .5; cursor: not-allowed; }
 

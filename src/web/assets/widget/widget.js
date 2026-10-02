@@ -998,14 +998,14 @@
     refreshBtn.addEventListener('click', function () { startNewConversation(true); });
     newChatBtn.addEventListener('click', function () { startNewConversation(false); });
 
-    endBtn.addEventListener('click', function () {
-      if (!confirm(T('endConfirm'))) return;
+    function endConversation() {
       var token = localStorage.getItem(STORAGE_TOKEN);
       if (!token) return;
       var data = new FormData();
       data.append('sessionToken', token);
-      post(urls().end, data).then(function (r) {
+      return post(urls().end, data).then(function (r) {
         if (!r.success) return;
+        Array.prototype.forEach.call(messages.querySelectorAll('.cs-chatbot__end-offer'), function (b) { b.remove(); });
         state.chatEnded = true;
         state.handoffStatus = state.handoffStatus === 'active' || state.handoffStatus === 'requested' ? 'ended' : state.handoffStatus;
         addSystem(T('youEnded'), new Date().toISOString());
@@ -1013,6 +1013,10 @@
         renderChatRating();
         scrollMessagesToBottom();
       });
+    }
+    endBtn.addEventListener('click', function () {
+      if (!confirm(T('endConfirm'))) return;
+      endConversation();
     });
 
     humanBtn.addEventListener('click', requestHuman);
@@ -1454,6 +1458,18 @@
           state.contactCaptured = true;
           if (card.parentNode) card.remove();
           addSystem(T('contactThanks'), new Date().toISOString());
+          // Leaving details is usually the visitor's last step, so offer the way
+          // out right there instead of in the overflow menu. No confirm: pressing
+          // this button is the decision. Sending another message keeps it going.
+          var endOffer = el('button', { type: 'button', class: 'cs-chatbot__new-chat cs-chatbot__end-offer' }, [T('endConversation')]);
+          endOffer.addEventListener('click', function () {
+            endOffer.disabled = true;
+            var ending = endConversation();
+            // Still on screen means it didn't end — let them try again.
+            var retry = function () { endOffer.disabled = false; };
+            if (ending) ending.then(retry, retry); else retry();
+          });
+          messages.appendChild(endOffer);
           scrollMessagesToBottom();
         }).catch(function () {
           submit.disabled = false;

@@ -2,9 +2,6 @@
 
 ## Unreleased
 
-- Fixed the chat widget failing to start on pages that are not served as UTF-8.
-  One of its patterns contained raw non-ASCII characters, which such a page
-  misreads, and the whole script stopped before the launcher appeared.
 - The control panel screens have a new look. Screens without tabs — the
   Dashboard, Live Chat, a conversation's log, missed chats — are now built of
   cards: a titled panel per topic, with the state of things (needs attention,
@@ -14,6 +11,15 @@
   titled sections, with short switches and numbers laid out beside their names
   instead of under them. Nothing about how the screens work has changed; the
   same settings are in the same tabs.
+- After a visitor leaves their contact details to be called back, the chat now
+  shows an **End conversation** button right under the thank-you line. Leaving
+  details is usually the last thing they do, and the only way to end the chat
+  used to be tucked away in the window's menu. Pressing it ends the conversation
+  straight away, without the confirmation the menu asks for; a visitor who would
+  rather keep chatting can just type, and the button stays out of the way.
+- Fixed the chat widget failing to start on pages that are not served as UTF-8.
+  One of its patterns contained raw non-ASCII characters, which such a page
+  misreads, and the whole script stopped before the launcher appeared.
 - The text color of each chat bubble can now be set, next to its background
   under **Settings → General → Bubble Colors**: one for the visitor's messages,
   one for the assistant's and one for replies from a live agent. Links in the
