@@ -788,6 +788,10 @@
       // user bubble defaults to primary — auto contrast for primary
       root.style.setProperty('--cb-bubble-user-fg', contrastFg(config.primaryColor || '#2563eb'));
     }
+    // An explicit text color wins over the contrast guess above.
+    if (config.bubbleBotTextColor) root.style.setProperty('--cb-bubble-bot-fg', config.bubbleBotTextColor);
+    if (config.bubbleAdminTextColor) root.style.setProperty('--cb-bubble-admin-fg', config.bubbleAdminTextColor);
+    if (config.bubbleUserTextColor) root.style.setProperty('--cb-bubble-user-fg', config.bubbleUserTextColor);
 
     var logoInner = config.logoUrl
       ? el('img', { src: config.logoUrl, alt: '' })

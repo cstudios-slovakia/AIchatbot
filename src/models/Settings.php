@@ -22,6 +22,10 @@ class Settings extends Model
     public string $bubbleBotColor = '';   // empty = use theme default (#f3f4f6 light, #1f2937 dark)
     public string $bubbleAdminColor = ''; // empty = use default #10b981
     public string $bubbleUserColor = '';  // empty = follow primaryColor
+    // Bubble text colors. Empty = picked automatically for contrast against the bubble.
+    public string $bubbleBotTextColor = '';
+    public string $bubbleAdminTextColor = '';
+    public string $bubbleUserTextColor = '';
     public string $defaultTheme = 'light'; // light|dark
     // Operation mode: 'chat' = floating bubble (current behavior). 'agent' = docked full-height side panel that squeezes page content.
     public string $operationMode = 'chat'; // chat|agent
@@ -258,8 +262,8 @@ class Settings extends Model
     public function rules(): array
     {
         return [
-            [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
-            [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt', 'disclaimerText'], 'string'],
+            [['primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'bubbleBotTextColor', 'bubbleAdminTextColor', 'bubbleUserTextColor'], 'filter', 'filter' => [self::class, 'normalizeHexColor']],
+            [['companyName', 'logoText', 'primaryColor', 'logoBgColor', 'bubbleBotColor', 'bubbleAdminColor', 'bubbleUserColor', 'bubbleBotTextColor', 'bubbleAdminTextColor', 'bubbleUserTextColor', 'defaultTheme', 'operationMode', 'chatModel', 'embeddingModel', 'helperModel', 'initialMessage', 'systemPrompt', 'disclaimerText'], 'string'],
             [['enabled', 'debugMode', 'autoTrainOnSave', 'suggestionsEnabled', 'ratingsEnabled', 'loggingEnabled', 'showAdminName', 'humanHandoffEnabled', 'filterEnabled', 'contactCaptureEnabled', 'agentModeEnabled', 'formsEnabled', 'handoffNotifyEnabled', 'queryRewriteEnabled', 'retrievalGuardEnabled', 'hybridEnabled', 'siteFilterEnabled', 'contextualPrefixEnabled', 'streamingEnabled', 'disclaimerEnabled', 'widgetResizeEnabled'], 'boolean'],
             [['handoffNotifyEmail', 'handoffNotifySubject', 'handoffNotifyBody'], 'string'],
             [['maxContextChunks', 'historyMessages', 'logRetentionDays', 'logoAssetId', 'filterMinLength', 'filterMaxLength', 'filterRateWindowSeconds', 'filterRateMaxMessages', 'autoCloseInactiveMinutes', 'contactPromptTimeoutMinutes', 'maxToolIterations'], 'integer'],

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The text color of each chat bubble can now be set, next to its background
+  under **Settings → General → Bubble Colors**: one for the visitor's messages,
+  one for the assistant's and one for replies from a live agent. Links in the
+  bubble follow it. Left empty, the text color is still picked automatically to
+  stay readable on the bubble, so nothing changes until you set one.
 - Link preview cards now show an image for pages whose SEO field has none. The
   card falls back to the `og:image` the page itself declares — usually a default
   your templates set, or one derived from the hero image — which is the same
