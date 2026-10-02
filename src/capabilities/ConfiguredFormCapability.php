@@ -10,7 +10,7 @@ use cstudiossro\craftcschatbot\Plugin;
  * normal tool-calling loop and calls this tool once they're gathered; the
  * actual validation, storage and delivery live in the Forms service.
  */
-class ConfiguredFormCapability extends BaseCapability
+class ConfiguredFormCapability extends BaseCapability implements TerminatesTurnInterface
 {
     /** @param array<string, mixed> $form A single entry from Settings::formDefinitions() */
     public function __construct(private array $form)
@@ -35,7 +35,9 @@ class ConfiguredFormCapability extends BaseCapability
         if ($this->isInline()) {
             // Inline mode: the user fills the rendered form, not the model.
             return $base . ' Call this to display the form so the user can fill it in and submit it themselves. '
-                . 'Do not ask for or collect the field values yourself — just call the tool when the form is relevant, then briefly tell the user to complete the form shown.';
+                . 'Calling it puts the form on their screen straight away, so never ask whether you should open it. '
+                . 'Answer the user\'s question in full first, then call this and add one short line pointing at the form. '
+                . 'Do not ask for or collect the field values yourself.';
         }
         // Conversational mode: model gathers the values and submits.
         return $base . ' Call this only once you have gathered the required fields from the user. '
@@ -98,6 +100,19 @@ class ConfiguredFormCapability extends BaseCapability
             $params['required'] = $required;
         }
         return $params;
+    }
+
+    /**
+     * An inline form is rendered by the widget from this turn's payload, so by
+     * the time the tool returns the visitor is already looking at it — there is
+     * nothing in the result for the model to read back to them.
+     *
+     * A conversational form is the opposite case: the model collected the values
+     * and has to tell the visitor what happened to them, so the turn continues.
+     */
+    public function terminatesTurn(): bool
+    {
+        return $this->isInline();
     }
 
     public function handle(array $args): mixed

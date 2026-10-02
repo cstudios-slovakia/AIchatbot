@@ -7,6 +7,7 @@ use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use DateTime;
 use DateTimeZone;
+use cstudiossro\craftcschatbot\capabilities\TerminatesTurnInterface;
 use cstudiossro\craftcschatbot\events\BuildSystemPromptEvent;
 use cstudiossro\craftcschatbot\events\TransformReplyEvent;
 use cstudiossro\craftcschatbot\Plugin;
@@ -245,22 +246,6 @@ class Chat extends Component
 
         $systemPrompt = $settings->getSystemPromptForSite($siteUid);
 
-        // Let plugins/modules contribute extra context (e.g. the current date on
-        // an events site). Core stays generic — site-specific additions live in
-        // the listeners, not here.
-        $promptEvent = new BuildSystemPromptEvent([
-            'siteUid' => $siteUid,
-            'question' => $question,
-            'session' => $session,
-        ]);
-        $this->trigger(self::EVENT_BUILD_SYSTEM_PROMPT, $promptEvent);
-        foreach ($promptEvent->additions as $addition) {
-            $addition = trim((string)$addition);
-            if ($addition !== '') {
-                $systemPrompt .= "\n\n" . $addition;
-            }
-        }
-
         // Language. Without this the model follows whichever language dominates
         // the prompt — the site's own content and its opening greeting — and
         // answers an English visitor in the site's language.
@@ -309,8 +294,38 @@ class Chat extends Component
                 $formList .= "\n- `" . $fc->name() . "`: " . $fc->description();
             }
             $systemPrompt .= "\n\n# Forms\nYou can offer these forms by calling the matching tool:" . $formList
-                . "\n\nBehave like an attentive salesperson: when the conversation shows the visitor could benefit from one of these (they express interest, a need, or intent it serves), proactively offer it — do not wait to be asked. Offer at most one form at a time, only when clearly relevant, and never be pushy; if the user declines, drop it gracefully."
-                . "\n\nEach tool's description says how it works. For forms you fill yourself, collect the fields by asking a question or two at a time, briefly recap them for confirmation, and copy every value EXACTLY as the user gave it — never rephrase, translate, correct, reformat, complete, summarize, or invent any value; if unsure, ask. For forms that are displayed for the user to complete, just call the tool when relevant and tell the user to fill in the form shown — do not ask for the values yourself.";
+                . "\n\nBehave like an attentive salesperson: when the conversation shows the visitor could benefit from one of these (they express interest, a need, or intent it serves), proactively offer it — do not wait to be asked. Offering it means calling the tool, not asking whether you may. Offer at most one form at a time, only when clearly relevant, and never be pushy; if the user declines, drop it gracefully."
+                . "\n\nEach tool's description says how it works. For forms you fill yourself, collect the fields by asking a question or two at a time, briefly recap them for confirmation, and copy every value EXACTLY as the user gave it — never rephrase, translate, correct, reformat, complete, summarize, or invent any value; if unsure, ask."
+                // Two failures this exists to prevent. The model used to call
+                // the display tool and, in the same reply, ask whether it should
+                // open the form — leaving the visitor reading "shall I start the
+                // form?" underneath the form. Told only that, it went the other
+                // way and offered the form *instead* of answering, which is the
+                // worse of the two: the visitor asked a question.
+                . "\n\nFor forms that are displayed for the user to complete, calling the tool puts the form on the visitor's screen immediately. Answer their question first and in full, exactly as you would if no form existed, and only then call the tool and add one short line pointing at the form. The form is never a substitute for the answer. Never ask permission to open it — never write \"shall I open the form?\", \"would you like me to start the form?\" or anything of that shape, because by the time they read it the form is already in front of them. Do not ask for the field values yourself.";
+        }
+
+        // Let plugins/modules contribute extra context (e.g. the current date on
+        // an events site). Core stays generic — site-specific additions live in
+        // the listeners, not here.
+        //
+        // Appended after every core block rather than before them. OpenAI caches
+        // a prompt by its leading tokens, so anything that changes between turns
+        // invalidates the cache for everything after it — and a listener adding
+        // today's date is exactly that. Keeping the volatile part next to the
+        // context, which changes every turn anyway, leaves the ~2000 tokens of
+        // fixed instruction above it cacheable.
+        $promptEvent = new BuildSystemPromptEvent([
+            'siteUid' => $siteUid,
+            'question' => $question,
+            'session' => $session,
+        ]);
+        $this->trigger(self::EVENT_BUILD_SYSTEM_PROMPT, $promptEvent);
+        foreach ($promptEvent->additions as $addition) {
+            $addition = trim((string)$addition);
+            if ($addition !== '') {
+                $systemPrompt .= "\n\n" . $addition;
+            }
         }
 
         if ($context !== '') {
@@ -681,6 +696,12 @@ class Chat extends Component
         }
         $caps = $plugin->capabilities;
         $maxIter = max(1, (int)$plugin->getSettings()->maxToolIterations);
+        // What the model wrote in earlier rounds, before it committed to a tool
+        // call. Streaming has already sent it to the visitor, so it has to end
+        // up in the reply too: the widget replaces the streamed text with the
+        // processed reply when the turn closes, and a reply missing its own
+        // opening makes that text appear and then vanish.
+        $spoken = '';
         for ($i = 0; $i < $maxIter; $i++) {
             $this->bump($timings, 'modelCalls');
             $message = $this->timed($timings, 'model', fn() => $onDelta === null
@@ -688,10 +709,17 @@ class Chat extends Component
                 : $plugin->openAi->chatStream($messages, ['tools' => $tools], $onDelta));
             $calls = $message['tool_calls'] ?? [];
             if (empty($calls)) {
-                return (string)($message['content'] ?? '');
+                return trim($spoken . (string)($message['content'] ?? ''));
             }
             // The assistant message carrying tool_calls must precede the results.
             $messages[] = $message;
+            // A round where every call delivered its own output to the visitor
+            // (an inline form the widget renders) leaves the model nothing to
+            // read back to them, so the round trip that would follow is spent
+            // writing a sentence over the entire prompt.
+            //
+            // Only once the model has actually answered, though — see below.
+            $endsTurn = true;
             foreach ($calls as $call) {
                 $fn = (string)($call['function']['name'] ?? '');
                 $argsRaw = $call['function']['arguments'] ?? '{}';
@@ -707,6 +735,28 @@ class Chat extends Component
                     'tool_call_id' => (string)($call['id'] ?? ''),
                     'content' => json_encode($result),
                 ];
+                // Only a call that actually ran can end the turn: a refused or
+                // failed one leaves the model an error it has to answer for.
+                $capability = ($result['ok'] ?? false) ? $caps->get($fn) : null;
+                if (!($capability instanceof TerminatesTurnInterface) || !$capability->terminatesTurn()) {
+                    $endsTurn = false;
+                }
+            }
+            // The reply the model wrote before it committed to the tool call —
+            // already streamed to the visitor, and the whole reason the turn can
+            // stop here.
+            //
+            // If it wrote nothing, the turn is not finished at all: a model that
+            // reaches for a form before answering has not answered yet, and the
+            // round below is where its answer gets written. Ending here would
+            // hand the visitor a form instead of the answer they asked for,
+            // which is worse than the round trip it saves.
+            $said = trim((string)($message['content'] ?? ''));
+            if ($endsTurn && $said !== '') {
+                return trim($spoken . $said);
+            }
+            if ($said !== '') {
+                $spoken .= $said . "\n\n";
             }
         }
         // Hit the iteration cap with calls still pending — force a final answer.
@@ -714,7 +764,7 @@ class Chat extends Component
         $message = $this->timed($timings, 'model', fn() => $onDelta === null
             ? $plugin->openAi->chatRaw($messages)
             : $plugin->openAi->chatStream($messages, [], $onDelta));
-        return (string)($message['content'] ?? '');
+        return trim($spoken . (string)($message['content'] ?? ''));
     }
 
     /**
@@ -877,9 +927,9 @@ class Chat extends Component
      * knowledge-base lookup at all.
      *
      * The rewrite only affects the retrieval embedding — generation still sees
-     * the user's original message. On the first turn, or on any failure, this
-     * falls back to the raw question with retrieval on, so search never silently
-     * breaks.
+     * the user's original message. A first turn skips the model call altogether
+     * (nothing can be elliptical yet), and so does any failure; both fall back to
+     * the raw question, so search never silently breaks.
      *
      * @param array<int, array{role:string, content:string}> $history
      * @return array{0:string, 1:bool, 2:bool} [standaloneQuery, needsRetrieval, outOfScope]
@@ -894,6 +944,21 @@ class Chat extends Component
         // Nothing to ask the model for: no rewriting wanted and no guard to run.
         if (!$settings->queryRewriteEnabled && !$settings->retrievalGuardEnabled) {
             return [$question, true, false];
+        }
+
+        // A first message cannot be elliptical. There is no earlier turn for a
+        // pronoun to point at and nothing to carry over, so the rewrite has
+        // nothing to resolve and the call would buy only the scope check.
+        //
+        // That check used to be worth making here — it stops an off-topic opener
+        // pulling a context set for nothing. It is not worth what it costs: the
+        // retrieval it avoids is an embedding and a search, a few hundred
+        // milliseconds, while the call itself is a model round trip and blocks
+        // the whole turn behind it. The smalltalk heuristic above still catches
+        // greetings for free, and a genuine question is the overwhelmingly more
+        // likely thing to arrive first.
+        if (empty($history)) {
+            return [$question, !$smalltalk, false];
         }
 
         try {

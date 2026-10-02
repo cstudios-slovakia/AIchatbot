@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Answers arrive in fewer round trips to OpenAI. A turn used to take up to five
+  calls in a row, each waiting on the one before it, and three of them were
+  spent on preparation rather than on the answer. Two are now gone. The first
+  message of a conversation no longer pays for a rewrite step whose whole job is
+  resolving references to earlier messages that do not exist yet. And when the
+  assistant has already answered and then shows a form for the visitor to fill
+  in, it no longer makes a second full call to the model just to add a line
+  above it — the widget was already rendering the form regardless. If it has not
+  answered yet, that call still happens: the answer comes first, always.
+- The assistant no longer asks whether it should open a form and then opens it
+  in the same breath. Displaying a form is instant, so it answers the visitor's
+  question in full, opens the form, and adds one line pointing at it — instead
+  of offering and waiting for a "yes" that arrives after the form is already on
+  screen. A form is never offered in place of an answer.
+- Fixed the opening of a reply disappearing when the assistant used a skill or a
+  form mid-answer. What it had written before reaching for the tool was shown as
+  it arrived and then dropped when the finished reply replaced it.
 - Slow answers can now be explained rather than guessed at. Every turn writes one
   line to the Craft log breaking its seconds down by stage — rewriting the
   question, embedding it, searching the index, reranking, and the model itself,

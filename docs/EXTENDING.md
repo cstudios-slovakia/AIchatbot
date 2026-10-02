@@ -9,6 +9,7 @@ Four extension points:
 | Want to | Use |
 |---|---|
 | Let the assistant fetch live data or perform an action | [Capabilities (skills)](#1-capabilities-skills) |
+| Skip the follow-up model call after your skill runs | [`TerminatesTurnInterface`](#ending-the-turn-without-a-second-model-call) |
 | Train the assistant on content this plugin doesn't know about | [Training sources](#2-training-sources) |
 | Add context to the system prompt | [`EVENT_BUILD_SYSTEM_PROMPT`](#3-adding-to-the-system-prompt) |
 | Rewrite the reply before the visitor sees it | [`EVENT_TRANSFORM_REPLY`](#4-rewriting-the-reply) |
@@ -141,6 +142,48 @@ The result goes into the context window and the model has to read it. Return the
 handful of fields an answer needs, with keys that read like English. Don't return
 an ORM object, a full element, or a hundred rows.
 
+### Ending the turn without a second model call
+
+Running a tool normally costs **two** completions: one where the model asks for
+the call, one where it reads the result and answers. If your capability already
+put its output in front of the visitor — it renders something in the widget,
+rather than handing the model data to describe — the second call buys one
+sentence for the price of the whole prompt.
+
+Implement `TerminatesTurnInterface` to skip it:
+
+```php
+use cstudiossro\craftcschatbot\capabilities\BaseCapability;
+use cstudiossro\craftcschatbot\capabilities\TerminatesTurnInterface;
+
+class ShowSeatMap extends BaseCapability implements TerminatesTurnInterface
+{
+    public function terminatesTurn(): bool
+    {
+        return true;
+    }
+
+    // name(), description(), handle() as usual
+}
+```
+
+Decided per call, so a capability that only sometimes delivers its own output
+can answer differently each time — that is exactly what the built-in form
+capability does, returning `true` for a form the visitor fills and `false` for
+one the model fills.
+
+The turn only actually ends if **the model already wrote a reply** before it
+called your tool. A model that calls a tool before saying anything has not
+answered the question yet, and the follow-up call is where its answer gets
+written — so the loop makes it regardless, and your `true` costs nothing. Say so
+in your `description()` if you want the model to answer first.
+
+A call that was refused or threw never ends the turn either: the model has to be
+given the chance to answer for the error.
+
+Do **not** return `true` from a capability that fetches data the model needs to
+interpret. It may never see the result.
+
 ### Conversational forms are capabilities too
 
 An admin-defined form (**Forms** in the CP) is turned into a capability at
@@ -258,8 +301,12 @@ field-exclusion handling is where custom extraction usually goes wrong.
 
 ## 3. Adding to the system prompt
 
-`Chat::EVENT_BUILD_SYSTEM_PROMPT` fires while the prompt is assembled, before
-the core blocks and the retrieved context are appended.
+`Chat::EVENT_BUILD_SYSTEM_PROMPT` fires while the prompt is assembled. Your
+additions land after every core block and immediately before the retrieved
+context — deliberately last, because OpenAI caches a prompt by its leading
+tokens and anything that changes between turns invalidates the cache for
+everything after it. The date example below changes daily; sitting where it does,
+it costs the cache nothing.
 
 ```php
 use cstudiossro\craftcschatbot\services\Chat;
